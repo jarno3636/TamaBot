@@ -6,20 +6,28 @@
     "build": "next build",
     "start": "next start",
     "format": "prettier --write .",
-    "deploy:foundry": "forge script script/Deploy.s.sol:Deploy --rpc-url $RPC_URL --broadcast --verify --etherscan-api-key $ETHERSCAN_KEY"
+    "typecheck": "tsc --noEmit",
+    "deploy:foundry": "forge script script/Deploy.s.sol:Deploy --rpc-url $RPC_URL --broadcast --verify --etherscan-api-key $ETHERSCAN_KEY",
+    "pin": "tsx scripts/pinSprite.ts",
+    "filebase:pin": "tsx scripts/filebasePin.ts"
   },
   "dependencies": {
     "next": "14.2.3",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "viem": "2.9.15",
-    "@supabase/supabase-js": "2.45.4"
+    "wagmi": "^2.10.0",
+    "swr": "^2.3.0",
+    "@supabase/supabase-js": "2.45.4",
+    "@filebase/sdk": "^1.0.0",
+    "@aws-sdk/client-s3": "^3.600.0",
+    "dotenv": "^16.4.5"
   },
   "devDependencies": {
     "typescript": "5.5.4",
     "@types/node": "20.11.30",
     "prettier": "3.3.3",
-    "web3.storage": "^4.5.6",
+    "tsx": "^4.7.0",
     "hardhat": "^2.22.10",
     "@nomicfoundation/hardhat-toolbox": "^5.0.0"
   }
