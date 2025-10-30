@@ -1,14 +1,25 @@
-import { Web3Storage, File } from "web3.storage";
-import fs from "fs";
+import "dotenv/config";
+import { Filebase } from "@filebase/sdk";
+import fs from "node:fs";
 
-const client = new Web3Storage({ token: process.env.WEB3_STORAGE_TOKEN! });
+const client = new Filebase({
+  accessKeyId: process.env.FILEBASE_ACCESS_KEY_ID!,
+  secretAccessKey: process.env.FILEBASE_SECRET_ACCESS_KEY!,
+});
 
-export async function pinSprite(tokenId: number, level: number, spritePath: string, previewPath?: string) {
-  const files: File[] = [new File([fs.readFileSync(spritePath)], `sprite_${tokenId}_lvl${level}.png`)];
-  if (previewPath) files.push(new File([fs.readFileSync(previewPath)], `preview_${tokenId}_lvl${level}.webm`));
-  const cid = await client.put(files, { wrapWithDirectory: true, name: `tama-${tokenId}-lvl${level}` });
-  return {
-    imageCid: `ipfs://${cid}/sprite_${tokenId}_lvl${level}.png`,
-    previewCid: previewPath ? `ipfs://${cid}/preview_${tokenId}_lvl${level}.webm` : undefined,
-  };
+export async function pinAsset(
+  localPath: string,
+  name?: string
+): Promise<{ cid: string; path: string }> {
+  const bytes = fs.readFileSync(localPath);
+  const res = await client.ipfs.add(bytes, { wrapWithDirectory: true, pin: true, name });
+  // res.contentCid is the root CID; the file will be available under /ipfs/<CID>/<filename>
+  const filename = name || localPath.split("/").pop()!;
+  return { cid: res.contentCid, path: `${res.contentCid}/${filename}` };
+}
+
+// CLI: pnpm filebase:pin ./assets/sprites/level1.png sprite_1_lvl1.png
+if (require.main === module) {
+  const [, , file, fname] = process.argv;
+  pinAsset(file, fname).then(console.log).catch(e => { console.error(e); process.exit(1); });
 }
