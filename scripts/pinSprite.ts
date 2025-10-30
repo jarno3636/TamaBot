@@ -1,52 +1,70 @@
 // scripts/pinSprite.ts
 import "dotenv/config";
 import fs from "node:fs";
-import { ObjectManager } from "@filebase/sdk";
+import { S3Client, PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+
+function must(name: string) {
+  const v = process.env[name];
+  if (!v) throw new Error(`Missing env: ${name}`);
+  return v;
+}
+
+const FILEBASE_S3 = new S3Client({
+  region: "us-east-1",
+  endpoint: "https://s3.filebase.com",
+  credentials: {
+    accessKeyId: must("FILEBASE_ACCESS_KEY_ID"),
+    secretAccessKey: must("FILEBASE_SECRET_ACCESS_KEY"),
+  },
+});
+
+async function putAndCid(Bucket: string, Key: string, Body: Buffer, ContentType: string) {
+  await FILEBASE_S3.send(new PutObjectCommand({ Bucket, Key, Body, ContentType }));
+  const head = await FILEBASE_S3.send(new HeadObjectCommand({ Bucket, Key }));
+  const meta = head.Metadata || {};
+  const cid = (meta["cid"] || meta["ipfs-hash"] || meta["x-amz-meta-cid"] || "") as string;
+  return { Key, cid, ipfsUri: cid ? `ipfs://${cid}/${Key}` : null };
+}
 
 /**
- * Upload sprite + optional preview together (packed as a CAR),
- * so they share a single root CID. Returns ipfs:// URIs.
- *
  * Usage:
  *   pnpm pin <tokenId> <level> ./assets/sprites/level1.png [./assets/previews/level1.webm]
  */
-export async function pinSprite(
-  tokenId: number,
-  level: number,
-  spritePath: string,
-  previewPath?: string
-) {
-  const S3_KEY = process.env.FILEBASE_ACCESS_KEY_ID!;
-  const S3_SECRET = process.env.FILEBASE_SECRET_ACCESS_KEY!;
-  const BUCKET = process.env.FILEBASE_BUCKET!;
-  if (!S3_KEY || !S3_SECRET || !BUCKET) {
-    throw new Error("Missing FILEBASE_ACCESS_KEY_ID/FILEBASE_SECRET_ACCESS_KEY/FILEBASE_BUCKET");
+async function main() {
+  const [, , tId, lvl, spritePath, previewPath] = process.argv;
+  if (!tId || !lvl || !spritePath) {
+    console.error("Usage: pnpm pin <tokenId> <level> <spritePath> [previewPath]");
+    process.exit(1);
   }
+  const tokenId = Number(tId);
+  const level = Number(lvl);
+  const Bucket = must("FILEBASE_BUCKET");
+  const gateway = (process.env.FILEBASE_GATEWAY_URL || "https://ipfs.filebase.io").replace(/\/$/, "");
 
-  const objectManager = new ObjectManager(S3_KEY, S3_SECRET, { bucket: BUCKET });
+  // sprite
+  const spriteKey = `sprite_${tokenId}_lvl${level}.png`;
+  const sprite = await putAndCid(Bucket, spriteKey, fs.readFileSync(spritePath), "image/png");
 
-  const spriteName = `sprite_${tokenId}_lvl${level}.png`;
-  const files: Array<{ path: string; content: Buffer }> = [
-    { path: spriteName, content: fs.readFileSync(spritePath) }
-  ];
+  // optional preview
+  let preview: { Key: string; cid: string; ipfsUri: string | null } | undefined;
   if (previewPath) {
-    files.push({ path: `preview_${tokenId}_lvl${level}.webm`, content: fs.readFileSync(previewPath) });
+    const previewKey = `preview_${tokenId}_lvl${level}.webm`;
+    preview = await putAndCid(Bucket, previewKey, fs.readFileSync(previewPath), "video/webm");
   }
 
-  // When 'source' is an array, ObjectManager.upload packs a CAR and returns the root CID.  [oai_citation:1‡filebase.github.io](https://filebase.github.io/filebase-sdk/ObjectManager.html?utm_source=chatgpt.com)
-  const head = await objectManager.upload(`tama-${tokenId}-lvl${level}.car`, files, { "Content-Type": "application/car" });
-  const cid = head?.["x-amz-meta-cid"] || head?.cid || "";
-
-  const imageCid = cid ? `ipfs://${cid}/${spriteName}` : "";
-  const previewCid = cid && files.length > 1 ? `ipfs://${cid}/preview_${tokenId}_lvl${level}.webm` : undefined;
-
-  return { imageCid, previewCid, rootCid: cid };
+  console.log({
+    sprite: {
+      ...sprite,
+      gatewayUrl: sprite.cid ? `${gateway}/ipfs/${sprite.cid}/${sprite.Key}` : null,
+    },
+    preview: preview && {
+      ...preview,
+      gatewayUrl: preview.cid ? `${gateway}/ipfs/${preview.cid}/${preview.Key}` : null,
+    },
+  });
 }
 
-// CLI
-if (require.main === module) {
-  const [, , tId, lvl, sprite, preview] = process.argv;
-  pinSprite(Number(tId), Number(lvl), sprite, preview)
-    .then(console.log)
-    .catch((e) => { console.error(e); process.exit(1); });
-}
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
