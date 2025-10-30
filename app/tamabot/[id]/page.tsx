@@ -1,35 +1,54 @@
 // app/tamabot/[id]/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo } from "react";
+import Link from "next/link";
 import PetCard from "@/components/PetCard";
 import { TAMABOT_CORE } from "@/lib/abi";
-import { ipfsToHttp } from "@/lib/ipfs";
-import Link from "next/link";
+import { useReadContract } from "wagmi";
+import { base } from "viem/chains";
 
 export default function Page({ params }: { params: { id: string } }) {
   const id = Number(params.id);
-  const [tokenURI, setTokenURI] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+
+  // Read tokenURI from chain (canonical source)
+  const { data: tokenUri } = useReadContract({
+    address: TAMABOT_CORE.address,
+    abi: TAMABOT_CORE.abi,
+    chainId: base.id,
+    functionName: "tokenURI",
+    args: [BigInt(id)],
+    query: { enabled: Number.isFinite(id) } as any,
+  });
+
+  // Read live on-chain state
+  const { data: s } = useReadContract({
+    address: TAMABOT_CORE.address,
+    abi: TAMABOT_CORE.abi,
+    chainId: base.id,
+    functionName: "getState",
+    args: [BigInt(id)],
+    query: { enabled: Number.isFinite(id) } as any,
+  });
+
+  const state = useMemo(() => {
+    if (!s) return null as any;
+    const [level, xp, mood, hunger, energy, cleanliness, lastTick, fid] = s as any;
+    return {
+      level: Number(level),
+      xp: Number(xp),
+      mood: Number(mood),
+      hunger: Number(hunger),
+      energy: Number(energy),
+      cleanliness: Number(cleanliness),
+      lastTick: Number(lastTick),
+      fid: Number(fid),
+    };
+  }, [s]);
 
   useEffect(() => {
-    async function fetchMetadata() {
-      try {
-        const base = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
-        const res = await fetch(`${base}/api/metadata/base/${TAMABOT_CORE.address}/${id}`);
-        if (!res.ok) throw new Error(`Metadata fetch failed (${res.status})`);
-        const data = await res.json();
-
-        // Convert to IPFS gateway URL if necessary
-        const uri = data.image ? ipfsToHttp(data.image) : "";
-        setTokenURI(`${base}/api/metadata/base/${TAMABOT_CORE.address}/${id}`);
-      } catch (e: any) {
-        console.error(e);
-        setError(e.message || "Failed to fetch metadata");
-      }
-    }
-    fetchMetadata();
-  }, [id]);
+    // Optional: prefetch /my
+  }, []);
 
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-6">
@@ -43,17 +62,43 @@ export default function Page({ params }: { params: { id: string } }) {
         </Link>
       </div>
 
-      {error && (
-        <div className="text-red-500 text-sm border border-red-500/30 p-3 rounded-xl bg-red-500/10">
-          {error}
-        </div>
+      {/* Metadata-rendered card */}
+      {typeof tokenUri === "string" ? (
+        <PetCard tokenURI={tokenUri} />
+      ) : (
+        <div className="text-sm opacity-70">Loading metadata…</div>
       )}
 
-      {tokenURI ? (
-        <PetCard tokenURI={tokenURI} />
-      ) : (
-        !error && <div className="text-sm opacity-70">Loading metadata…</div>
-      )}
+      {/* Live on-chain stats */}
+      <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+        <h2 className="text-lg font-semibold mb-3">Live Stats</h2>
+        {!state ? (
+          <div className="text-sm opacity-70">Fetching on-chain state…</div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <Stat label="Level" value={state.level} />
+            <Stat label="XP" value={state.xp} />
+            <Stat label="Mood" value={state.mood} />
+            <Stat label="Hunger" value={state.hunger} />
+            <Stat label="Energy" value={state.energy} />
+            <Stat label="Cleanliness" value={state.cleanliness} />
+            <Stat label="FID" value={state.fid} />
+            <Stat label="Last Tick (day)" value={state.lastTick} />
+          </div>
+        )}
+        <p className="text-xs text-zinc-500 mt-3">
+          Dynamic values decay/boost over time and after actions (feed, play, clean, rest).
+        </p>
+      </section>
     </main>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-xl border border-zinc-200 p-3 bg-zinc-50">
+      <div className="text-xs text-zinc-500">{label}</div>
+      <div className="text-base font-semibold">{String(value)}</div>
+    </div>
   );
 }
