@@ -17,11 +17,7 @@ export default function Nav() {
   const [avatar, setAvatar] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
 
-  useEffect(() => {
-    const f = currentFid();
-    if (f) setFid(f);
-  }, []);
-
+  useEffect(() => { const f = currentFid(); if (f) setFid(f); }, []);
   useEffect(() => {
     if (!fid) return;
     (async () => {
@@ -42,15 +38,17 @@ export default function Nav() {
 
   return (
     <header
-      className="sticky top-0 z-[60] border-b border-white/10
-                 bg-[radial-gradient(1200px_600px_at_10%_-10%,#1f6feb22,transparent),radial-gradient(1000px_500px_at_110%_-20%,#f59e0b22,transparent)]
-                 backdrop-blur-md shadow-lg"
+      className="sticky top-0 z-[60] border-b border-white/10 backdrop-blur-md"
+      style={{
+        background:
+          "radial-gradient(900px 420px at 10% -20%, rgba(58,166,216,.14), transparent 70%),radial-gradient(900px 420px at 110% -30%, rgba(234,122,42,.18), transparent 70%),linear-gradient(180deg, rgba(8,9,12,.80), rgba(8,9,12,.58))"
+      }}
     >
-      <nav className="container h-16 flex items-center justify-between text-white">
-        {/* === Left: Farcaster avatar (larger, glass style) === */}
+      <nav className="container nav-bar">
+        {/* Left: Farcaster avatar */}
         <button
           onClick={() => (fid ? openProfile(fid) : undefined)}
-          className="relative w-12 h-12 rounded-full overflow-hidden border border-white/30 bg-white/15 backdrop-blur-sm grid place-items-center hover:scale-[1.03] transition-transform"
+          className="nav-avatar"
           title={fid ? `Open Farcaster (FID ${fid})` : "Not signed in"}
           aria-label="Farcaster profile"
         >
@@ -61,82 +59,38 @@ export default function Nav() {
           )}
         </button>
 
-        {/* === Right: menu toggle === */}
+        {/* Right: burger */}
         <button
           onClick={() => setOpen(v => !v)}
           aria-label="Open menu"
-          className="w-12 h-12 grid place-items-center rounded-2xl bg-white/15 hover:bg-white/25 border border-white/25 shadow-inner"
+          className="nav-burger"
         >
-          <svg
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.2"
-            className="text-white"
-          >
-            <path d="M3 6h18M3 12h18M3 18h18" />
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+            <path d="M3 6h18M3 12h18M3 18h18"/>
           </svg>
         </button>
       </nav>
 
-      {/* === Dropdown menu === */}
       {open && (
         <div className="border-t border-white/10 bg-black/70 backdrop-blur-xl animate-fadeInDown">
-          <div className="container py-5 grid gap-3 text-white text-lg">
-            <a
-              href="/"
-              onClick={() => setOpen(false)}
-              className={`nav-pill px-5 py-2 text-base ${is("/") ? "nav-pill--active" : ""}`}
-            >
-              Home
-            </a>
-            <a
-              href="/mint"
-              onClick={() => setOpen(false)}
-              className={`nav-pill px-5 py-2 text-base ${is("/mint") ? "nav-pill--active" : ""}`}
-            >
-              Mint
-            </a>
-            <a
-              href="/my"
-              onClick={() => setOpen(false)}
-              className={`nav-pill px-5 py-2 text-base ${is("/my") ? "nav-pill--active" : ""}`}
-            >
-              My&nbsp;Pet
-            </a>
-            <a
-              href="/about"
-              onClick={() => setOpen(false)}
-              className={`nav-pill px-5 py-2 text-base ${is("/about") ? "nav-pill--active" : ""}`}
-            >
-              About
-            </a>
+          <div className="container py-5 grid gap-3 text-white text-[15px]">
+            <a href="/"      onClick={()=>setOpen(false)} className={`nav-pill ${is("/") ? "nav-pill--active" : ""}`}>Home</a>
+            <a href="/mint"  onClick={()=>setOpen(false)} className={`nav-pill ${is("/mint") ? "nav-pill--active" : ""}`}>Mint</a>
+            <a href="/my"    onClick={()=>setOpen(false)} className={`nav-pill ${is("/my") ? "nav-pill--active" : ""}`}>My&nbsp;Pet</a>
+            <a href="/about" onClick={()=>setOpen(false)} className={`nav-pill ${is("/about") ? "nav-pill--active" : ""}`}>About</a>
 
-            {/* Wallet actions */}
             {isConnected ? (
               <button
-                onClick={() => {
-                  disconnect();
-                  setOpen(false);
-                }}
-                className="justify-self-start px-5 py-2 rounded-full font-semibold
-                           bg-gradient-to-r from-amber-300 to-yellow-400 text-black
-                           hover:brightness-110 transition"
+                onClick={() => { disconnect(); setOpen(false); }}
+                className="btn-wallet--disconnect"
                 title={address || ""}
               >
-                Disconnect {address?.slice(0, 6)}…{address?.slice(-4)}
+                Disconnect {address?.slice(0,6)}…{address?.slice(-4)}
               </button>
             ) : (
               <button
-                onClick={() => {
-                  connectWallet();
-                  setOpen(false);
-                }}
-                className="justify-self-start px-5 py-2 rounded-full font-semibold
-                           bg-gradient-to-r from-blue-400 to-cyan-500 text-black
-                           hover:brightness-110 transition"
+                onClick={() => { connectWallet(); setOpen(false); }}
+                className="btn-wallet--connect"
               >
                 Connect Wallet
               </button>
