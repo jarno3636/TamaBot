@@ -1,7 +1,8 @@
+// components/Nav.tsx
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAccount, useConnect, useDisconnect, useConnectors } from "wagmi";
 import { currentFid, openProfile } from "@/lib/mini";
@@ -18,11 +19,7 @@ export default function Nav() {
   const [avatar, setAvatar] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  useEffect(() => {
-    const f = currentFid();
-    if (f) setFid(f);
-  }, []);
-
+  useEffect(() => { const f = currentFid(); if (f) setFid(f); }, []);
   useEffect(() => {
     if (!fid) return;
     (async () => {
@@ -34,21 +31,14 @@ export default function Nav() {
     })();
   }, [fid]);
 
-  const active = useMemo(() => ({
-    home: pathname === "/" || pathname === "/home",
-    mint: pathname.startsWith("/mint"),
-    my: pathname.startsWith("/my"),
-    about: pathname.startsWith("/about"),
-  }), [pathname]);
-
   async function connectWallet() {
     const c = connectors[0];
     if (c) await connectAsync({ connector: c });
   }
 
   return (
-    <header className="sticky top-0 z-50 border-b border-[#f59e0b]/30 bg-[linear-gradient(90deg,#ff9f40,#ff7b54)]/90 backdrop-blur">
-      <nav className="mx-auto max-w-6xl px-4 h-16 flex items-center justify-between text-white">
+    <header className="sticky top-0 z-50 border-b border-[#f59e0b]/30 bg-[linear-gradient(90deg,#ff9f40,#ff7b54)]/90 backdrop-blur text-white">
+      <nav className="mx-auto max-w-6xl px-4 h-16 flex items-center justify-between">
         {/* Left: Farcaster avatar (fallback egg) */}
         <button
           onClick={() => (fid ? openProfile(fid) : void 0)}
@@ -61,37 +51,12 @@ export default function Nav() {
           ) : (
             <div className="w-full h-full grid place-items-center text-2xl">🥚</div>
           )}
-          <span className="pointer-events-none absolute inset-0 rounded-full ring-0 group-hover:ring-2 ring-white/70 transition"/>
+          <span className="pointer-events-none absolute inset-0 rounded-full ring-0 group-hover:ring-2 ring-white/70 transition" />
         </button>
 
-        {/* Right: pills (desktop) + burger (mobile) */}
-        <div className="hidden md:flex items-center gap-2">
-          <PillLink href="/"   active={active.home}>Home</PillLink>
-          <PillLink href="/mint" active={active.mint}>Mint</PillLink>
-          <PillLink href="/my"   active={active.my}>My&nbsp;Pet</PillLink>
-          <PillLink href="/about" active={active.about}>About</PillLink>
-
-          {isConnected ? (
-            <button
-              onClick={() => disconnect()}
-              className="inline-flex items-center px-4 py-2 rounded-full bg-white text-amber-800 font-semibold hover:brightness-95 shadow"
-              title={address || ""}
-            >
-              {address?.slice(0, 6)}…{address?.slice(-4)}
-            </button>
-          ) : (
-            <button
-              onClick={connectWallet}
-              className="inline-flex items-center px-4 py-2 rounded-full bg-white text-amber-800 font-semibold hover:brightness-95 shadow"
-            >
-              Connect Wallet
-            </button>
-          )}
-        </div>
-
-        {/* burger */}
+        {/* Right: single hamburger (everything lives in the drawer) */}
         <button
-          className="md:hidden w-10 h-10 grid place-items-center rounded-xl bg-white/90 text-amber-800 border border-amber-300"
+          className="w-10 h-10 grid place-items-center rounded-xl bg-white/90 text-amber-800 border border-amber-300"
           onClick={() => setMenuOpen((v) => !v)}
           aria-label="Open menu"
         >
@@ -101,26 +66,27 @@ export default function Nav() {
         </button>
       </nav>
 
-      {/* Mobile drawer */}
+      {/* Drawer: shown for ALL screen sizes when open */}
       {menuOpen && (
-        <div className="md:hidden border-t border-[#f59e0b]/30 bg-[#ffd59a]/95 text-amber-900">
-          <div className="mx-auto max-w-6xl px-4 py-3 grid gap-2">
-            <PillLink href="/" onClick={()=>setMenuOpen(false)} active={active.home}>Home</PillLink>
-            <PillLink href="/mint" onClick={()=>setMenuOpen(false)} active={active.mint}>Mint</PillLink>
-            <PillLink href="/my" onClick={()=>setMenuOpen(false)} active={active.my}>My&nbsp;Pet</PillLink>
-            <PillLink href="/about" onClick={()=>setMenuOpen(false)} active={active.about}>About</PillLink>
+        <div className="border-t border-[#f59e0b]/30 bg-[#ffd59a]/95 text-amber-900">
+          <div className="mx-auto max-w-6xl px-4 py-4 grid gap-2">
+            <PillLink href="/"    onClick={()=>setMenuOpen(false)} active={pathname === "/" || pathname === "/home"}>Home</PillLink>
+            <PillLink href="/mint" onClick={()=>setMenuOpen(false)} active={pathname.startsWith("/mint")}>Mint</PillLink>
+            <PillLink href="/my"   onClick={()=>setMenuOpen(false)} active={pathname.startsWith("/my")}>My&nbsp;Pet</PillLink>
+            <PillLink href="/about" onClick={()=>setMenuOpen(false)} active={pathname.startsWith("/about")}>About</PillLink>
 
             {isConnected ? (
               <button
                 onClick={() => { disconnect(); setMenuOpen(false); }}
-                className="inline-flex items-center px-4 py-2 rounded-full bg-white text-amber-800 font-semibold"
+                className="inline-flex items-center px-4 py-2 rounded-full bg-white text-amber-800 font-semibold mt-2"
+                title={address || ""}
               >
                 Disconnect {address?.slice(0, 6)}…{address?.slice(-4)}
               </button>
             ) : (
               <button
                 onClick={() => { connectWallet(); setMenuOpen(false); }}
-                className="inline-flex items-center px-4 py-2 rounded-full bg-white text-amber-800 font-semibold"
+                className="inline-flex items-center px-4 py-2 rounded-full bg-white text-amber-800 font-semibold mt-2"
               >
                 Connect Wallet
               </button>
