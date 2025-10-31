@@ -30,14 +30,19 @@ export default function Nav() {
   }, [fid]);
 
   async function connectWallet() {
-    const c = connectors[0]; if (c) await connectAsync({ connector: c });
+    const c = connectors[0];
+    if (c) await connectAsync({ connector: c });
   }
 
+  const is = (p: string) => (p === "/" ? pathname === "/" : pathname.startsWith(p));
+
   return (
-    <header className="sticky top-0 z-[60] border-b border-white/10
-      bg-[radial-gradient(1200px_600px_at_10%_-10%,#1f6feb22,transparent),radial-gradient(1000px_500px_at_110%_-20%,#f59e0b22,transparent)]
-      backdrop-blur">
-      <nav className="mx-auto max-w-6xl h-14 px-4 flex items-center justify-between text-white">
+    <header
+      className="sticky top-0 z-[60] border-b border-white/10
+                 bg-[radial-gradient(1200px_600px_at_10%_-10%,#1f6feb22,transparent),radial-gradient(1000px_500px_at_110%_-20%,#f59e0b22,transparent)]
+                 backdrop-blur"
+    >
+      <nav className="container h-14 flex items-center justify-between text-white">
         {/* Left: Farcaster avatar (fallback egg) */}
         <button
           onClick={() => (fid ? openProfile(fid) : undefined)}
@@ -45,14 +50,10 @@ export default function Nav() {
           title={fid ? `Open Farcaster (FID ${fid})` : "Not signed in"}
           aria-label="Farcaster profile"
         >
-          {avatar ? (
-            <Image src={avatar} alt="Farcaster avatar" fill sizes="40px" />
-          ) : (
-            <span className="text-xl">🥚</span>
-          )}
+          {avatar ? <Image src={avatar} alt="Farcaster avatar" fill sizes="40px" /> : <span className="text-xl">🥚</span>}
         </button>
 
-        {/* Right: burger only */}
+        {/* Right: burger only (all links live inside) */}
         <button
           onClick={() => setOpen(v => !v)}
           aria-label="Open menu"
@@ -66,14 +67,13 @@ export default function Nav() {
 
       {/* Dropdown menu */}
       {open && (
-        <div className="z-[59] border-t border-white/10 bg-black/70 backdrop-blur">
-          <div className="mx-auto max-w-6xl px-4 py-4 grid gap-2 text-white">
-            <a href="/"      onClick={()=>setOpen(false)} className={linkCls(pathname === "/")}>Home</a>
-            <a href="/mint"  onClick={()=>setOpen(false)} className={linkCls(pathname.startsWith("/mint"))}>Mint</a>
-            <a href="/my"    onClick={()=>setOpen(false)} className={linkCls(pathname.startsWith("/my"))}>My Pet</a>
-            <a href="/about" onClick={()=>setOpen(false)} className={linkCls(pathname.startsWith("/about"))}>About</a>
+        <div className="border-t border-white/10 bg-black/70 backdrop-blur">
+          <div className="container py-4 grid gap-2 text-white">
+            <a href="/"      onClick={()=>setOpen(false)} className={`nav-pill ${is("/") ? "nav-pill--active" : ""}`}>Home</a>
+            <a href="/mint"  onClick={()=>setOpen(false)} className={`nav-pill ${is("/mint") ? "nav-pill--active" : ""}`}>Mint</a>
+            <a href="/my"    onClick={()=>setOpen(false)} className={`nav-pill ${is("/my") ? "nav-pill--active" : ""}`}>My&nbsp;Pet</a>
+            <a href="/about" onClick={()=>setOpen(false)} className={`nav-pill ${is("/about") ? "nav-pill--active" : ""}`}>About</a>
 
-            {/* Wallet action lives inside the menu */}
             {isConnected ? (
               <button
                 onClick={() => { disconnect(); setOpen(false); }}
@@ -95,12 +95,4 @@ export default function Nav() {
       )}
     </header>
   );
-}
-
-function linkCls(active: boolean) {
-  return [
-    "inline-block px-4 py-2 rounded-full border border-white/20 transition",
-    "bg-white/10 hover:bg-white/20",
-    active && "ring-2 ring-white/50 shadow-[0_0_18px_4px_rgba(255,255,255,0.2)]"
-  ].filter(Boolean).join(" ");
 }
