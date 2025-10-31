@@ -37,12 +37,16 @@ body {
   box-shadow: 0 10px 40px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.08);
   backdrop-filter: blur(10px);
 }
-.glass-pad { padding: 1.25rem; }  /* consistent inner padding */
+
+/* More generous padding inside every card */
+.glass-pad { 
+  padding: 1.6rem 1.4rem; 
+}
 
 /* Vertical spacing between sibling blocks (sections/cards) */
-.stack > * + * { margin-top: 1.5rem; }
+.stack > * + * { margin-top: 2rem; }
 @media (min-width: 768px) {
-  .stack > * + * { margin-top: 2rem; }
+  .stack > * + * { margin-top: 2.5rem; }
 }
 
 /* ===== Buttons ===== */
@@ -57,11 +61,11 @@ body {
 .btn-pill:focus-visible { outline:2px solid rgba(255,255,255,.5); outline-offset:2px; }
 
 /* Brand variants */
-.btn-pill--orange { background: var(--tam-orange); color:#1b0d07; border-color:#00000022; box-shadow:0 8px 22px #EA7A2A55; }
-.btn-pill--blue   { background: var(--tam-blue);   color:#04161c; border-color:#00000022; box-shadow:0 8px 22px #3AA6D855; }
-.btn-pill--green  { background: var(--tam-green);  color:#07150a; border-color:#00000022; box-shadow:0 8px 22px #6CB27155; }
-.btn-pill--red    { background: var(--tam-red);    color:#1a0a08; border-color:#00000022; box-shadow:0 8px 22px #E1634A55; }
-.btn-pill--yellow { background: var(--tam-yellow); color:#231a02; border-color:#00000022; box-shadow:0 8px 22px #F4C64E55; }
+.btn-pill--orange { background: var(--tam-orange); color:#1b0d07; box-shadow:0 8px 22px #EA7A2A55; }
+.btn-pill--blue   { background: var(--tam-blue);   color:#04161c; box-shadow:0 8px 22px #3AA6D855; }
+.btn-pill--green  { background: var(--tam-green);  color:#07150a; box-shadow:0 8px 22px #6CB27155; }
+.btn-pill--red    { background: var(--tam-red);    color:#1a0a08; box-shadow:0 8px 22px #E1634A55; }
+.btn-pill--yellow { background: var(--tam-yellow); color:#231a02; box-shadow:0 8px 22px #F4C64E55; }
 
 .btn-ghost {
   display:inline-flex; align-items:center; justify-content:center;
@@ -77,14 +81,24 @@ body {
 }
 
 /* CTA rows – roomy gap between buttons and what’s above */
-.cta-row  { display:flex; flex-wrap:wrap; gap: 14px; margin-top: 1.25rem; }
+.cta-row { 
+  display:flex; 
+  flex-wrap:wrap; 
+  gap: 16px; 
+  margin-top: 1.4rem; 
+}
 
 /* ===== Info pills (chips) ===== */
 .pill-note {
-  display:inline-block; padding:.5rem .9rem; border-radius:9999px;
-  background:rgba(255,255,255,.10); color:#fff;
-  border:1px solid rgba(255,255,255,.18); backdrop-filter: blur(6px);
+  display:inline-block; 
+  padding:.55rem .95rem; 
+  border-radius:9999px;
+  background:rgba(255,255,255,.10); 
+  color:#fff;
+  border:1px solid rgba(255,255,255,.18); 
+  backdrop-filter: blur(6px);
 }
+
 /* Brand tint variants */
 .pill-note--orange { background:#EA7A2A1a; border-color:#EA7A2A33; color:#ffd9c4; }
 .pill-note--blue   { background:#3AA6D81a; border-color:#3AA6D833; color:#d9f2ff; }
@@ -92,29 +106,33 @@ body {
 .pill-note--red    { background:#E1634A1a; border-color:#E1634A33; color:#ffe4df; }
 .pill-note--yellow { background:#F4C64E1a; border-color:#F4C64E33; color:#fff3cf; }
 
-/* Chip rows with generous spacing (alias: .pill-row and .chips) */
-.pill-row, .chips { display:flex; flex-wrap:wrap; gap: 14px 14px; }
+/* Chip rows with generous spacing */
+.pill-row, .chips { 
+  display:flex; 
+  flex-wrap:wrap; 
+  gap: 16px 16px; 
+}
 
-/* Safari fallback (older WebKit without flex gap) */
-@supports not (gap: 14px 14px) {
-  .pill-row > *, .chips > * { margin-right: 14px; margin-bottom: 14px; }
+/* Safari fallback */
+@supports not (gap: 16px 16px) {
+  .pill-row > *, .chips > * { margin-right: 16px; margin-bottom: 16px; }
   .pill-row > *:last-child, .chips > *:last-child { margin-right: 0; }
 }
 
-/* ===== Media elements safe sizing ===== */
+/* ===== Media elements ===== */
 img, svg, video, canvas { max-width:100%; height:auto; }
 
 /* ===== Layout helpers ===== */
 .container { max-width:72rem; margin-inline:auto; padding-inline:1.25rem; }
 
-/* Smaller, CLS-safe logo boxes */
-.hero-logo-card { padding: 1.25rem; }
+/* ===== Logo boxes ===== */
+.hero-logo-card { padding: 1.5rem 1.25rem 1.75rem; }
 .hero-logo-wrap { position:relative; width:100%; max-width:180px; aspect-ratio:1/1; margin-inline:auto; }
 @media (min-width:768px){ .hero-logo-wrap { max-width:200px; } }
-/* Back-compat for older markup using .hero-logo */
+
+/* Back-compat for .hero-logo */
 .hero-logo { position:relative; width:100%; max-width:180px; margin-inline:auto; aspect-ratio:1/1; }
-.hero-logo img,
-.hero-logo-wrap img { object-fit:contain !important; pointer-events:none; user-select:none; }
+.hero-logo img, .hero-logo-wrap img { object-fit:contain !important; pointer-events:none; user-select:none; }
 
 /* ===== Nav (optional) ===== */
 .nav-pill {
@@ -126,5 +144,10 @@ img, svg, video, canvas { max-width:100%; height:auto; }
 .nav-pill:hover { background: rgba(255,255,255,.18); box-shadow:0 0 0 2px rgba(255,255,255,.25); }
 .nav-pill--active { box-shadow:0 0 0 2px rgba(255,255,255,.45), 0 0 18px 4px rgba(255,255,255,.18); }
 
-/* Section spacing consistency inside container */
-.container > section + section { margin-top: 1.75rem; }
+/* ===== Section spacing consistency ===== */
+.container > section + section { 
+  margin-top: 2.25rem; 
+}
+@media (min-width:768px){ 
+  .container > section + section { margin-top: 3rem; } 
+}
