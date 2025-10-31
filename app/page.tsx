@@ -2,83 +2,129 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { isInsideMini, miniReady, miniSignin, miniAddApp } from "@/lib/mini";
-
-function Tag({ children }: { children: React.ReactNode }) {
-  return <span className="pill-note">{children}</span>;
-}
+import { useEffect, useMemo, useState } from "react";
+import { isInsideMini, miniReady } from "@/lib/mini";
+import { buildTweetUrl, farcasterComposeUrl } from "@/lib/share";
 
 export default function Home() {
   const [inside, setInside] = useState(false);
-  const [busy, setBusy] = useState(false);
-  useEffect(() => { setInside(isInsideMini()); miniReady(); }, []);
+  useEffect(() => {
+    setInside(isInsideMini());
+    miniReady();
+  }, []);
 
-  const onSignin    = async () => { setBusy(true); try { await miniSignin(); } finally { setBusy(false); } };
-  const onSubscribe = async () => { setBusy(true); try { await miniAddApp(); } finally { setBusy(false); } };
+  // --- Share links (uses pet redirect) ---
+  const base =
+    typeof window !== "undefined"
+      ? window.location.origin
+      : (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
+  const shareUrl = useMemo(() => `${base}/my`, [base]);
+  const tweetURL = useMemo(
+    () =>
+      buildTweetUrl({
+        text: "Here’s my TamaBot 🐣",
+        url: shareUrl,
+      }),
+    [shareUrl]
+  );
+  const castURL = useMemo(
+    () =>
+      farcasterComposeUrl({
+        text: "Here’s my TamaBot 🐣",
+        url: shareUrl,
+      }),
+    [shareUrl]
+  );
 
   return (
     <main className="min-h-[100svh] bg-deep pb-16">
-      <div className="container pt-6">
-        {/* HERO */}
+      <div className="container pt-6 space-y-8">
+        {/* ========= HERO ========= */}
         <section className="grid lg:grid-cols-[1fr,1.2fr] gap-6 items-stretch">
-          {/* Logo card */}
-          <div className="glass p-5 flex items-center justify-center">
+          {/* Logo Card */}
+          <div className="glass flex items-center justify-center p-6">
             <div className="hero-logo">
-              <Image src="/logo.PNG" alt="TamaBots" fill priority sizes="(max-width:768px) 60vw, 340px" />
+              <Image
+                src="/logo.PNG"
+                alt="TamaBots"
+                fill
+                priority
+                sizes="(max-width:768px) 60vw, 220px"
+              />
             </div>
           </div>
 
-          {/* Copy + CTAs */}
+          {/* Adopt Card */}
           <div className="glass p-6">
-            <h1 className="text-3xl md:text-4xl font-extrabold">Adopt your TamaBot</h1>
-            <p className="mt-2 text-white/90">
-              Your Farcaster-aware pet that grows with your vibe. Feed, play, clean, rest—then show it off.
+            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
+              Adopt your TamaBot
+            </h1>
+            <p className="mt-2 text-white/90 leading-relaxed">
+              A Farcaster-aware pet that grows with your vibe. Feed, play,
+              clean, rest—then show it off.
             </p>
 
+            {/* Info Tags */}
             <div className="mt-4 flex flex-wrap gap-2">
-              <Tag>Cute on-chain stats</Tag>
-              <Tag>IPFS sprites</Tag>
-              <Tag>Lives inside Warpcast</Tag>
-              <Tag>Milestone pings ✨</Tag>
+              <span className="pill-note pill-note--orange">
+                Cute on-chain stats
+              </span>
+              <span className="pill-note pill-note--blue">IPFS sprites</span>
+              <span className="pill-note pill-note--green">
+                Lives inside Warpcast
+              </span>
+              <span className="pill-note pill-note--red">
+                Milestone pings ✨
+              </span>
             </div>
 
+            {/* CTAs */}
             <div className="mt-6 flex gap-3 flex-wrap">
-              <Link href="/mint" className="btn-pill">Mint your pet</Link>
-              <Link href="/my" className="btn-ghost">See my pet</Link>
+              <Link href="/mint" className="btn-pill btn-pill--orange">
+                Mint your pet
+              </Link>
+              <Link href="/my" className="btn-pill btn-pill--blue">
+                See my pet
+              </Link>
             </div>
-
-            {inside && (
-              <div className="mt-4 flex gap-3 flex-wrap">
-                <button onClick={onSignin} disabled={busy} className="btn-ghost">
-                  {busy ? "Working…" : "Sign in (Warpcast)"}
-                </button>
-                <button onClick={onSubscribe} disabled={busy} className="btn-ghost">
-                  {busy ? "Working…" : "Subscribe / Add App"}
-                </button>
-              </div>
-            )}
           </div>
         </section>
 
-        {/* SECONDARY */}
-        <section className="section grid md:grid-cols-2 gap-6">
+        {/* ========= SHARE & QUICK FACTS ========= */}
+        <section className="grid md:grid-cols-2 gap-6">
+          {/* Share your TamaBot */}
           <div className="glass p-6">
-            <div className="rounded-2xl h-56 md:h-64 grid place-items-center text-center px-6
-                bg-[radial-gradient(circle_at_30%_30%,#22d3ee2e,transparent_60%),radial-gradient(circle_at_80%_70%,#f59e0b2e,transparent_60%)]">
-              <p className="text-lg font-semibold text-white/95">
-                Share your mint link—rich embeds open right in Warpcast’s mini overlay.
-              </p>
+            <h2 className="text-xl font-bold mb-2">Share your TamaBot</h2>
+            <p className="text-white/90 mb-4">
+              Post your pet with rich preview art on Farcaster or X.
+            </p>
+            <div className="flex gap-3 flex-wrap">
+              <a href={castURL} className="btn-pill btn-pill--blue">
+                Share on Farcaster
+              </a>
+              <a
+                href={tweetURL}
+                target="_blank"
+                rel="noreferrer"
+                className="btn-pill btn-pill--yellow"
+              >
+                Share on X
+              </a>
             </div>
-            <p className="mt-3 text-sm text-white/80">Splash screens auto-hide via <code>actions.ready()</code>.</p>
+            <p className="mt-3 text-sm text-white/75">
+              Tip: we use your pet page’s Open&nbsp;Graph image for the embed.
+            </p>
           </div>
 
+          {/* Quick Facts */}
           <div className="glass p-6">
             <h3 className="text-xl font-bold mb-2">Quick facts</h3>
             <ul className="grid gap-2 text-white/90">
-              <li className="pill-note">One pet per FID</li>
-              <li className="pill-note">Mint on Base</li>
-              <li className="pill-note">Playable on web & Mini App</li>
+              <li className="pill-note pill-note--blue">One pet per FID</li>
+              <li className="pill-note pill-note--orange">Mint on Base</li>
+              <li className="pill-note pill-note--green">
+                Web & Mini App compatible
+              </li>
             </ul>
           </div>
         </section>
