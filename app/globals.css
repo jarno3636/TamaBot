@@ -1,114 +1,39 @@
-/* Base dark with subtle pops */
-:root { color-scheme: dark; }
-html, body { margin: 0; padding: 0; }
-body {
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-  color: #f6f7fb;
-  /* logo palette */
-  --tam-orange: #EA7A2A;
-  --tam-blue:   #3AA6D8;
-  --tam-green:  #6CB271;
-  --tam-red:    #E1634A;
-  --tam-yellow: #F4C64E;
-}
+// app/page.tsx (only the changed classNames)
+<main className="min-h-[100svh] bg-deep pb-16">
+  <div className="container pt-6 stack">
+    {/* HERO */}
+    <section className="grid lg:grid-cols-[1fr,1.2fr] gap-6 items-stretch">
+      {/* Logo card */}
+      <div className="glass glass-pad flex items-center justify-center">
+        <div className="hero-logo">
+          <Image src="/logo.PNG" alt="TamaBots" fill priority sizes="(max-width:768px) 45vw, 180px" />
+        </div>
+      </div>
 
-/* ===== Deep orange gradient (replaces previous .bg-deep) ===== */
-.bg-deep {
-  background:
-    radial-gradient(1200px 600px at -10% -20%, rgba(255,149,0,.10), transparent 60%),
-    radial-gradient(1000px 500px at 110% -10%, rgba(255,100,0,.09), transparent 60%),
-    linear-gradient(180deg, #0e0b08 0%, #120e0a 35%, #140f0a 70%, #0f0c09 100%);
-}
+      {/* Adopt card */}
+      <div className="glass glass-pad">
+        <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Adopt your TamaBot</h1>
+        <p className="mt-2 text-white/90 leading-relaxed">
+          Your Farcaster-aware pet that grows with your vibe. Feed, play, clean, rest—then flex it.
+        </p>
 
-/* Glass cards */
-.glass {
-  border-radius: 20px;
-  border: 1px solid rgba(255,255,255,.12);
-  background: rgba(255,255,255,.06);
-  box-shadow: 0 10px 40px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.08);
-  backdrop-filter: blur(10px);
-}
-/* Consistent inner padding so text never hugs edges */
-.glass-pad { padding: 1.25rem; }
-@media (min-width: 768px) { .glass-pad { padding: 1.5rem; } }
+        {/* Two focused tags with generous spacing */}
+        <div className="mt-4 pill-row">
+          <span className="pill-note pill-note--green text-[0.95rem]">Lives on Farcaster</span>
+          <span className="pill-note pill-note--blue  text-[0.95rem]">Built from your Farcaster stats</span>
+        </div>
 
-/* Vertical spacing helper between stacked sections/cards */
-.stack > * + * { margin-top: 2rem; }
-@media (min-width: 768px) { .stack > * + * { margin-top: 2.5rem; } }
+        <div className="mt-6 flex flex-wrap gap-4">
+          <Link href="/mint" className="btn-pill btn-pill--orange">Mint your pet</Link>
+          <Link href="/my"   className="btn-pill btn-pill--blue">See my pet</Link>
+        </div>
+      </div>
+    </section>
 
-/* Primary & ghost (neutral) */
-.btn-pill {
-  display:inline-flex; align-items:center; justify-content:center;
-  padding:.65rem 1.05rem; border-radius:9999px; font-weight:700;
-  background:#ffffff; color:#1b1b1f; border:1px solid rgba(0,0,0,.05);
-  box-shadow:0 6px 18px rgba(255,200,120,.25);
-  transition:transform .08s ease, filter .15s ease, box-shadow .15s ease;
-}
-.btn-pill:hover { filter:brightness(.97); transform:translateY(-1px); }
-.btn-pill:focus-visible { outline:2px solid rgba(255,255,255,.5); outline-offset:2px; }
-
-.btn-ghost {
-  display:inline-flex; align-items:center; justify-content:center;
-  padding:.65rem 1.05rem; border-radius:9999px; font-weight:600;
-  background:rgba(255,255,255,.12); color:#fff;
-  border:1px solid rgba(255,255,255,.25); backdrop-filter: blur(8px);
-  transition:background .15s ease, box-shadow .15s ease, transform .08s ease;
-}
-.btn-ghost:hover {
-  background:rgba(255,255,255,.18);
-  box-shadow:0 0 0 2px rgba(255,255,255,.4), 0 0 18px 4px rgba(255,255,255,.18);
-  transform:translateY(-1px);
-}
-.btn-ghost:focus-visible { outline:2px solid rgba(255,255,255,.5); outline-offset:2px; }
-
-/* ==== COLOR VARIANTS (logo palette) ==== */
-.btn-pill--orange { background: var(--tam-orange); color:#1b0d07; border-color:#00000022; box-shadow:0 8px 22px #EA7A2A55; }
-.btn-pill--blue   { background: var(--tam-blue);   color:#04161c; border-color:#00000022; box-shadow:0 8px 22px #3AA6D855; }
-.btn-pill--green  { background: var(--tam-green);  color:#07150a; border-color:#00000022; box-shadow:0 8px 22px #6CB27155; }
-.btn-pill--red    { background: var(--tam-red);    color:#1a0a08; border-color:#00000022; box-shadow:0 8px 22px #E1634A55; }
-.btn-pill--yellow { background: var(--tam-yellow); color:#231a02; border-color:#00000022; box-shadow:0 8px 22px #F4C64E55; }
-
-/* Tiny info pills (neutral) */
-.pill-note {
-  display:inline-block; padding:.45rem .8rem; border-radius:9999px;
-  background:rgba(255,255,255,.10); color:#fff;
-  border:1px solid rgba(255,255,255,.18); backdrop-filter: blur(6px);
-}
-/* Colored info pills */
-.pill-note--orange { background:#EA7A2A1a; border-color:#EA7A2A33; color:#ffd9c4; }
-.pill-note--blue   { background:#3AA6D81a; border-color:#3AA6D833; color:#d9f2ff; }
-.pill-note--green  { background:#6CB2711a; border-color:#6CB27133; color:#e9f9ea; }
-.pill-note--red    { background:#E1634A1a; border-color:#E1634A33; color:#ffe4df; }
-.pill-note--yellow { background:#F4C64E1a; border-color:#F4C64E33; color:#fff3cf; }
-
-/* Chip rows with generous spacing */
-.pill-row { display:flex; flex-wrap:wrap; gap:.75rem; } /* use on containers of pills */
-
-/* Images: safe by default */
-img, svg, video, canvas { max-width:100%; height:auto; }
-
-/* Utility */
-.container { max-width:72rem; margin-inline:auto; padding-inline:1.25rem; }
-.section { margin-top:1.5rem; }
-
-/* Hero logo box (smaller + stable to prevent CLS) */
-.hero-logo { position:relative; width:100%; max-width:160px; margin-inline:auto; aspect-ratio:1/1; }
-@media (min-width:768px){ .hero-logo { max-width:200px; } }
-.hero-logo img { object-fit:contain !important; pointer-events:none; user-select:none; }
-
-/* Mobile menu link pill */
-.nav-pill {
-  display:inline-block; padding:.6rem 1rem; border-radius:9999px;
-  border:1px solid rgba(255,255,255,.22);
-  background:rgba(255,255,255,.10); color:#fff;
-  transition: background .15s ease, box-shadow .15s ease;
-}
-.nav-pill:hover { background: rgba(255,255,255,.18); box-shadow:0 0 0 2px rgba(255,255,255,.25); }
-.nav-pill--active { box-shadow:0 0 0 2px rgba(255,255,255,.45), 0 0 18px 4px rgba(255,255,255,.18); }
-
-/* Optional: colored nav pills (use sparingly) */
-.nav-pill--orange { background:#EA7A2A22; border-color:#EA7A2A44; }
-.nav-pill--blue   { background:#3AA6D822; border-color:#3AA6D844; }
-.nav-pill--green  { background:#6CB27122; border-color:#6CB27144; }
-.nav-pill--red    { background:#E1634A22; border-color:#E1634A44; }
-.nav-pill--yellow { background:#F4C64E22; border-color:#F4C64E44; }
+    {/* SHARE & FACTS */}
+    <section className="grid md:grid-cols-2 gap-6">
+      <div className="glass glass-pad"> … </div>
+      <div className="glass glass-pad"> … </div>
+    </section>
+  </div>
+</main>
