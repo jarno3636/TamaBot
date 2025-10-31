@@ -15,34 +15,57 @@ export default function Page({ params }: { params: { id: string } }) {
   const id = Number(params.id);
 
   const { data: tokenUri } = useReadContract({
-    address: TAMABOT_CORE.address, abi: TAMABOT_CORE.abi, chainId: base.id,
-    functionName: "tokenURI", args: [BigInt(id)], query: { enabled: Number.isFinite(id) } as any
+    address: TAMABOT_CORE.address,
+    abi: TAMABOT_CORE.abi,
+    chainId: base.id,
+    functionName: "tokenURI",
+    args: [BigInt(id)],
+    query: { enabled: Number.isFinite(id) } as any,
   });
 
   const { data: s } = useReadContract({
-    address: TAMABOT_CORE.address, abi: TAMABOT_CORE.abi, chainId: base.id,
-    functionName: "getState", args: [BigInt(id)], query: { enabled: Number.isFinite(id) } as any
+    address: TAMABOT_CORE.address,
+    abi: TAMABOT_CORE.abi,
+    chainId: base.id,
+    functionName: "getState",
+    args: [BigInt(id)],
+    query: { enabled: Number.isFinite(id) } as any,
   });
 
   const state = useMemo(() => {
     if (!s) return null as any;
     const [level, xp, mood, hunger, energy, cleanliness, lastTick, fid] = s as any;
-    return { level: Number(level), xp: Number(xp), mood: Number(mood), hunger: Number(hunger),
-      energy: Number(energy), cleanliness: Number(cleanliness), lastTick: Number(lastTick), fid: Number(fid) };
+    return {
+      level: Number(level),
+      xp: Number(xp),
+      mood: Number(mood),
+      hunger: Number(hunger),
+      energy: Number(energy),
+      cleanliness: Number(cleanliness),
+      lastTick: Number(lastTick),
+      fid: Number(fid),
+    };
   }, [s]);
 
-  // Share helpers
-  const shareUrl  = (typeof window !== "undefined") ? window.location.href : "";
+  // ----- Share helpers -----
+  const shareUrl = typeof window !== "undefined" ? window.location.href : "";
   const shareText = `Meet my TamaBot #${id} — evolving with my Farcaster vibe.`;
 
   function shareFarcaster() {
-    // Use Mini composer when available; fall back to warpcast web
-    try { composeCast(`${shareText} ${shareUrl}`); }
-    catch { openUrl(`https://warpcast.com/~/compose?text=${encodeURIComponent(`${shareText} ${shareUrl}`)}`); }
+    try {
+      composeCast(`${shareText} ${shareUrl}`); // Mini composer if available
+    } catch {
+      openUrl(
+        `https://warpcast.com/~/compose?text=${encodeURIComponent(
+          `${shareText} ${shareUrl}`
+        )}`
+      );
+    }
   }
 
   function shareX() {
-    openUrl(buildTweetUrl(shareText, shareUrl));
+    const tweetUrl = buildTweetUrl({ text: shareText, url: shareUrl });
+    openUrl(tweetUrl);
   }
 
   return (
@@ -51,12 +74,22 @@ export default function Page({ params }: { params: { id: string } }) {
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-2xl md:text-3xl font-extrabold">TamaBot #{id}</h1>
           <div className="flex gap-2">
-            <Link href="/my" className="btn-pill btn-pill--blue">My Pet</Link>
-            <Link href="/mint" className="btn-pill btn-pill--orange">Mint another</Link>
+            <Link href="/my" className="btn-pill btn-pill--blue">
+              My Pet
+            </Link>
+            <Link href="/mint" className="btn-pill btn-pill--orange">
+              Mint another
+            </Link>
           </div>
         </div>
 
-        <Card>{typeof tokenUri === "string" ? <PetCard tokenURI={tokenUri} /> : "Loading metadata…"} </Card>
+        <Card>
+          {typeof tokenUri === "string" ? (
+            <PetCard tokenURI={tokenUri} />
+          ) : (
+            "Loading metadata…"
+          )}
+        </Card>
 
         {/* Share card */}
         <Card>
@@ -65,19 +98,26 @@ export default function Page({ params }: { params: { id: string } }) {
             <Pill>Rich preview enabled</Pill>
           </div>
           <div className="flex gap-3 flex-wrap">
-            <button onClick={shareFarcaster} className="btn-pill btn-pill--blue">Share on Farcaster</button>
-            <button onClick={shareX}         className="btn-pill btn-pill--yellow">Share on X</button>
+            <button onClick={shareFarcaster} className="btn-pill btn-pill--blue">
+              Share on Farcaster
+            </button>
+            <button onClick={shareX} className="btn-pill btn-pill--yellow">
+              Share on X
+            </button>
           </div>
           <p className="text-xs text-white/70 mt-3">
-            We set OpenGraph/Twitter tags for this page so your pet’s image and title appear in the embed.
+            We set OpenGraph/Twitter tags for this page so your pet’s image and
+            title appear in the embed.
           </p>
         </Card>
 
+        {/* Live stats */}
         <Card>
           <div className="mb-3 flex flex-wrap gap-2">
             <Pill>Live stats</Pill>
             <Pill>Updates over time</Pill>
           </div>
+
           {!state ? (
             <div className="text-sm text-white/80">Fetching on-chain state…</div>
           ) : (
@@ -92,8 +132,10 @@ export default function Page({ params }: { params: { id: string } }) {
               <KV k="Last Tick (day)" v={state.lastTick} />
             </div>
           )}
+
           <p className="text-xs text-white/75 mt-3">
-            Values decay/boost after actions (feed, play, clean, rest) and with time.
+            Values decay/boost after actions (feed, play, clean, rest) and with
+            time.
           </p>
         </Card>
       </div>
