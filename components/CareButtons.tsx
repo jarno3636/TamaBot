@@ -2,6 +2,13 @@
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { TAMABOT_CORE } from "@/lib/abi";
 
+const LABEL: Record<"feed"|"play"|"clean"|"rest", string> = {
+  feed:  "🍖 Feed",
+  play:  "🎮 Play",
+  clean: "🧽 Clean",
+  rest:  "😴 Rest",
+};
+
 export function CareButtons({ id }: { id: number }) {
   const { writeContract, data: hash, isPending } = useWriteContract();
   const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({ hash });
@@ -12,12 +19,18 @@ export function CareButtons({ id }: { id: number }) {
   }
 
   return (
-    <div className="flex gap-2">
+    <div className="flex flex-wrap gap-3">
       {(["feed","play","clean","rest"] as const).map(k=> (
-        <button key={k} disabled={busy} onClick={()=>call(k)}
-                className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-50">{k}</button>
+        <button
+          key={k}
+          disabled={busy}
+          onClick={()=>call(k)}
+          className="btn-pill btn-pill--blue hover:brightness-110 disabled:opacity-60"
+        >
+          {LABEL[k]}
+        </button>
       ))}
-      {isSuccess && <span className="text-xs text-emerald-400">Done!</span>}
+      {isSuccess && <span className="pill-note pill-note--green text-xs">Action confirmed</span>}
     </div>
   );
 }
