@@ -1,4 +1,6 @@
+// app/page.tsx
 "use client";
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { isInsideMini, miniReady, miniSignin, miniAddApp } from "@/lib/mini";
@@ -14,7 +16,23 @@ export default function Home() {
 
   return (
     <main className="home-bg min-h-[100svh] pb-16">
-      <div className="mx-auto max-w-6xl px-5 pt-8">
+      <div className="mx-auto max-w-6xl px-5 pt-8 space-y-6">
+
+        {/* NEW: logo hero card */}
+        <Card className="border-white/20 grid place-items-center">
+          <div className="relative w-full max-w-[520px] aspect-[1/1]">
+            <Image
+              src="/logo.PNG"
+              alt="TamaBots"
+              fill
+              sizes="520px"
+              className="object-contain drop-shadow-[0_10px_30px_rgba(0,0,0,0.45)]"
+              priority
+            />
+          </div>
+        </Card>
+
+        {/* Existing hero content */}
         <section className="grid lg:grid-cols-2 gap-6">
           <Card className="border-white/20">
             <h1 className="text-3xl md:text-4xl font-extrabold">Adopt your TamaBot</h1>
@@ -36,8 +54,12 @@ export default function Home() {
 
             {inside && (
               <div className="mt-4 flex gap-3">
-                <button onClick={onSignin} disabled={busy} className="btn-ghost">{busy ? "Working…" : "Sign in (Warpcast)"}</button>
-                <button onClick={onSubscribe} disabled={busy} className="btn-ghost">{busy ? "Working…" : "Subscribe / Add App"}</button>
+                <button onClick={onSignin} disabled={busy} className="btn-ghost">
+                  {busy ? "Working…" : "Sign in (Warpcast)"}
+                </button>
+                <button onClick={onSubscribe} disabled={busy} className="btn-ghost">
+                  {busy ? "Working…" : "Subscribe / Add App"}
+                </button>
               </div>
             )}
           </Card>
