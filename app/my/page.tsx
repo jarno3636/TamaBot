@@ -7,6 +7,14 @@ import FarcasterLogin from "@/components/FarcasterLogin";
 import { useRouter } from "next/navigation";
 import { currentFid } from "@/lib/mini";
 import { Card, Pill } from "@/components/UI";
+import Nav from "@/components/Nav";
+
+export const metadata = {
+  title: "My TamaBot • TamaBots",
+  description: "Jump straight to your TamaBot. Auto-detects FID in the Warpcast Mini.",
+  openGraph: { title: "My TamaBot • TamaBots", images: ["/og.png"] },
+  twitter: { card: "summary_large_image" }
+};
 
 export default function MyPetPage() {
   const router = useRouter();
@@ -30,34 +38,37 @@ export default function MyPetPage() {
   const id = Number(tokenId || 0);
 
   return (
-    <main className="my-bg min-h-[100svh] pb-16">
-      <div className="mx-auto max-w-3xl px-5 pt-8">
-        <Card>
-          <h1 className="text-2xl md:text-3xl font-extrabold">My Pet</h1>
+    <>
+      <Nav />
+      <main className="my-bg min-h-[100svh] pb-16">
+        <div className="mx-auto max-w-3xl px-5 pt-8">
+          <Card>
+            <h1 className="text-2xl md:text-3xl font-extrabold">My Pet</h1>
 
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Pill>Auto-detect inside Warpcast</Pill>
-            <Pill>Jump to your pet</Pill>
-          </div>
-
-          {!fid && (
-            <div className="mt-5">
-              <FarcasterLogin onLogin={setFid} />
+            <div className="mt-3 pill-row">
+              <Pill>Auto-detect inside Warpcast</Pill>
+              <Pill>Jump to your pet</Pill>
             </div>
-          )}
 
-          {fid && id === 0 && (
-            <div className="mt-6">
-              <p className="text-white/90">No pet found for FID <b>{fid}</b>.</p>
-              <a href="/mint" className="btn-pill mt-3 inline-block">Mint your TamaBot</a>
-            </div>
-          )}
+            {!fid && (
+              <div className="mt-5">
+                <FarcasterLogin onLogin={setFid} />
+              </div>
+            )}
 
-          <p className="mt-6 text-sm text-white/80">
-            Tip: inside Warpcast MiniApp this auto-detects your FID and deep-links to your pet.
-          </p>
-        </Card>
-      </div>
-    </main>
+            {fid && id === 0 && (
+              <div className="mt-6">
+                <p className="text-white/90">No pet found for FID <b>{fid}</b>.</p>
+                <a href="/mint" className="btn-pill btn-pill--orange mt-3 inline-block">Mint your TamaBot</a>
+              </div>
+            )}
+
+            <p className="mt-6 text-sm text-white/80">
+              Tip: inside Warpcast MiniApp this auto-detects your FID and deep-links to your pet.
+            </p>
+          </Card>
+        </div>
+      </main>
+    </>
   );
 }
