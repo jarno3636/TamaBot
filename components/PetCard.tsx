@@ -4,41 +4,34 @@ import useSWR from "swr";
 import Image from "next/image";
 import { ipfsToHttp } from "@/lib/ipfs";
 
-const fetcher = (u: string) => fetch(u).then((r) => {
+const fetcher = async (u: string) => {
+  const r = await fetch(u);
   if (!r.ok) throw new Error(`Metadata fetch failed (${r.status})`);
   return r.json();
-});
+};
 
 export default function PetCard({ tokenURI }: { tokenURI: string }) {
   const { data, error, isLoading } = useSWR(tokenURI, fetcher, { revalidateOnFocus: false });
 
-  if (isLoading) return <div className="p-6">Loading metadata…</div>;
-  if (error) return <div className="p-6 text-red-500 text-sm">Error: {String(error.message || error)}</div>;
-  if (!data) return <div className="p-6">No metadata found.</div>;
+  if (isLoading) return <div className="glass glass-pad">Loading metadata…</div>;
+  if (error) return <div className="glass glass-pad text-red-400 text-sm">Error: {String((error as any)?.message || error)}</div>;
+  if (!data) return <div className="glass glass-pad">No metadata found.</div>;
 
   const img = data.image ? ipfsToHttp(data.image) : "";
   const anim = data.animation_url ? ipfsToHttp(data.animation_url) : "";
 
   return (
-    <div className="grid gap-3 p-6 rounded-2xl border border-white/10 bg-white/5">
+    <div className="glass glass-pad grid gap-4">
       <div className="relative w-full aspect-square rounded-2xl overflow-hidden">
         {img ? (
-          <Image src={img} alt={data.name} fill sizes="512px" />
+          <Image src={img} alt={data.name} fill sizes="512px" className="object-cover" />
         ) : (
           <div className="w-full h-full bg-black/20" />
         )}
       </div>
 
       {anim && (
-        <video
-          className="w-full rounded-xl"
-          autoPlay
-          loop
-          muted
-          playsInline
-          src={anim}
-          controls={false}
-        />
+        <video className="w-full rounded-xl" autoPlay loop muted playsInline src={anim} />
       )}
 
       <div className="flex items-center justify-between">
@@ -48,9 +41,9 @@ export default function PetCard({ tokenURI }: { tokenURI: string }) {
         </span>
       </div>
 
-      <div className="flex gap-2 flex-wrap">
+      <div className="pill-row">
         {data.attributes?.map((a: any) => (
-          <span key={a.trait_type} className="px-3 py-1 rounded-full bg-white/10 text-sm">
+          <span key={a.trait_type} className="pill-note pill-note--blue text-sm">
             {a.trait_type}: {String(a.value)}
           </span>
         ))}
