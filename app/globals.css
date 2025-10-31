@@ -151,3 +151,57 @@ img, svg, video, canvas { max-width:100%; height:auto; }
 @media (min-width:768px){ 
   .container > section + section { margin-top: 3rem; } 
 }
+/* --- Premium nav sizing & elements --- */
+.nav-bar { height: 68px; display:flex; align-items:center; justify-content:space-between; color:#fff; }
+.nav-avatar{
+  position:relative; width:48px; height:48px; border-radius:9999px; overflow:hidden;
+  border:1px solid rgba(255,255,255,.35); background:rgba(255,255,255,.15);
+  display:grid; place-items:center; backdrop-filter: blur(6px);
+  box-shadow: 0 4px 14px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.14);
+  transition: transform .12s ease, box-shadow .2s ease;
+}
+.nav-avatar:hover{ transform: translateY(-1px); box-shadow:0 10px 24px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.18); }
+
+.nav-burger{
+  width:48px; height:48px; display:grid; place-items:center; border-radius:18px;
+  border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.15);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.05), 0 8px 26px rgba(0,0,0,.35);
+  color:#fff; transition: background .15s ease, transform .12s ease;
+}
+.nav-burger:hover{ background:rgba(255,255,255,.22); transform:translateY(-1px); }
+
+/* Wallet buttons inside menu */
+.btn-wallet--connect{
+  padding:.6rem 1.1rem; border-radius:9999px; font-weight:700; color:#131313;
+  background:linear-gradient(90deg,#8ad1ff,#6dd3ef); border:0;
+  box-shadow:0 10px 24px rgba(109,211,239,.35);
+}
+.btn-wallet--disconnect{
+  padding:.6rem 1.1rem; border-radius:9999px; font-weight:700; color:#1b1206;
+  background:linear-gradient(90deg,#ffd36b,#f7c347); border:0;
+  box-shadow:0 10px 24px rgba(247,195,71,.35);
+}
+
+/* Ensure visual space BETWEEN cards/sections (not just inside) */
+.container > section + section { margin-top: 32px; }
+.card-stack > .glass + .glass { margin-top: 22px; }
+@media (min-width: 768px){
+  .container > section + section { margin-top: 40px; }
+  .card-stack > .glass + .glass { margin-top: 26px; }
+}
+
+/* Subtle premium border glow for cards */
+.glass{
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.04));
+  box-shadow: 0 10px 40px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.08);
+}
+.glass::after{
+  content:""; pointer-events:none; position:absolute; inset:0; border-radius:20px;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.06), 0 0 50px rgba(58,166,216,.06);
+}
+
+/* Pill rows & CTA spacing (real gaps even without Tailwind) */
+.pill-row, .chips { display:flex; flex-wrap:wrap; gap:14px; }
+.cta-row { display:flex; flex-wrap:wrap; gap:16px; margin-top:1.4rem; }
