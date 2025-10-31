@@ -1,4 +1,3 @@
-// app/page.tsx
 "use client";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -9,79 +8,50 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   useEffect(() => { setInside(isInsideMini()); miniReady(); }, []);
 
-  async function onSignin() {
-    setBusy(true);
-    try { await miniSignin(); } finally { setBusy(false); }
-  }
-  async function onSubscribe() {
-    setBusy(true);
-    try { await miniAddApp(); } finally { setBusy(false); }
-  }
+  const onSignin = async () => { setBusy(true); try{ await miniSignin(); } finally{ setBusy(false); } };
+  const onSubscribe = async () => { setBusy(true); try{ await miniAddApp(); } finally{ setBusy(false); } };
 
   return (
-    <main className="min-h-[100svh] bg-gradient-to-b from-sky-500 via-fuchsia-500 to-amber-400">
-      <div className="mx-auto max-w-5xl px-5 py-10 text-white">
-        <header className="flex items-center justify-between">
-          <h1 className="text-3xl md:text-4xl font-extrabold drop-shadow">TamaBot</h1>
-          <nav className="flex gap-3">
-            <Link href="/my" className="px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25">My Pet</Link>
-            <Link href="/mint" className="px-4 py-2 rounded-xl bg-black/30 hover:bg-black/40">Mint</Link>
-          </nav>
-        </header>
-
-        <section className="mt-10 grid md:grid-cols-2 gap-6">
-          <div className="rounded-3xl p-6 bg-black/20 backdrop-blur border border-white/20">
-            <h2 className="text-2xl font-bold">Adopt your Farcaster-aware pet</h2>
-            <p className="mt-2 text-white/90">
-              Your pet evolves daily based on your Farcaster vibe. Feed, play, rest — and flex the glow-up.
-            </p>
-            <ul className="mt-4 space-y-2 text-white/90 text-sm">
-              <li>• On-chain stats on Base</li>
-              <li>• IPFS sprites that change as you level</li>
-              <li>• Optional notifications for milestones</li>
-            </ul>
-
-            <div className="mt-6 flex gap-3">
-              {inside ? (
-                <>
-                  <button
-                    onClick={onSignin}
-                    disabled={busy}
-                    className="px-4 py-2 rounded-2xl bg-white text-black font-semibold hover:opacity-90 disabled:opacity-60"
-                  >
-                    {busy ? "Working…" : "Sign in with Farcaster"}
-                  </button>
-                  <button
-                    onClick={onSubscribe}
-                    disabled={busy}
-                    className="px-4 py-2 rounded-2xl bg-black/70 border border-white/30 hover:bg-black/60 disabled:opacity-60"
-                  >
-                    {busy ? "Working…" : "Add App / Enable notifications"}
-                  </button>
-                </>
-              ) : (
-                <a
-                  href="/mint"
-                  className="px-4 py-2 rounded-2xl bg-white text-black font-semibold hover:opacity-90"
-                >
-                  Open Mint
-                </a>
-              )}
-            </div>
+    <main className="mx-auto max-w-6xl px-5 pb-16">
+      {/* Hero */}
+      <section className="mt-8 grid lg:grid-cols-2 gap-6">
+        <div className="card p-6" style={{background:"linear-gradient(135deg,#ffe0b3,#ffd89e)"}}>
+          <h1 className="text-3xl font-extrabold">Adopt your TamaBot</h1>
+          <p className="mt-2 text-zinc-800">
+            A Farcaster-aware pet on <b>Base</b>. Your daily vibe levels it up. Feed, play, clean, rest.
+          </p>
+          <ul className="mt-3 text-zinc-800">
+            <li>• On-chain stats & IPFS sprites</li>
+            <li>• Mini app inside Warpcast</li>
+            <li>• Cute cards, glowy pills ✨</li>
+          </ul>
+          <div className="mt-5 flex gap-3">
+            <Link href="/mint" className="btn-pill">Mint yours</Link>
+            <Link href="/my" className="btn-ghost">My Pet</Link>
           </div>
-
-          <div className="rounded-3xl p-6 bg-white/15 border border-white/20">
-            <div className="aspect-square rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-center p-6">
-              <p className="text-white/90">
-                Share a cast with your mint link — we render beautiful embeds and launch right inside Warpcast.
-              </p>
+          {inside && (
+            <div className="mt-4 flex gap-3">
+              <button onClick={onSignin} disabled={busy} className="btn-ghost">
+                {busy ? "Working…" : "Sign in (Warpcast)"}
+              </button>
+              <button onClick={onSubscribe} disabled={busy} className="btn-ghost">
+                {busy ? "Working…" : "Subscribe / Add App"}
+              </button>
             </div>
-            <p className="mt-3 text-sm text-white/90">
-              Tip: first-time users get a splash screen, then your app takes over. We auto-hide the splash via <code>actions.ready()</code>.
+          )}
+        </div>
+
+        <div className="card p-6">
+          <div className="rounded-2xl h-64 bg-[radial-gradient(circle_at_30%_30%,#ffe8c7,transparent_60%),radial-gradient(circle_at_70%_70%,#ffd7a2,transparent_60%)] flex items-center justify-center text-center px-6">
+            <p className="text-lg font-semibold text-zinc-800">
+              Share your pet with a cast! We render rich embeds and open right in Warpcast’s mini overlay.
             </p>
           </div>
-        </section>
-      </div>
+          <p className="mt-3 text-sm text-zinc-600">
+            Splash screens auto-hide via <code>actions.ready()</code>.
+          </p>
+        </div>
+      </section>
     </main>
   );
 }
