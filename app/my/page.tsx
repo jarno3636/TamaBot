@@ -1,5 +1,5 @@
-// app/my/page.tsx
 "use client";
+
 import { useEffect, useState } from "react";
 import { useReadContract } from "wagmi";
 import { base } from "viem/chains";
@@ -31,33 +31,39 @@ export default function MyPetPage() {
   const id = Number(tokenId || 0);
 
   return (
-    <main className="my-bg min-h-[100svh] pb-16">
+    <main className="min-h-[100svh] bg-deep-orange pb-16">
       <div className="mx-auto max-w-3xl px-5 pt-8">
-        <Card>
-          <h1 className="text-2xl md:text-3xl font-extrabold">My Pet</h1>
+        <section className="stack">
+          <Card className="glass glass-pad">
+            <h1 className="text-2xl md:text-3xl font-extrabold">My Pet</h1>
 
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Pill>Auto-detect inside Warpcast</Pill>
-            <Pill>Jump to your pet</Pill>
-          </div>
-
-          {!fid && (
-            <div className="mt-5">
-              <FarcasterLogin onLogin={setFid} />
+            <div className="mt-3 pill-row">
+              <Pill>Auto-detect inside Farcaster</Pill>
+              <Pill>Jump to your pet</Pill>
             </div>
-          )}
 
-          {fid && id === 0 && (
-            <div className="mt-6">
-              <p className="text-white/90">No pet found for FID <b>{fid}</b>.</p>
-              <a href="/mint" className="btn-pill mt-3 inline-block">Mint your TamaBot</a>
-            </div>
-          )}
+            {!fid && (
+              <div className="mt-5">
+                <FarcasterLogin onLogin={setFid} />
+              </div>
+            )}
 
-          <p className="mt-6 text-sm text-white/80">
-            Tip: inside Warpcast MiniApp this auto-detects your FID and deep-links to your pet.
-          </p>
-        </Card>
+            {fid && id === 0 && (
+              <div className="mt-6">
+                <p className="text-white/90">
+                  No pet found for FID <b>{fid}</b>.
+                </p>
+                <a href="/mint" className="btn-pill btn-pill--orange mt-3 inline-block">
+                  Mint your TamaBot
+                </a>
+              </div>
+            )}
+
+            <p className="mt-6 text-sm text-white/80">
+              Tip: inside the Farcaster Mini this auto-detects your FID and deep-links to your pet.
+            </p>
+          </Card>
+        </section>
       </div>
     </main>
   );
