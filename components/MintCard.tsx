@@ -23,7 +23,7 @@ export default function MintCard() {
     const mini = detectMiniFid();
     if (mini && !fid) setFid(String(mini));
     else if (fromQuery && !fid) setFid(fromQuery);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fidNum = /^\d+$/.test(fid) ? Number(fid) : null;
@@ -58,7 +58,6 @@ export default function MintCard() {
     abi: TAMABOT_CORE.abi,
     functionName: "tokenIdByFID",
     args: [BigInt(fidNum || 0)],
-    // only try once we have a fid and either (a) tx confirmed or (b) user reloads page later
     query: { enabled: Boolean(fidNum && isSuccess) } as any,
   });
 
@@ -68,52 +67,48 @@ export default function MintCard() {
   }, [isSuccess, tokenId, router]);
 
   return (
-    <div className="rounded-2xl p-6 border border-white/10 bg-white/5 grid gap-3">
-      <h2 className="text-xl font-semibold">Mint your TamaBot</h2>
+    <div className="glass glass-pad grid gap-4">
+      <h2 className="text-xl md:text-2xl font-extrabold">Mint your TamaBot</h2>
 
       <label className="text-sm opacity-80">Farcaster FID</label>
       <input
-        className="px-3 py-2 rounded-lg bg-black/30 border border-white/10"
+        className="px-3 py-2 rounded-xl bg-black/30 border border-white/15 focus:outline-none focus:ring-2 focus:ring-white/30"
         value={fid}
         onChange={(e) => setFid(e.target.value.trim())}
         placeholder="e.g. 12345"
         inputMode="numeric"
       />
 
-      <div className="text-sm opacity-80">
-        Mint fee: {fee ? `${feeEth} ETH` : "…"}
+      <div className="pill-row">
+        <span className="pill-note pill-note--yellow text-sm">Mint fee: {fee ? `${feeEth} ETH` : "…"}</span>
+        {fidNum === null && fid && <span className="pill-note pill-note--red text-sm">Invalid FID</span>}
       </div>
 
-      <button
-        onClick={onMint}
-        disabled={!canMint || isPending || confirming}
-        className="px-4 py-2 rounded-xl bg-emerald-500/80 hover:bg-emerald-500 disabled:opacity-50"
-      >
-        {isPending || confirming ? "Minting…" : `Mint (${feeEth} ETH)`}
-      </button>
-
-      {hash && (
-        <a
-          className="text-sm underline"
-          href={`https://basescan.org/tx/${hash}`}
-          target="_blank"
-          rel="noreferrer"
+      <div className="cta-row">
+        <button
+          onClick={onMint}
+          disabled={!canMint || isPending || confirming}
+          className="btn-pill btn-pill--orange"
         >
-          View transaction
-        </a>
-      )}
+          {isPending || confirming ? "Minting…" : `Mint (${feeEth} ETH)`}
+        </button>
+        {hash && (
+          <a
+            className="btn-ghost"
+            href={`https://basescan.org/tx/${hash}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            View tx on BaseScan
+          </a>
+        )}
+      </div>
 
       {isSuccess && !tokenId && (
-        <div className="text-emerald-400">
-          Mint confirmed. Resolving your token ID…
-        </div>
+        <div className="text-emerald-400">Mint confirmed. Resolving your token ID…</div>
       )}
 
-      {werr && (
-        <div className="text-red-400 text-sm break-words">
-          {String(werr.message)}
-        </div>
-      )}
+      {werr && <div className="text-red-400 text-sm break-words">{String(werr.message)}</div>}
     </div>
   );
 }
