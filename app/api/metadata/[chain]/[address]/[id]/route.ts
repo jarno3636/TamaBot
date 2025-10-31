@@ -1,6 +1,7 @@
 // app/api/metadata/[chain]/[address]/[id]/route.ts
 import { NextRequest } from "next/server";
 import { getOnchainState, getPersona, getSpriteCid, hasSupabase } from "@/lib/data";
+import { ipfsToHttp } from "@/lib/ipfs"; // <-- you already have this helper
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -12,19 +13,24 @@ export async function GET(
 ) {
   const { address, id } = params;
 
-  // On-chain state (via RPC)
+  // On-chain state
   const s = await getOnchainState(address, Number(id));
 
-  // DB lookups only if Supabase is configured
-  const persona = hasSupabase() ? await getPersona(Number(id)) : null;
-  const imageCid = hasSupabase() ? await getSpriteCid(Number(id)) : "";
+  // Optional DB lookups
+  const persona   = hasSupabase() ? await getPersona(Number(id)) : null;
+  const spriteCid = hasSupabase() ? await getSpriteCid(Number(id)) : "";
 
   const site = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
+
+  // ensure absolute https assets for embeds
+  const imageHttp = spriteCid ? ipfsToHttp(spriteCid) : "";
+  const animHttp  = persona?.previewCid ? ipfsToHttp(persona.previewCid) : "";
+
   const json = {
     name: `TamaBot #${id}`,
     description: persona?.bio ?? "An AI-shaped Farcaster pet that evolves with your vibe.",
-    image: imageCid || "",
-    animation_url: persona?.previewCid ?? "",
+    image: imageHttp,
+    animation_url: animHttp,
     attributes: [
       { trait_type: "Level", value: s.level },
       { trait_type: "Mood", value: s.mood },
@@ -32,15 +38,15 @@ export async function GET(
       { trait_type: "Energy", value: s.energy },
       { trait_type: "Cleanliness", value: s.cleanliness },
       { trait_type: "FID", value: s.fid },
-      { trait_type: "Personality", value: persona?.label ?? "Unknown" }
+      { trait_type: "Personality", value: persona?.label ?? "Unknown" },
     ],
-    external_url: site ? `${site}/tamabot/${id}` : undefined
+    external_url: site ? `${site}/tamabot/${id}` : undefined,
   };
 
   return new Response(JSON.stringify(json), {
     headers: {
-      "content-type": "application/json",
-      "cache-control": "no-store"
-    }
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+    },
   });
 }
