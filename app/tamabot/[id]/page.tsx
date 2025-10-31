@@ -53,8 +53,10 @@ export default function Page({ params }: { params: { id: string } }) {
 
   function shareFarcaster() {
     try {
-      composeCast(`${shareText} ${shareUrl}`); // Mini composer if available
+      // Mini composer if available
+      composeCast(`${shareText} ${shareUrl}`);
     } catch {
+      // Fallback: Farcaster web client (Warpcast)
       openUrl(
         `https://warpcast.com/~/compose?text=${encodeURIComponent(
           `${shareText} ${shareUrl}`
@@ -94,7 +96,7 @@ export default function Page({ params }: { params: { id: string } }) {
         {/* Share card */}
         <Card>
           <div className="mb-3 flex flex-wrap gap-2">
-            <Pill c="green">Share your TamaBot</Pill>
+            <Pill>Share your TamaBot</Pill>
             <Pill>Rich preview enabled</Pill>
           </div>
           <div className="flex gap-3 flex-wrap">
