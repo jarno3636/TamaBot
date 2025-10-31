@@ -24,8 +24,8 @@ body {
 /* deep orange variant (distinct from yellow pill) */
 .bg-deep-orange {
   background:
-    radial-gradient(1200px 600px at 0% -10%, rgba(234,122,42,.18), transparent 60%),
-    radial-gradient(1200px 700px at 110% -20%, rgba(225,99,74,.14), transparent 60%),
+    radial-gradient(1200px 600px at 0% -10%, rgba(234,122,42,0.25), transparent 60%),
+    radial-gradient(1200px 700px at 110% -20%, rgba(225,99,74,0.18), transparent 60%),
     linear-gradient(180deg, #0b0d12 0%, #101013 35%, #131014 100%);
 }
 
@@ -37,7 +37,7 @@ body {
   box-shadow: 0 10px 40px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.08);
   backdrop-filter: blur(10px);
 }
-.glass-pad { padding: 1.25rem; }          /* consistent inner padding */
+.glass-pad { padding: 1.25rem; } /* consistent inner padding */
 
 /* Vertical spacing between sibling blocks (sections/cards) */
 .stack > * + * { margin-top: 1.5rem; }
@@ -111,3 +111,48 @@ img, svg, video, canvas { max-width:100%; height:auto; }
 }
 .nav-pill:hover { background: rgba(255,255,255,.18); box-shadow:0 0 0 2px rgba(255,255,255,.25); }
 .nav-pill--active { box-shadow:0 0 0 2px rgba(255,255,255,.45), 0 0 18px 4px rgba(255,255,255,.18); }
+
+/* --- Spacing + padding helpers (extended) --- */
+.glass-pad { padding: 1.25rem; }
+
+/* Wide logo wrapper (prevents overflow & weird cropping) */
+.logo-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 220px;
+  aspect-ratio: 3 / 2;      /* wide shape for header logo */
+  margin-inline: auto;
+  overflow: hidden;
+}
+.logo-wrap img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain !important;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Chip rows with generous spacing between pills */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+/* Safari fallback (for older WebKit) */
+@supports not (gap: 12px) {
+  .chips > * {
+    margin-right: 12px;
+    margin-bottom: 12px;
+  }
+  .chips > *:last-child {
+    margin-right: 0;
+  }
+}
+
+/* Section spacing consistency */
+.container > section + section {
+  margin-top: 1.75rem;
+}
