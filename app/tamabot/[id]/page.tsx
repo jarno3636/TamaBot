@@ -1,8 +1,7 @@
-// app/tamabot/[id]/page.tsx
 "use client";
 
-import { useEffect, useMemo } from "react";
 import Link from "next/link";
+import { useMemo } from "react";
 import PetCard from "@/components/PetCard";
 import { TAMABOT_CORE } from "@/lib/abi";
 import { useReadContract } from "wagmi";
@@ -11,94 +10,73 @@ import { base } from "viem/chains";
 export default function Page({ params }: { params: { id: string } }) {
   const id = Number(params.id);
 
-  // Read tokenURI from chain (canonical source)
   const { data: tokenUri } = useReadContract({
-    address: TAMABOT_CORE.address,
-    abi: TAMABOT_CORE.abi,
-    chainId: base.id,
-    functionName: "tokenURI",
-    args: [BigInt(id)],
-    query: { enabled: Number.isFinite(id) } as any,
+    address: TAMABOT_CORE.address, abi: TAMABOT_CORE.abi, chainId: base.id,
+    functionName: "tokenURI", args: [BigInt(id)], query: { enabled: Number.isFinite(id) } as any
   });
 
-  // Read live on-chain state
   const { data: s } = useReadContract({
-    address: TAMABOT_CORE.address,
-    abi: TAMABOT_CORE.abi,
-    chainId: base.id,
-    functionName: "getState",
-    args: [BigInt(id)],
-    query: { enabled: Number.isFinite(id) } as any,
+    address: TAMABOT_CORE.address, abi: TAMABOT_CORE.abi, chainId: base.id,
+    functionName: "getState", args: [BigInt(id)], query: { enabled: Number.isFinite(id) } as any
   });
 
   const state = useMemo(() => {
     if (!s) return null as any;
     const [level, xp, mood, hunger, energy, cleanliness, lastTick, fid] = s as any;
     return {
-      level: Number(level),
-      xp: Number(xp),
-      mood: Number(mood),
-      hunger: Number(hunger),
-      energy: Number(energy),
-      cleanliness: Number(cleanliness),
-      lastTick: Number(lastTick),
-      fid: Number(fid),
+      level: Number(level), xp: Number(xp), mood: Number(mood),
+      hunger: Number(hunger), energy: Number(energy),
+      cleanliness: Number(cleanliness), lastTick: Number(lastTick), fid: Number(fid),
     };
   }, [s]);
 
-  useEffect(() => {
-    // Optional: prefetch /my
-  }, []);
-
   return (
-    <main className="max-w-5xl mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">TamaBot #{id}</h1>
-        <Link
-          href="/my"
-          className="text-sm rounded-lg bg-purple-600 text-white px-3 py-1 hover:bg-purple-500"
-        >
-          My Pet
-        </Link>
+    <main className="mx-auto max-w-5xl px-5 py-8 space-y-6">
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-extrabold">TamaBot #{id}</h1>
+        <div className="flex gap-2">
+          <Link href="/my" className="btn-ghost">My Pet</Link>
+          <Link href="/mint" className="btn-pill">Mint another</Link>
+        </div>
       </div>
 
-      {/* Metadata-rendered card */}
       {typeof tokenUri === "string" ? (
-        <PetCard tokenURI={tokenUri} />
+        <div className="card p-4">
+          <PetCard tokenURI={tokenUri} />
+        </div>
       ) : (
-        <div className="text-sm opacity-70">Loading metadata…</div>
+        <div className="card p-4">Loading metadata…</div>
       )}
 
-      {/* Live on-chain stats */}
-      <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-semibold mb-3">Live Stats</h2>
+      <section className="card p-6" style={{background:"linear-gradient(180deg,#ffffff,#fff3e3)"}}>
+        <h2 className="text-lg font-bold mb-3">Live Stats</h2>
         {!state ? (
-          <div className="text-sm opacity-70">Fetching on-chain state…</div>
+          <div className="text-sm text-zinc-600">Fetching on-chain state…</div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <Stat label="Level" value={state.level} />
-            <Stat label="XP" value={state.xp} />
-            <Stat label="Mood" value={state.mood} />
-            <Stat label="Hunger" value={state.hunger} />
-            <Stat label="Energy" value={state.energy} />
-            <Stat label="Cleanliness" value={state.cleanliness} />
-            <Stat label="FID" value={state.fid} />
-            <Stat label="Last Tick (day)" value={state.lastTick} />
+          <div className="grid-kv">
+            <KV k="Level" v={state.level} />
+            <KV k="XP" v={state.xp} />
+            <KV k="Mood" v={state.mood} />
+            <KV k="Hunger" v={state.hunger} />
+            <KV k="Energy" v={state.energy} />
+            <KV k="Cleanliness" v={state.cleanliness} />
+            <KV k="FID" v={state.fid} />
+            <KV k="Last Tick (day)" v={state.lastTick} />
           </div>
         )}
-        <p className="text-xs text-zinc-500 mt-3">
-          Dynamic values decay/boost over time and after actions (feed, play, clean, rest).
+        <p className="text-xs text-zinc-600 mt-3">
+          Values decay/boost over time and after actions (feed, play, clean, rest).
         </p>
       </section>
     </main>
   );
 }
 
-function Stat({ label, value }: { label: string; value: number | string }) {
+function KV({ k, v }: { k: string; v: number | string }) {
   return (
-    <div className="rounded-xl border border-zinc-200 p-3 bg-zinc-50">
-      <div className="text-xs text-zinc-500">{label}</div>
-      <div className="text-base font-semibold">{String(value)}</div>
+    <div className="p-3 rounded-xl bg-white border border-black/5">
+      <div className="text-xs text-zinc-500">{k}</div>
+      <div className="text-base font-semibold">{String(v)}</div>
     </div>
   );
 }
