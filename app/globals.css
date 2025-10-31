@@ -21,7 +21,7 @@ body {
     linear-gradient(180deg, #0b0d12 0%, #0a0b10 40%, #0a0a0e 100%);
 }
 
-/* deep orange variant (distinct from yellow pill) */
+/* Deep orange variant (distinct from yellow pill) */
 .bg-deep-orange {
   background:
     radial-gradient(1200px 600px at 0% -10%, rgba(234,122,42,0.25), transparent 60%),
@@ -37,7 +37,7 @@ body {
   box-shadow: 0 10px 40px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.08);
   backdrop-filter: blur(10px);
 }
-.glass-pad { padding: 1.25rem; } /* consistent inner padding */
+.glass-pad { padding: 1.25rem; }  /* consistent inner padding */
 
 /* Vertical spacing between sibling blocks (sections/cards) */
 .stack > * + * { margin-top: 1.5rem; }
@@ -56,7 +56,7 @@ body {
 .btn-pill:hover { filter:brightness(.97); transform:translateY(-1px); }
 .btn-pill:focus-visible { outline:2px solid rgba(255,255,255,.5); outline-offset:2px; }
 
-/* brand variants */
+/* Brand variants */
 .btn-pill--orange { background: var(--tam-orange); color:#1b0d07; border-color:#00000022; box-shadow:0 8px 22px #EA7A2A55; }
 .btn-pill--blue   { background: var(--tam-blue);   color:#04161c; border-color:#00000022; box-shadow:0 8px 22px #3AA6D855; }
 .btn-pill--green  { background: var(--tam-green);  color:#07150a; border-color:#00000022; box-shadow:0 8px 22px #6CB27155; }
@@ -76,31 +76,45 @@ body {
   transform:translateY(-1px);
 }
 
+/* CTA rows – roomy gap between buttons and what’s above */
+.cta-row  { display:flex; flex-wrap:wrap; gap: 14px; margin-top: 1.25rem; }
+
 /* ===== Info pills (chips) ===== */
 .pill-note {
   display:inline-block; padding:.5rem .9rem; border-radius:9999px;
   background:rgba(255,255,255,.10); color:#fff;
   border:1px solid rgba(255,255,255,.18); backdrop-filter: blur(6px);
 }
-/* brand tint variants */
+/* Brand tint variants */
 .pill-note--orange { background:#EA7A2A1a; border-color:#EA7A2A33; color:#ffd9c4; }
 .pill-note--blue   { background:#3AA6D81a; border-color:#3AA6D833; color:#d9f2ff; }
 .pill-note--green  { background:#6CB2711a; border-color:#6CB27133; color:#e9f9ea; }
 .pill-note--red    { background:#E1634A1a; border-color:#E1634A33; color:#ffe4df; }
 .pill-note--yellow { background:#F4C64E1a; border-color:#F4C64E33; color:#fff3cf; }
 
-/* give chips generous spacing on wrap */
-.pill-row { display:flex; flex-wrap:wrap; gap: 14px 14px; }
+/* Chip rows with generous spacing (alias: .pill-row and .chips) */
+.pill-row, .chips { display:flex; flex-wrap:wrap; gap: 14px 14px; }
 
-/* ===== Images: safe by default ===== */
+/* Safari fallback (older WebKit without flex gap) */
+@supports not (gap: 14px 14px) {
+  .pill-row > *, .chips > * { margin-right: 14px; margin-bottom: 14px; }
+  .pill-row > *:last-child, .chips > *:last-child { margin-right: 0; }
+}
+
+/* ===== Media elements safe sizing ===== */
 img, svg, video, canvas { max-width:100%; height:auto; }
 
 /* ===== Layout helpers ===== */
 .container { max-width:72rem; margin-inline:auto; padding-inline:1.25rem; }
 
-/* smaller, CLS-safe logo box */
+/* Smaller, CLS-safe logo boxes */
+.hero-logo-card { padding: 1.25rem; }
+.hero-logo-wrap { position:relative; width:100%; max-width:180px; aspect-ratio:1/1; margin-inline:auto; }
+@media (min-width:768px){ .hero-logo-wrap { max-width:200px; } }
+/* Back-compat for older markup using .hero-logo */
 .hero-logo { position:relative; width:100%; max-width:180px; margin-inline:auto; aspect-ratio:1/1; }
-.hero-logo img { object-fit:contain !important; pointer-events:none; user-select:none; }
+.hero-logo img,
+.hero-logo-wrap img { object-fit:contain !important; pointer-events:none; user-select:none; }
 
 /* ===== Nav (optional) ===== */
 .nav-pill {
@@ -112,47 +126,5 @@ img, svg, video, canvas { max-width:100%; height:auto; }
 .nav-pill:hover { background: rgba(255,255,255,.18); box-shadow:0 0 0 2px rgba(255,255,255,.25); }
 .nav-pill--active { box-shadow:0 0 0 2px rgba(255,255,255,.45), 0 0 18px 4px rgba(255,255,255,.18); }
 
-/* --- Spacing + padding helpers (extended) --- */
-.glass-pad { padding: 1.25rem; }
-
-/* Wide logo wrapper (prevents overflow & weird cropping) */
-.logo-wrap {
-  position: relative;
-  width: 100%;
-  max-width: 220px;
-  aspect-ratio: 3 / 2;      /* wide shape for header logo */
-  margin-inline: auto;
-  overflow: hidden;
-}
-.logo-wrap img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: contain !important;
-  pointer-events: none;
-  user-select: none;
-}
-
-/* Chip rows with generous spacing between pills */
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-/* Safari fallback (for older WebKit) */
-@supports not (gap: 12px) {
-  .chips > * {
-    margin-right: 12px;
-    margin-bottom: 12px;
-  }
-  .chips > *:last-child {
-    margin-right: 0;
-  }
-}
-
-/* Section spacing consistency */
-.container > section + section {
-  margin-top: 1.75rem;
-}
+/* Section spacing consistency inside container */
+.container > section + section { margin-top: 1.75rem; }
