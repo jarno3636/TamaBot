@@ -12,12 +12,12 @@ body {
   --tam-yellow: #F4C64E;
 }
 
-/* Deep gradient bg used on home */
+/* ===== Deep orange gradient (replaces previous .bg-deep) ===== */
 .bg-deep {
   background:
-    radial-gradient(1200px 600px at 0% -10%, #1f6feb22, transparent),
-    radial-gradient(1200px 700px at 100% -20%, #f59e0b22, transparent),
-    linear-gradient(180deg, #0b0d12 0%, #0a0b10 40%, #0a0a0e 100%);
+    radial-gradient(1200px 600px at -10% -20%, rgba(255,149,0,.10), transparent 60%),
+    radial-gradient(1000px 500px at 110% -10%, rgba(255,100,0,.09), transparent 60%),
+    linear-gradient(180deg, #0e0b08 0%, #120e0a 35%, #140f0a 70%, #0f0c09 100%);
 }
 
 /* Glass cards */
@@ -28,6 +28,13 @@ body {
   box-shadow: 0 10px 40px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.08);
   backdrop-filter: blur(10px);
 }
+/* Consistent inner padding so text never hugs edges */
+.glass-pad { padding: 1.25rem; }
+@media (min-width: 768px) { .glass-pad { padding: 1.5rem; } }
+
+/* Vertical spacing helper between stacked sections/cards */
+.stack > * + * { margin-top: 2rem; }
+@media (min-width: 768px) { .stack > * + * { margin-top: 2.5rem; } }
 
 /* Primary & ghost (neutral) */
 .btn-pill {
@@ -74,6 +81,9 @@ body {
 .pill-note--red    { background:#E1634A1a; border-color:#E1634A33; color:#ffe4df; }
 .pill-note--yellow { background:#F4C64E1a; border-color:#F4C64E33; color:#fff3cf; }
 
+/* Chip rows with generous spacing */
+.pill-row { display:flex; flex-wrap:wrap; gap:.75rem; } /* use on containers of pills */
+
 /* Images: safe by default */
 img, svg, video, canvas { max-width:100%; height:auto; }
 
@@ -81,8 +91,9 @@ img, svg, video, canvas { max-width:100%; height:auto; }
 .container { max-width:72rem; margin-inline:auto; padding-inline:1.25rem; }
 .section { margin-top:1.5rem; }
 
-/* Hero logo box (smaller by default) */
-.hero-logo { position:relative; width:100%; max-width:220px; margin-inline:auto; aspect-ratio:1/1; }
+/* Hero logo box (smaller + stable to prevent CLS) */
+.hero-logo { position:relative; width:100%; max-width:160px; margin-inline:auto; aspect-ratio:1/1; }
+@media (min-width:768px){ .hero-logo { max-width:200px; } }
 .hero-logo img { object-fit:contain !important; pointer-events:none; user-select:none; }
 
 /* Mobile menu link pill */
