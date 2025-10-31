@@ -24,7 +24,7 @@ export default function FarcasterLogin({ onLogin }: { onLogin?: (fid: number) =>
     const inside = isInsideMini();
     setInsideMiniApp(inside);
 
-    // 1️⃣ MiniKit auto context
+    // 1) MiniKit auto context
     const mk: any = (globalThis as any).MiniKit;
     if (mk?.user?.fid) {
       const f = Number(mk.user.fid);
@@ -36,7 +36,7 @@ export default function FarcasterLogin({ onLogin }: { onLogin?: (fid: number) =>
       return;
     }
 
-    // 2️⃣ Cookie/localStorage fallback
+    // 2) Cookie/localStorage fallback
     const saved = Number(getCookie("fid") || localStorage.getItem("fid") || "");
     if (Number.isFinite(saved) && saved > 0) {
       setFid(saved);
@@ -50,14 +50,15 @@ export default function FarcasterLogin({ onLogin }: { onLogin?: (fid: number) =>
     setChecking(true);
     try {
       const res = await miniSignin();
-      const newFid = res?.user?.fid;
-      if (newFid) {
+      const newFidRaw = res?.user?.fid;
+      const newFid = Number(newFidRaw); // <-- normalize to number
+      if (Number.isFinite(newFid) && newFid > 0) {
         setFid(newFid);
         localStorage.setItem("fid", String(newFid));
         setCookie("fid", String(newFid));
         onLogin?.(newFid);
       } else {
-        throw new Error("No FID returned from MiniKit");
+        throw new Error("No valid FID returned from MiniKit");
       }
     } catch (e: any) {
       console.error("MiniKit signin error:", e);
@@ -78,7 +79,7 @@ export default function FarcasterLogin({ onLogin }: { onLogin?: (fid: number) =>
     try {
       const r = await fetch(`/api/neynar/user/${fid}`);
       if (!r.ok) throw new Error(`Neynar lookup failed (${r.status})`);
-      const j = await r.json();
+      await r.json(); // optional: inspect result
       localStorage.setItem("fid", String(fid));
       setCookie("fid", String(fid));
       onLogin?.(fid);
@@ -90,9 +91,7 @@ export default function FarcasterLogin({ onLogin }: { onLogin?: (fid: number) =>
   }
 
   if (loading)
-    return (
-      <div className="text-sm text-zinc-500 animate-pulse">Detecting Farcaster session…</div>
-    );
+    return <div className="text-sm text-zinc-500 animate-pulse">Detecting Farcaster session…</div>;
 
   if (fid)
     return (
@@ -131,9 +130,7 @@ export default function FarcasterLogin({ onLogin }: { onLogin?: (fid: number) =>
             className="border border-white/20 rounded-lg px-3 py-2 w-40 bg-black/40 text-white placeholder:text-white/40"
             placeholder="Enter your FID"
             inputMode="numeric"
-            onChange={(e) =>
-              setFid(e.target.value ? Number(e.target.value) : null)
-            }
+            onChange={(e) => setFid(e.target.value ? Number(e.target.value) : null)}
           />
           <button
             onClick={confirmWithNeynar}
