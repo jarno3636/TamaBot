@@ -13,7 +13,6 @@ export default function Home() {
   const [inside, setInside] = useState(false);
   useEffect(() => { setInside(isInsideMini()); miniReady(); }, []);
 
-  // Share links (route to /my, which redirects to the user's pet)
   const base =
     typeof window !== "undefined"
       ? window.location.origin
@@ -24,38 +23,36 @@ export default function Home() {
 
   return (
     <main className="min-h-[100svh] bg-deep-orange pb-16">
-      <div className="container pt-6 stack">
-        {/* ===== HERO ===== */}
+      <div className="container pt-6 space-y-8">
+        {/* HERO */}
         <section className="grid lg:grid-cols-[1fr,1.2fr] gap-6 items-stretch">
-          {/* Logo card (smaller, fixed ratio to prevent CLS) */}
+          {/* Logo card (smaller, wide aspect, overflow hidden) */}
           <div className="glass glass-pad flex items-center justify-center">
-            <div className="relative mx-auto aspect-[1/1] w-full max-w-[160px] md:max-w-[200px]">
+            <div className="logo-wrap">
               <Image
                 src="/logo.PNG"
                 alt="TamaBots"
                 fill
                 priority
-                sizes="(max-width:768px) 160px, 200px"
-                className="object-contain pointer-events-none"
+                sizes="(max-width:768px) 200px, 220px"
               />
             </div>
           </div>
 
-          {/* Adopt card (concise) */}
+          {/* Adopt card */}
           <div className="glass glass-pad">
             <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Adopt your TamaBot</h1>
             <p className="mt-2 text-white/90 leading-relaxed">
               Your Farcaster-aware pet that grows with your vibe. Feed, play, clean, rest—then flex it.
             </p>
 
-            {/* Two focused tags with generous spacing */}
-            <div className="mt-4 flex flex-wrap gap-3">
+            {/* Chip row with generous spacing */}
+            <div className="mt-4 chips">
               <span className="pill-note pill-note--green text-[0.95rem]">Lives on Farcaster</span>
               <span className="pill-note pill-note--blue  text-[0.95rem]">Built from your Farcaster stats</span>
             </div>
 
-            {/* CTAs */}
-            <div className="mt-6 flex gap-3 flex-wrap">
+            <div className="mt-6 chips">
               <Link href="/mint" className="btn-pill btn-pill--orange">Mint your pet</Link>
               <Link href="/my"   className="btn-pill btn-pill--blue">See my pet</Link>
             </div>
@@ -69,13 +66,12 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ===== SHARE & FACTS ===== */}
+        {/* SHARE & FACTS */}
         <section className="grid md:grid-cols-2 gap-6">
-          {/* Share */}
           <div className="glass glass-pad">
             <h2 className="text-xl font-bold mb-2">Share your TamaBot</h2>
             <p className="text-white/90 mb-4">Post your pet with rich preview art on Farcaster or X.</p>
-            <div className="flex gap-3 flex-wrap">
+            <div className="chips">
               <a href={castURL}  className="btn-pill btn-pill--blue">Share on Farcaster</a>
               <a href={tweetURL} className="btn-pill btn-pill--yellow" target="_blank" rel="noreferrer">Share on X</a>
             </div>
@@ -84,10 +80,9 @@ export default function Home() {
             </p>
           </div>
 
-          {/* Quick facts */}
           <div className="glass glass-pad">
             <h3 className="text-xl font-bold mb-2">Quick facts</h3>
-            <ul className="grid gap-3 text-white/90">
+            <ul className="chips text-white/90">
               <li className="pill-note pill-note--blue  text-[0.95rem]">One pet per FID</li>
               <li className="pill-note pill-note--orange text-[0.95rem]">Mint on Base</li>
               <li className="pill-note pill-note--green text-[0.95rem]">Web & Mini App compatible</li>
