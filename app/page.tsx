@@ -1,3 +1,4 @@
+// app/page.tsx
 "use client";
 
 import Image from "next/image";
@@ -5,76 +6,68 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { isInsideMini, miniReady } from "@/lib/mini";
 import { buildTweetUrl, farcasterComposeUrl } from "@/lib/share";
+import FarcasterLogin from "@/components/FarcasterLogin";
+import SubscribeCallout from "@/components/SubscribeCallout";
 
 export default function Home() {
   const [inside, setInside] = useState(false);
+
   useEffect(() => {
     setInside(isInsideMini());
     miniReady();
   }, []);
 
-  // --- Share links (uses pet redirect) ---
+  // Share links (route to /my, which redirects to the user's pet page)
   const base =
     typeof window !== "undefined"
       ? window.location.origin
       : (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
   const shareUrl = useMemo(() => `${base}/my`, [base]);
   const tweetURL = useMemo(
-    () =>
-      buildTweetUrl({
-        text: "Here’s my TamaBot 🐣",
-        url: shareUrl,
-      }),
+    () => buildTweetUrl({ text: "Here’s my TamaBot 🐣", url: shareUrl }),
     [shareUrl]
   );
   const castURL = useMemo(
-    () =>
-      farcasterComposeUrl({
-        text: "Here’s my TamaBot 🐣",
-        url: shareUrl,
-      }),
+    () => farcasterComposeUrl({ text: "Here’s my TamaBot 🐣", url: shareUrl }),
     [shareUrl]
   );
 
   return (
     <main className="min-h-[100svh] bg-deep pb-16">
       <div className="container pt-6 space-y-8">
-        {/* ========= HERO ========= */}
+        {/* ===== HERO ===== */}
         <section className="grid lg:grid-cols-[1fr,1.2fr] gap-6 items-stretch">
-          {/* Logo Card */}
+          {/* Logo card (smaller) */}
           <div className="glass flex items-center justify-center p-6">
-            <div className="hero-logo">
+            <div className="hero-logo" style={{ maxWidth: 200 }}>
               <Image
                 src="/logo.PNG"
                 alt="TamaBots"
                 fill
                 priority
-                sizes="(max-width:768px) 60vw, 220px"
+                sizes="(max-width:768px) 45vw, 200px"
+                className="pointer-events-none"
               />
             </div>
           </div>
 
-          {/* Adopt Card */}
+          {/* Adopt card (concise) */}
           <div className="glass p-6">
             <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
               Adopt your TamaBot
             </h1>
             <p className="mt-2 text-white/90 leading-relaxed">
-              A Farcaster-aware pet that grows with your vibe. Feed, play,
-              clean, rest—then show it off.
+              Your Farcaster-aware pet that grows with your vibe. Feed, play,
+              clean, rest—then flex it.
             </p>
 
-            {/* Info Tags */}
+            {/* Two focused tags */}
             <div className="mt-4 flex flex-wrap gap-2">
-              <span className="pill-note pill-note--orange">
-                Cute on-chain stats
+              <span className="pill-note pill-note--green text-[0.95rem]">
+                Lives on Farcaster
               </span>
-              <span className="pill-note pill-note--blue">IPFS sprites</span>
-              <span className="pill-note pill-note--green">
-                Lives inside Warpcast
-              </span>
-              <span className="pill-note pill-note--red">
-                Milestone pings ✨
+              <span className="pill-note pill-note--blue text-[0.95rem]">
+                Built from your Farcaster stats
               </span>
             </div>
 
@@ -87,12 +80,20 @@ export default function Home() {
                 See my pet
               </Link>
             </div>
+
+            {/* Mini helpers only when inside Farcaster */}
+            {inside && (
+              <div className="mt-6 space-y-4">
+                <FarcasterLogin />
+                <SubscribeCallout />
+              </div>
+            )}
           </div>
         </section>
 
-        {/* ========= SHARE & QUICK FACTS ========= */}
+        {/* ===== SHARE & FACTS ===== */}
         <section className="grid md:grid-cols-2 gap-6">
-          {/* Share your TamaBot */}
+          {/* Share */}
           <div className="glass p-6">
             <h2 className="text-xl font-bold mb-2">Share your TamaBot</h2>
             <p className="text-white/90 mb-4">
@@ -116,13 +117,17 @@ export default function Home() {
             </p>
           </div>
 
-          {/* Quick Facts */}
+          {/* Quick facts */}
           <div className="glass p-6">
             <h3 className="text-xl font-bold mb-2">Quick facts</h3>
             <ul className="grid gap-2 text-white/90">
-              <li className="pill-note pill-note--blue">One pet per FID</li>
-              <li className="pill-note pill-note--orange">Mint on Base</li>
-              <li className="pill-note pill-note--green">
+              <li className="pill-note pill-note--blue text-[0.95rem]">
+                One pet per FID
+              </li>
+              <li className="pill-note pill-note--orange text-[0.95rem]">
+                Mint on Base
+              </li>
+              <li className="pill-note pill-note--green text-[0.95rem]">
                 Web & Mini App compatible
               </li>
             </ul>
