@@ -1,4 +1,3 @@
-// app/page.tsx
 "use client";
 
 import Image from "next/image";
@@ -13,7 +12,6 @@ export default function Home() {
   const [inside, setInside] = useState(false);
   useEffect(() => { setInside(isInsideMini()); miniReady(); }, []);
 
-  // Share links (route to /my, which redirects to user's pet page)
   const base =
     typeof window !== "undefined"
       ? window.location.origin
@@ -22,7 +20,6 @@ export default function Home() {
   const tweetURL = useMemo(() => buildTweetUrl({ text: "Here’s my TamaBot 🐣", url: shareUrl }), [shareUrl]);
   const castURL  = useMemo(() => farcasterComposeUrl({ text: "Here’s my TamaBot 🐣", url: shareUrl }), [shareUrl]);
 
-  // Quick facts – price & supply from env with friendly fallbacks
   const mintPrice = (process.env.NEXT_PUBLIC_MINT_PRICE || "").trim();
   const maxSupply = (process.env.NEXT_PUBLIC_MAX_SUPPLY || "").trim();
   const priceLabel = mintPrice ? `Mint price: ${mintPrice}` : "Mint price: TBA";
@@ -30,11 +27,11 @@ export default function Home() {
 
   return (
     <main className="min-h-[100svh] bg-deep-orange pb-16">
-      <div className="container pt-6 stack">
+      <div className="container pt-6">
         {/* ===== HERO ===== */}
-        <section className="grid lg:grid-cols-[1fr,1.2fr] gap-8 items-stretch">
-          {/* Logo card (small & padded) */}
-          <div className="glass hero-logo-card">
+        <section className="card-stack" style={{ display:'grid', gridTemplateColumns:'1fr', gap:16 }}>
+          {/* Logo card */}
+          <div className="glass glass-pad" style={{ position:'relative' }}>
             <div className="hero-logo-wrap">
               <Image
                 src="/logo.PNG"
@@ -54,21 +51,19 @@ export default function Home() {
               Your Farcaster-aware pet that grows with your vibe. Feed, play, clean, rest—then flex it.
             </p>
 
-            {/* Focused tags with generous spacing */}
-            <div className="mt-4 pill-row">
+            <div className="pill-row" style={{ marginTop: 14 }}>
               <span className="pill-note pill-note--green text-[0.95rem]">Lives on Farcaster</span>
               <span className="pill-note pill-note--blue  text-[0.95rem]">Built from your Farcaster stats</span>
             </div>
 
-            {/* CTAs with extra gap from chips */}
             <div className="cta-row">
               <Link href="/mint" className="btn-pill btn-pill--orange">Mint your pet</Link>
               <Link href="/my"   className="btn-pill btn-pill--blue">See my pet</Link>
             </div>
 
             {inside && (
-              <div className="mt-6 space-y-4">
-                <FarcasterLogin />
+              <div style={{ marginTop: 20 }}>
+                <div style={{ marginBottom: 12 }}><FarcasterLogin /></div>
                 <SubscribeCallout />
               </div>
             )}
@@ -76,12 +71,12 @@ export default function Home() {
         </section>
 
         {/* ===== SHARE & FACTS ===== */}
-        <section className="grid md:grid-cols-2 gap-8">
+        <section style={{ display:'grid', gridTemplateColumns:'1fr', gap:16 }} className="card-stack">
           {/* Share */}
           <div className="glass glass-pad">
             <h2 className="text-xl font-bold mb-2">Share your TamaBot</h2>
             <p className="text-white/90 mb-4">Post your pet with rich preview art on Farcaster or X.</p>
-            <div className="cta-row mt-0">
+            <div className="cta-row" style={{ marginTop: 0 }}>
               <a href={castURL}  className="btn-pill btn-pill--blue">Share on Farcaster</a>
               <a href={tweetURL} className="btn-pill btn-pill--yellow" target="_blank" rel="noreferrer">Share on X</a>
             </div>
@@ -90,10 +85,10 @@ export default function Home() {
             </p>
           </div>
 
-          {/* Quick facts (now includes price & supply) */}
+          {/* Quick facts */}
           <div className="glass glass-pad">
             <h3 className="text-xl font-bold mb-3">Quick facts</h3>
-            <ul className="pill-row text-white/90">
+            <ul className="pill-row">
               <li className="pill-note pill-note--blue  text-[0.95rem]">One pet per FID</li>
               <li className="pill-note pill-note--orange text-[0.95rem]">Mint on Base</li>
               <li className="pill-note pill-note--green text-[0.95rem]">Web & Mini App compatible</li>
