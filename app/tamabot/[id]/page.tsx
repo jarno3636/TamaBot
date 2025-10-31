@@ -1,3 +1,4 @@
+// app/tamabot/[id]/page.tsx
 "use client";
 
 import Link from "next/link";
@@ -7,6 +8,8 @@ import { TAMABOT_CORE } from "@/lib/abi";
 import { useReadContract } from "wagmi";
 import { base } from "viem/chains";
 import { Card, Pill } from "@/components/UI";
+import { composeCast, openUrl } from "@/lib/mini";
+import { buildTweetUrl } from "@/lib/share";
 
 export default function Page({ params }: { params: { id: string } }) {
   const id = Number(params.id);
@@ -28,25 +31,53 @@ export default function Page({ params }: { params: { id: string } }) {
       energy: Number(energy), cleanliness: Number(cleanliness), lastTick: Number(lastTick), fid: Number(fid) };
   }, [s]);
 
+  // Share helpers
+  const shareUrl  = (typeof window !== "undefined") ? window.location.href : "";
+  const shareText = `Meet my TamaBot #${id} — evolving with my Farcaster vibe.`;
+
+  function shareFarcaster() {
+    // Use Mini composer when available; fall back to warpcast web
+    try { composeCast(`${shareText} ${shareUrl}`); }
+    catch { openUrl(`https://warpcast.com/~/compose?text=${encodeURIComponent(`${shareText} ${shareUrl}`)}`); }
+  }
+
+  function shareX() {
+    openUrl(buildTweetUrl(shareText, shareUrl));
+  }
+
   return (
     <main className="pet-bg min-h-[100svh] pb-16">
       <div className="mx-auto max-w-5xl px-5 pt-8 space-y-6">
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-2xl md:text-3xl font-extrabold">TamaBot #{id}</h1>
           <div className="flex gap-2">
-            <Link href="/my" className="btn-ghost">My Pet</Link>
-            <Link href="/mint" className="btn-pill">Mint another</Link>
+            <Link href="/my" className="btn-pill btn-pill--blue">My Pet</Link>
+            <Link href="/mint" className="btn-pill btn-pill--orange">Mint another</Link>
           </div>
         </div>
 
         <Card>{typeof tokenUri === "string" ? <PetCard tokenURI={tokenUri} /> : "Loading metadata…"} </Card>
+
+        {/* Share card */}
+        <Card>
+          <div className="mb-3 flex flex-wrap gap-2">
+            <Pill c="green">Share your TamaBot</Pill>
+            <Pill>Rich preview enabled</Pill>
+          </div>
+          <div className="flex gap-3 flex-wrap">
+            <button onClick={shareFarcaster} className="btn-pill btn-pill--blue">Share on Farcaster</button>
+            <button onClick={shareX}         className="btn-pill btn-pill--yellow">Share on X</button>
+          </div>
+          <p className="text-xs text-white/70 mt-3">
+            We set OpenGraph/Twitter tags for this page so your pet’s image and title appear in the embed.
+          </p>
+        </Card>
 
         <Card>
           <div className="mb-3 flex flex-wrap gap-2">
             <Pill>Live stats</Pill>
             <Pill>Updates over time</Pill>
           </div>
-
           {!state ? (
             <div className="text-sm text-white/80">Fetching on-chain state…</div>
           ) : (
