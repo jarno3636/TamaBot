@@ -1,25 +1,24 @@
+// app/api/og/pet/route.tsx
 import { ImageResponse } from "next/og";
-import { NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 import { createPublicClient, http } from "viem";
 import { base } from "viem/chains";
 import { TAMABOT_CORE } from "@/lib/abi";
 
 export const runtime = "edge";
 
-// ---------- Helpers ----------
+/* ---------- utils ---------- */
 function ipfsToHttp(u: string) {
   if (!u) return u;
-  if (u.startsWith("ipfs://")) return u.replace("ipfs://", "https://ipfs.io/ipfs/");
-  return u;
+  return u.startsWith("ipfs://") ? u.replace("ipfs://", "https://ipfs.io/ipfs/") : u;
 }
-
 async function fetchJson(url: string) {
   const r = await fetch(url, { next: { revalidate: 300 } });
   if (!r.ok) throw new Error(`Fetch failed: ${r.status}`);
   return r.json();
 }
 
-/** Try to resolve { name, image } for a token id */
+/** Resolve { name, image } for a token id */
 async function resolveTokenMedia(client: any, id: bigint) {
   let tokenURI: string | undefined;
   try {
@@ -29,16 +28,14 @@ async function resolveTokenMedia(client: any, id: bigint) {
       functionName: "tokenURI",
       args: [id],
     })) as string;
-  } catch (_) {
-    // ignore; fall back to defaults below
+  } catch {
+    /* ignore; fall back below */
   }
 
-  // Defaults
-  const fallback = { name: `TamaBot #${id}`, image: "/og.png" };
+  if (!tokenURI || typeof tokenURI !== "string")
+    return { name: `TamaBot #${id}`, image: "" };
 
-  if (!tokenURI || typeof tokenURI !== "string") return fallback;
-
-  // data:application/json;… (base64 or utf8)
+  // data:application/json;...
   if (tokenURI.startsWith("data:application/json")) {
     try {
       const [, payload] = tokenURI.split(",", 2);
@@ -47,31 +44,26 @@ async function resolveTokenMedia(client: any, id: bigint) {
         ? Buffer.from(payload, "base64").toString("utf8")
         : decodeURIComponent(payload);
       const j = JSON.parse(jsonStr);
-      const image = ipfsToHttp(j.image || j.image_url || j.animation_url || fallback.image);
-      const name = j.name || fallback.name;
+      const image = ipfsToHttp(j.image || j.image_url || j.animation_url || "");
+      const name = j.name || `TamaBot #${id}`;
       return { name, image };
     } catch {
-      return fallback;
+      return { name: `TamaBot #${id}`, image: "" };
     }
   }
 
-  // http(s) → fetch JSON metadata
-  if (/^https?:\/\//i.test(tokenURI) || tokenURI.startsWith("ipfs://")) {
-    try {
-      const metaUrl = ipfsToHttp(tokenURI);
-      const j = await fetchJson(metaUrl);
-      const image = ipfsToHttp(j.image || j.image_url || j.animation_url || fallback.image);
-      const name = j.name || fallback.name;
-      return { name, image };
-    } catch {
-      return fallback;
-    }
+  // http(s)/ipfs
+  try {
+    const j = await fetchJson(ipfsToHttp(tokenURI));
+    const image = ipfsToHttp(j.image || j.image_url || j.animation_url || "");
+    const name = j.name || `TamaBot #${id}`;
+    return { name, image };
+  } catch {
+    return { name: `TamaBot #${id}`, image: "" };
   }
-
-  return fallback;
 }
 
-/** Optional: read on-chain state for pretty meters */
+/** Optional on-chain state for meters */
 async function readState(client: any, id: bigint) {
   try {
     const s = (await client.readContract({
@@ -100,37 +92,38 @@ export async function GET(req: NextRequest) {
   const titleParam = searchParams.get("title");
   const subtitleParam = searchParams.get("subtitle");
 
+  // Prefer server-only key, fallback to public, then mainnet
   const rpcUrl =
     process.env.CHAIN_RPC_BASE ||
     process.env.NEXT_PUBLIC_CHAIN_RPC_BASE ||
     "https://mainnet.base.org";
-
   const client = createPublicClient({ chain: base, transport: http(rpcUrl) });
 
-  // Resolve media + (optional) state
   const id = idParam && /^\d+$/.test(idParam) ? BigInt(idParam) : null;
-  const media = id ? await resolveTokenMedia(client, id) : { name: "TamaBots", image: "/og.png" };
+  const media = id ? await resolveTokenMedia(client, id) : { name: "TamaBots", image: "" };
   const state = id ? await readState(client, id) : null;
 
-  const title =
-    titleParam || (id ? `TamaBot #${id.toString()}` : media.name || "TamaBots");
+  const title = titleParam || (id ? `TamaBot #${id.toString()}` : media.name || "TamaBots");
   const subtitle = subtitleParam || "Farcaster-aware pets on Base";
 
-  // Fonts (optional; robust fallbacks)
+  // Absolute fallback image (prevents 404 in edge context if /og.png is relative)
+  const fallbackImg = new URL("/og.png", req.url).toString();
+  const imgUrl = media.image && /^https?:\/\//i.test(media.image)
+    ? media.image
+    : fallbackImg;
+
+  // Optional fonts (gracefully fall back)
   let interBold: ArrayBuffer | undefined;
   let interReg: ArrayBuffer | undefined;
   try {
     interBold = await fetch(
       "https://fonts.gstatic.com/s/inter/v12/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMa1Zf_.woff2"
-    ).then((r) => r.arrayBuffer());
+    ).then(r => r.arrayBuffer());
     interReg = await fetch(
       "https://fonts.gstatic.com/s/inter/v12/UcC73FwrK3iLTeHuS_fvQtMwCp50KnM8.woff2"
-    ).then((r) => r.arrayBuffer());
-  } catch {
-    // If fonts fail to load, system fonts will be used
-  }
+    ).then(r => r.arrayBuffer());
+  } catch {}
 
-  // Premium meters
   const meters = state
     ? [
         { label: "Mood", value: clamp(state.mood) },
@@ -168,7 +161,7 @@ export async function GET(req: NextRequest) {
             boxShadow: "0 10px 40px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.08)",
           }}
         >
-          {/* Media card */}
+          {/* Media */}
           <div
             style={{
               width: 260,
@@ -179,10 +172,9 @@ export async function GET(req: NextRequest) {
               border: "1px solid rgba(255,255,255,0.12)",
             }}
           >
-            {/* next/og supports remote <img> */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={media.image}
+              src={imgUrl}
               alt={title}
               width={260}
               height={260}
@@ -192,19 +184,12 @@ export async function GET(req: NextRequest) {
 
           {/* Text + meters */}
           <div style={{ display: "grid", alignContent: "center", gap: 16 }}>
-            <div
-              style={{
-                fontSize: 54,
-                fontWeight: 800,
-                letterSpacing: -0.5,
-                lineHeight: 1.05,
-              }}
-            >
+            <div style={{ fontSize: 54, fontWeight: 800, letterSpacing: -0.5, lineHeight: 1.05 }}>
               {title}
             </div>
             <div style={{ fontSize: 22, opacity: 0.9 }}>{subtitle}</div>
 
-            {/* Badges row */}
+            {/* Badges */}
             <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
               <Badge color="#3AA6D8">Lives on Farcaster</Badge>
               <Badge color="#EA7A2A">Mint on Base</Badge>
@@ -212,7 +197,7 @@ export async function GET(req: NextRequest) {
             </div>
 
             {/* Premium meters */}
-            {meters.length > 0 ? (
+            {meters.length ? (
               <div
                 style={{
                   display: "grid",
@@ -234,14 +219,14 @@ export async function GET(req: NextRequest) {
       width: 1200,
       height: 630,
       fonts: [
-        interReg ? { name: "Inter", data: interReg, style: "normal", weight: 400 } : undefined,
-        interBold ? { name: "Inter", data: interBold, style: "normal", weight: 800 } : undefined,
+        interReg && { name: "Inter", data: interReg, style: "normal", weight: 400 },
+        interBold && { name: "Inter", data: interBold, style: "normal", weight: 800 },
       ].filter(Boolean) as any,
     }
   );
 }
 
-// ---------- Tiny UI helpers for @vercel/og JSX ----------
+/* ---------- @vercel/og helpers ---------- */
 function Badge({ children, color }: { children: string; color: string }) {
   return (
     <div
@@ -264,7 +249,6 @@ function Badge({ children, color }: { children: string; color: string }) {
 
 function Meter({ label, value }: { label: string; value: number }) {
   const pct = Math.max(0, Math.min(100, value));
-  const bar = { bg: "rgba(255,255,255,0.14)", fg: "#6CB271" }; // green brand for fill
   return (
     <div style={{ display: "grid", gap: 6 }}>
       <div style={{ fontSize: 14, opacity: 0.8 }}>{label}</div>
@@ -273,7 +257,7 @@ function Meter({ label, value }: { label: string; value: number }) {
           height: 16,
           width: "100%",
           borderRadius: 999,
-          background: bar.bg,
+          background: "rgba(255,255,255,0.14)",
           overflow: "hidden",
           border: "1px solid rgba(255,255,255,0.25)",
         }}
@@ -282,7 +266,7 @@ function Meter({ label, value }: { label: string; value: number }) {
           style={{
             height: "100%",
             width: `${pct}%`,
-            background: bar.fg,
+            background: "#6CB271",
             boxShadow: "inset 0 -2px 0 rgba(0,0,0,0.15)",
           }}
         />
