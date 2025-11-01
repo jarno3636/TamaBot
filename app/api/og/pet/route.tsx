@@ -193,7 +193,8 @@ export async function GET(req: NextRequest) {
             <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
               <Badge color="#3AA6D8">Lives on Farcaster</Badge>
               <Badge color="#EA7A2A">Mint on Base</Badge>
-              {state ? <Badge color="#F4C64E">Level {state.level}</Badge> : null}
+              {/* FIX: make children a single string */}
+              {state ? <Badge color="#F4C64E">{`Level ${state.level}`}</Badge> : null}
             </div>
 
             {/* Premium meters */}
