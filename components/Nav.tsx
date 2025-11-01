@@ -12,13 +12,7 @@ export default function Nav() {
   const [avatar, setAvatar] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
 
-  // detect Farcaster user (FID)
-  useEffect(() => {
-    const f = currentFid();
-    if (f) setFid(f);
-  }, []);
-
-  // fetch Neynar avatar if signed in
+  useEffect(() => { const f = currentFid(); if (f) setFid(f); }, []);
   useEffect(() => {
     if (!fid) return;
     (async () => {
@@ -48,64 +42,35 @@ export default function Nav() {
           title={fid ? `Open Farcaster (FID ${fid})` : "Not signed in"}
         >
           {avatar ? (
-            <Image
-              src={avatar}
-              alt="Farcaster avatar"
-              fill
-              sizes="40px"
-              className="object-cover"
-            />
+            <Image src={avatar} alt="Farcaster avatar" fill sizes="40px" className="object-cover" />
           ) : (
             <span className="absolute inset-0 flex items-center justify-center text-2xl">🥚</span>
           )}
         </button>
 
-        {/* Center: Nav links (desktop) */}
+        {/* Center links (desktop) */}
         <div className="hidden md:flex items-center gap-6 text-[15px] font-medium">
-          <a
-            href="/"
-            className={`nav-pill ${is("/") ? "nav-pill--active" : ""}`}
-          >
-            Home
-          </a>
-          <a
-            href="/mint"
-            className={`nav-pill ${is("/mint") ? "nav-pill--active" : ""}`}
-          >
-            Mint
-          </a>
-          <a
-            href="/my"
-            className={`nav-pill ${is("/my") ? "nav-pill--active" : ""}`}
-          >
-            My&nbsp;Pet
-          </a>
-          <a
-            href="/about"
-            className={`nav-pill ${is("/about") ? "nav-pill--active" : ""}`}
-          >
-            About
-          </a>
+          <a href="/"      className={`nav-pill ${is("/") ? "nav-pill--active" : ""}`}>Home</a>
+          <a href="/mint"  className={`nav-pill ${is("/mint") ? "nav-pill--active" : ""}`}>Mint</a>
+          <a href="/my"    className={`nav-pill ${is("/my") ? "nav-pill--active" : ""}`}>My&nbsp;Pet</a>
+          <a href="/about" className={`nav-pill ${is("/about") ? "nav-pill--active" : ""}`}>About</a>
         </div>
 
-        {/* Right: Wallet + Burger */}
+        {/* Right: Desktop connect + Burger */}
         <div className="flex items-center gap-3">
-          <ConnectWallet />
+          {/* Desktop-only connect button */}
+          <div className="hidden md:block">
+            <ConnectWallet />
+          </div>
 
+          {/* Mobile burger */}
           <button
-            onClick={() => setOpen((v) => !v)}
+            onClick={() => setOpen(v => !v)}
             aria-label="Open menu"
             className="md:hidden flex items-center justify-center h-9 w-9 rounded-lg border border-white/15 hover:bg-white/10 transition"
           >
-            <svg
-              width="22"
-              height="22"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-            >
-              <path d="M3 6h18M3 12h18M3 18h18" />
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <path d="M3 6h18M3 12h18M3 18h18"/>
             </svg>
           </button>
         </div>
@@ -113,39 +78,19 @@ export default function Nav() {
 
       {/* Mobile menu */}
       {open && (
-        <div className="border-t border-white/10 bg-black/70 backdrop-blur-xl animate-fadeInDown md:hidden">
+        <div className="md:hidden border-t border-white/10 bg-black/70 backdrop-blur-xl animate-fadeInDown">
           <div className="container mx-auto px-4 py-5 grid gap-3 text-white text-[15px]">
-            <a
-              href="/"
-              onClick={() => setOpen(false)}
-              className={`nav-pill ${is("/") ? "nav-pill--active" : ""}`}
-            >
-              Home
-            </a>
-            <a
-              href="/mint"
-              onClick={() => setOpen(false)}
-              className={`nav-pill ${is("/mint") ? "nav-pill--active" : ""}`}
-            >
-              Mint
-            </a>
-            <a
-              href="/my"
-              onClick={() => setOpen(false)}
-              className={`nav-pill ${is("/my") ? "nav-pill--active" : ""}`}
-            >
-              My&nbsp;Pet
-            </a>
-            <a
-              href="/about"
-              onClick={() => setOpen(false)}
-              className={`nav-pill ${is("/about") ? "nav-pill--active" : ""}`}
-            >
-              About
-            </a>
+            <a href="/"      onClick={()=>setOpen(false)} className={`nav-pill ${is("/") ? "nav-pill--active" : ""}`}>Home</a>
+            <a href="/mint"  onClick={()=>setOpen(false)} className={`nav-pill ${is("/mint") ? "nav-pill--active" : ""}`}>Mint</a>
+            <a href="/my"    onClick={()=>setOpen(false)} className={`nav-pill ${is("/my") ? "nav-pill--active" : ""}`}>My&nbsp;Pet</a>
+            <a href="/about" onClick={()=>setOpen(false)} className={`nav-pill ${is("/about") ? "nav-pill--active" : ""}`}>About</a>
 
-            {/* Inline wallet connect for mobile */}
-            <div className="pt-3 border-t border-white/10">
+            {/* Mobile-only connect button (keeps menu open while modal is active) */}
+            <div
+              className="pt-3 border-t border-white/10"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
               <ConnectWallet />
             </div>
           </div>
