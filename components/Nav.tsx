@@ -1,4 +1,3 @@
-// components/Nav.tsx
 "use client";
 
 import Image from "next/image";
@@ -9,24 +8,11 @@ import ConnectWallet from "@/components/ConnectWallet";
 
 export default function Nav() {
   const pathname = usePathname();
-
-  // --- Singleton: render only the first Nav mounted on a page ---
-  const [hidden, setHidden] = useState(false);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if ((window as any).__TAMABOT_NAV__) setHidden(true);
-    else (window as any).__TAMABOT_NAV__ = true;
-  }, []);
-  if (hidden) return null;
-
-  // --- Farcaster avatar state ---
   const [fid, setFid] = useState<number | null>(null);
   const [avatar, setAvatar] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
 
-  useEffect(() => {
-    const f = currentFid();
-    if (f) setFid(f);
-  }, []);
+  useEffect(() => { const f = currentFid(); if (f) setFid(f); }, []);
   useEffect(() => {
     if (!fid) return;
     (async () => {
@@ -37,11 +23,6 @@ export default function Nav() {
       } catch {}
     })();
   }, [fid]);
-
-  // --- Mobile menu ---
-  const [open, setOpen] = useState(false);
-  // auto-close menu when route changes
-  useEffect(() => { setOpen(false); }, [pathname]);
 
   const is = (p: string) => (p === "/" ? pathname === "/" : pathname.startsWith(p));
 
@@ -67,49 +48,44 @@ export default function Nav() {
           )}
         </button>
 
-        {/* Center: Desktop links ONLY (hidden on mobile) */}
+        {/* DESKTOP: links + connect (only ≥ md) */}
         <div className="hidden md:flex items-center gap-6 text-[15px] font-medium">
           <a href="/"      className={`nav-pill ${is("/") ? "nav-pill--active" : ""}`}>Home</a>
           <a href="/mint"  className={`nav-pill ${is("/mint") ? "nav-pill--active" : ""}`}>Mint</a>
           <a href="/my"    className={`nav-pill ${is("/my") ? "nav-pill--active" : ""}`}>My&nbsp;Pet</a>
           <a href="/about" className={`nav-pill ${is("/about") ? "nav-pill--active" : ""}`}>About</a>
-        </div>
-
-        {/* Right: Desktop connect OR Mobile burger (never both) */}
-        <div className="flex items-center gap-3">
-          {/* Desktop connect */}
-          <div className="hidden md:block">
+          <div className="ml-2">
             <ConnectWallet />
           </div>
-
-          {/* Mobile burger */}
-          <button
-            onClick={() => setOpen((v) => !v)}
-            aria-label="Open menu"
-            className="md:hidden flex items-center justify-center h-9 w-9 rounded-lg border border-white/15 hover:bg-white/10 transition"
-          >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <path d="M3 6h18M3 12h18M3 18h18" />
-            </svg>
-          </button>
         </div>
+
+        {/* MOBILE: burger only (links live in dropdown) */}
+        <button
+          onClick={() => setOpen(v => !v)}
+          aria-label="Open menu"
+          className="md:hidden flex items-center justify-center h-9 w-9 rounded-lg border border-white/15 hover:bg-white/10 transition"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+            <path d="M3 6h18M3 12h18M3 18h18"/>
+          </svg>
+        </button>
       </nav>
 
-      {/* Mobile menu (links + connect). Only rendered on small screens when open. */}
-      <div className={`md:hidden border-t border-white/10 bg-black/70 backdrop-blur-xl transition-[max-height,opacity] duration-200 overflow-hidden ${open ? "max-h-[600px] opacity-100" : "max-h-0 opacity-0"}`}>
-        {open && (
+      {/* MOBILE MENU (only < md, never render desktop links here) */}
+      {open && (
+        <div className="md:hidden border-t border-white/10 bg-black/70 backdrop-blur-xl animate-fadeInDown">
           <div className="container mx-auto px-4 py-5 grid gap-3 text-white text-[15px]">
-            <a href="/"      onClick={() => setOpen(false)} className={`nav-pill ${is("/") ? "nav-pill--active" : ""}`}>Home</a>
-            <a href="/mint"  onClick={() => setOpen(false)} className={`nav-pill ${is("/mint") ? "nav-pill--active" : ""}`}>Mint</a>
-            <a href="/my"    onClick={() => setOpen(false)} className={`nav-pill ${is("/my") ? "nav-pill--active" : ""}`}>My&nbsp;Pet</a>
-            <a href="/about" onClick={() => setOpen(false)} className={`nav-pill ${is("/about") ? "nav-pill--active" : ""}`}>About</a>
+            <a href="/"      onClick={()=>setOpen(false)} className={`nav-pill ${is("/") ? "nav-pill--active" : ""}`}>Home</a>
+            <a href="/mint"  onClick={()=>setOpen(false)} className={`nav-pill ${is("/mint") ? "nav-pill--active" : ""}`}>Mint</a>
+            <a href="/my"    onClick={()=>setOpen(false)} className={`nav-pill ${is("/my") ? "nav-pill--active" : ""}`}>My&nbsp;Pet</a>
+            <a href="/about" onClick={()=>setOpen(false)} className={`nav-pill ${is("/about") ? "nav-pill--active" : ""}`}>About</a>
 
-            <div className="pt-3 border-t border-white/10">
+            <div className="pt-3 border-t border-white/10" onMouseDown={(e)=>e.stopPropagation()} onClick={(e)=>e.stopPropagation()}>
               <ConnectWallet />
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </header>
   );
 }
