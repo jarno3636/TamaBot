@@ -1,14 +1,9 @@
+// app/providers.tsx
 "use client";
 
 import { WagmiProvider } from "wagmi";
-import { http, createConfig } from "wagmi";
-import { base } from "viem/chains";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-
-const wagmiConfig = createConfig({
-  chains: [base],
-  transports: { [base.id]: http(process.env.NEXT_PUBLIC_RPC_URL) },
-});
+import { wagmiConfig } from "@/lib/wallet";
 
 const queryClient = new QueryClient();
 
