@@ -1,111 +1,108 @@
 // scripts/oracleSign.ts
-import 'dotenv/config';
-import { createWalletClient, http, formatBytes32String } from 'viem';
-import { base } from 'viem/chains';
-import { privateKeyToAccount } from 'viem/accounts';
-import { createPublicClient, encodeAbiParameters, keccak256, http as httpPub } from 'viem';
-import { TAMABOT_CORE } from '@/lib/abi'; // your Core (or the Verifier ABI below)
+import "dotenv/config";
+import { createWalletClient, createPublicClient, http, encodeAbiParameters, keccak256, stringToHex, padHex } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { base } from "viem/chains";
 
-const VERIFIER_ADDR = process.env.VERIFIER_ADDRESS as `0x${string}`;
-const RPC = process.env.CHAIN_RPC_BASE || 'https://mainnet.base.org';
-const ORACLE_PK = process.env.ORACLE_PRIVATE_KEY! as `0x${string}`;
+/** ---- config from env ----
+ * REQUIRED:
+ *   ORACLE_PRIVATE_KEY        0x... (no 0x is also fine)
+ *   VERIFYING_CONTRACT        0x... (address of your AttestationVerifier)
+ * OPTIONAL:
+ *   DOMAIN_NAME (default "TamaBotVerifier")
+ *   DOMAIN_VERSION (default "1")
+ *   CHAIN_RPC_BASE (falls back to Base mainnet)
+ */
+const RPC =
+  process.env.CHAIN_RPC_BASE ||
+  process.env.NEXT_PUBLIC_CHAIN_RPC_BASE ||
+  "https://mainnet.base.org";
 
-const account = privateKeyToAccount(ORACLE_PK);
-const wallet = createWalletClient({ account, chain: base, transport: http(RPC) });
-const pub = createPublicClient({ chain: base, transport: httpPub(RPC) });
+const VERIFYING_CONTRACT = (process.env.VERIFYING_CONTRACT || "").trim() as `0x${string}`;
+if (!VERIFYING_CONTRACT) throw new Error("Missing env VERIFYING_CONTRACT");
 
-/** Replace these with the exact fields & order your Solidity expects */
-type Score = {
-  fid: bigint;
-  day: bigint;
-  dss: bigint;        // uint64 fits into bigint fine
-  deadline: bigint;
-  nonce: bigint;
-};
+const ORACLE_PK = (process.env.ORACLE_PRIVATE_KEY || "").replace(/^0x/, "");
+if (!ORACLE_PK) throw new Error("Missing env ORACLE_PRIVATE_KEY");
 
-async function getDomain() {
-  // Read eip712Domain() from the verifier
-  const [fields, name, version, chainId, verifyingContract] = await pub.readContract({
-    address: VERIFIER_ADDR,
-    abi: [
-      { inputs: [], name: 'eip712Domain', outputs: [
-        { type: 'bytes1', name: 'fields' },
-        { type: 'string', name: 'name' },
-        { type: 'string', name: 'version' },
-        { type: 'uint256', name: 'chainId' },
-        { type: 'address', name: 'verifyingContract' },
-        { type: 'bytes32', name: 'salt' },
-        { type: 'uint256[]', name: 'extensions' },
-      ], stateMutability: 'view', type: 'function' }
-    ] as const,
-    functionName: 'eip712Domain',
-  }) as any[];
+const DOMAIN_NAME = process.env.DOMAIN_NAME || "TamaBotVerifier";
+const DOMAIN_VERSION = process.env.DOMAIN_VERSION || "1";
 
-  return {
-    name: String(name || 'TamaBot Oracle'),
-    version: String(version || '1'),
-    chainId: BigInt(chainId),
-    verifyingContract: verifyingContract as `0x${string}`,
-  };
-}
+const toBytes32 = (s: string) => padHex(stringToHex(s), { size: 32 });
 
-export async function signScore(input: Score) {
-  const domain = await getDomain();
+async function main() {
+  const account = privateKeyToAccount(`0x${ORACLE_PK}`);
+  const wallet = createWalletClient({ account, chain: base, transport: http(RPC) });
+  const pub    = createPublicClient({ chain: base, transport: http(RPC) });
 
-  /** Must match Solidity struct + order + types */
-  const types = {
-    Score: [
-      { name: 'fid',      type: 'uint256' },
-      { name: 'day',      type: 'uint256' },
-      { name: 'dss',      type: 'uint64'  },
-      { name: 'deadline', type: 'uint256' },
-      { name: 'nonce',    type: 'uint256' },
-    ],
-  } as const;
+  // Example input (you can wire CLI args)
+  // pnpm oracle:sign <fid> [day] [dss] [deadlineSec]
+  const [, , fidArg, dayArg, dssArg, deadlineArg] = process.argv;
+  if (!fidArg || !/^\d+$/.test(fidArg)) {
+    console.error("Usage: pnpm oracle:sign <fid> [dayUnixDays] [dss] [deadlineSec]");
+    process.exit(1);
+  }
 
-  const message = {
-    fid: input.fid,
-    day: input.day,
-    dss: input.dss,
-    deadline: input.deadline,
-    nonce: input.nonce,
-  };
+  const now = Math.floor(Date.now() / 1000);
+  const day = dayArg ? Number(dayArg) : Math.floor(now / 86400);
+  const deadline = deadlineArg ? Number(deadlineArg) : now + 15 * 60;
 
-  // 1) EIP-712 signature
-  const signature = await wallet.signTypedData({
-    domain, types, primaryType: 'Score', message,
-  });
+  // Your DSS calculation (replace with real score)
+  const dss = dssArg ? BigInt(dssArg) : BigInt((Number(fidArg) * 1337) % 10000);
 
-  // 2) ABI-encode payload bytes in the SAME ORDER the contract decodes
+  const fid = BigInt(fidArg);
+  const nonce = BigInt(day); // example: per-day nonce
+
+  // Encode the exact params your verifier checks
   const payload = encodeAbiParameters(
     [
-      { name: 'fid',      type: 'uint256' },
-      { name: 'day',      type: 'uint256' },
-      { name: 'dss',      type: 'uint64'  },
-      { name: 'deadline', type: 'uint256' },
-      { name: 'nonce',    type: 'uint256' },
+      { name: "fid", type: "uint256" },
+      { name: "day", type: "uint256" },
+      { name: "dss", type: "uint64"  },
+      { name: "deadline", type: "uint256" },
+      { name: "nonce", type: "uint256" },
     ],
-    [message.fid, message.day, message.dss, message.deadline, message.nonce]
+    [fid, BigInt(day), dss, BigInt(deadline), nonce]
   );
 
-  return { payload, signature };
+  // EIP-712 domain — if your verifier reads domain.name/version as bytes32, keep bytes32
+  const domainSeparator = keccak256(
+    encodeAbiParameters(
+      [
+        { name: "name", type: "bytes32" },
+        { name: "version", type: "bytes32" },
+        { name: "chainId", type: "uint256" },
+        { name: "verifyingContract", type: "address" },
+      ],
+      [toBytes32(DOMAIN_NAME), toBytes32(DOMAIN_VERSION), BigInt(base.id), VERIFYING_CONTRACT]
+    )
+  );
+
+  // Final digest — match your verifier’s verifyAndScore hashing (often keccak256(0x1901 || domain || keccak(payload)))
+  const payloadHash = keccak256(payload);
+  const digest = keccak256(`0x1901${domainSeparator.slice(2)}${payloadHash.slice(2)}`);
+
+  const signature = await wallet.signMessage({ message: { raw: digest as `0x${string}` } });
+
+  console.log(JSON.stringify({
+    fid: fid.toString(),
+    day,
+    dss: dss.toString(),
+    deadline,
+    nonce: nonce.toString(),
+    payload,
+    signature,
+    domain: {
+      name: DOMAIN_NAME,
+      version: DOMAIN_VERSION,
+      chainId: base.id,
+      verifyingContract: VERIFYING_CONTRACT,
+    },
+    signer: account.address,
+    rpc: RPC,
+  }, null, 2));
 }
 
-// Example usage
-if (require.main === module) {
-  (async () => {
-    const now = Math.floor(Date.now() / 1000);
-    const day = Math.floor(now / 86400);
-
-    const out = await signScore({
-      fid:  BigInt(1234),
-      day:  BigInt(day),
-      dss:  BigInt(9876),        // your computed score
-      deadline: BigInt(now + 900), // 15 min ttl
-      nonce: BigInt(day),        // simple: one per day
-    });
-
-    console.log('payload (0x…):', out.payload);
-    console.log('signature (0x…):', out.signature);
-  })();
-}
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
