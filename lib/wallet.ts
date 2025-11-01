@@ -1,32 +1,43 @@
 // lib/wallet.ts
-import { http, createConfig } from "wagmi";
+import { createConfig, http } from "wagmi";
 import { base } from "viem/chains";
-import { injected, walletConnect, coinbaseWallet } from "@wagmi/connectors";
+import { injected } from "wagmi/connectors";
+import { walletConnect } from "wagmi/connectors";
+import { coinbaseWallet } from "wagmi/connectors";
 
-const WC_ID = process.env.NEXT_PUBLIC_WC_PROJECT_ID as string | undefined;
-const RPC   = process.env.NEXT_PUBLIC_RPC_URL || "https://mainnet.base.org";
+const RPC =
+  (process.env.NEXT_PUBLIC_RPC_URL || process.env.NEXT_PUBLIC_CHAIN_RPC_BASE || "").trim() ||
+  "https://mainnet.base.org";
+
+const WC_PROJECT_ID = (process.env.NEXT_PUBLIC_WC_PROJECT_ID || "").trim();
+
+// Build connectors (Injected, WalletConnect, Coinbase)
+const connectors = [
+  injected({
+    shimDisconnect: true, // keeps disconnect state reliable across reloads
+  }),
+  walletConnect({
+    projectId: WC_PROJECT_ID, // REQUIRED for WalletConnect v2
+    showQrModal: true,        // shows QR in web; deep-links in mobile
+    metadata: {
+      name: "TamaBot",
+      description: "On-chain Farcaster pet on Base",
+      url: process.env.NEXT_PUBLIC_SITE_URL || "https://tamabot.vercel.app",
+      icons: ["/favicon.ico"],
+    },
+  }),
+  coinbaseWallet({
+    appName: "TamaBot",
+    appLogoUrl: "/favicon.ico",
+    preference: "all", // allow CB extension & mobile deep-link
+  }),
+];
 
 export const wagmiConfig = createConfig({
-  ssr: true,
   chains: [base],
-  transports: { [base.id]: http(RPC) },
-  connectors: [
-    injected({ shimDisconnect: true }),
-    ...(WC_ID ? [walletConnect({
-      projectId: WC_ID,
-      showQrModal: true,
-      metadata: {
-        name: "TamaBot",
-        description: "On-chain Farcaster pet on Base",
-        url: process.env.NEXT_PUBLIC_SITE_URL || "https://tamabot.vercel.app",
-        icons: [ (process.env.NEXT_PUBLIC_SITE_URL || "https://tamabot.vercel.app") + "/icon.png" ],
-      },
-    })] : []),
-    coinbaseWallet({
-      appName: "TamaBot",
-      appLogoUrl: (process.env.NEXT_PUBLIC_SITE_URL || "https://tamabot.vercel.app") + "/icon.png",
-      // If you prefer Smart Wallet only, uncomment:
-      // preference: "smartWalletOnly",
-    }),
-  ],
+  connectors,
+  transports: {
+    [base.id]: http(RPC),
+  },
+  pollingInterval: 6_000,
 });
