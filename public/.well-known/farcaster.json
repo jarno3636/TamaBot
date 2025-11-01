@@ -1,23 +1,19 @@
 {
   "accountAssociation": {
-    "header": "<base64 JFS header from your custody/auth key>",
-    "payload": "<base64 JFS payload for { domain: \"tamabot.vercel.app\" }>",
-    "signature": "<base64 JFS signature>"
+    "header": "eyJmaWQiOjE0MzQxNzEsInR5cGUiOiJjdXN0b2R5Iiwia2V5IjoiMHhFNkMwQTQxMEI0QzcyMmI4NDdmNjE2Mjk4MTllM0Q2MjE1ODA2MENGIn0",
+    "payload": "eyJkb21haW4iOiJ0YW1hYm90LnZlcmNlbC5hcHAifQ",
+    "signature": "iHaWHbcVV0WGUEIHxMEjWJBlJXg495/ZMI3nS6R0xoR6xTO0HGKY0eTUu8/5/D6Rf/Rr3OJIfiRSlJIC1l7BRxw="
   },
-  "miniapp": {
+  "frame": {
     "version": "1",
-    "name": "TamaBot",
-    "homeUrl": "https://tamabot.vercel.app/",
-    "iconUrl": "https://tamabot.vercel.app/miniapp/icon-1024.png",
-    "splashImageUrl": "https://tamabot.vercel.app/miniapp/splash-200.png",
-    "splashBackgroundColor": "#0ea5e9",
-    "subtitle": "On-chain Farcaster pet",
-    "description": "Adopt, evolve, and flex your Base-native pet — all inside Warpcast.",
-    "heroImageUrl": "https://tamabot.vercel.app/og.png",
-    "ogTitle": "TamaBot",
-    "ogDescription": "Mint and evolve a Farcaster-aware pet on Base.",
-    "requiredChains": ["eip155:8453"],
-    "requiredCapabilities": ["sdk/actions/signin", "sdk/wallet/getEthereumProvider"],
-    "tags": ["games","social","art-creativity"]
+    "name": "TamaBot — On-Chain Farcaster Pet",
+    "iconUrl": "https://tamabot.vercel.app/icon.png",
+    "homeUrl": "https://tamabot.vercel.app",
+    "imageUrl": "https://tamabot.vercel.app/og.png",
+    "buttonTitle": "Adopt Your TamaBot",
+    "splashImageUrl": "https://tamabot.vercel.app/splash.png",
+    "splashBackgroundColor": "#0a0b10",
+    "webhookUrl": "https://tamabot.vercel.app/api/webhook",
+    "description": "Adopt, evolve, and share your on-chain AI pet directly from Warpcast — powered by Base."
   }
 }
