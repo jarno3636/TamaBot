@@ -32,10 +32,32 @@ export function isInsideMini(): boolean {
   return isFarcasterUA() || inIframe || !!getMiniKit();
 }
 
+function setCookie(name: string, value: string, days = 365) {
+  try {
+    const d = new Date();
+    d.setTime(d.getTime() + days * 24 * 60 * 60 * 1000);
+    document.cookie = `${name}=${encodeURIComponent(value)}; expires=${d.toUTCString()}; path=/; samesite=lax`;
+  } catch {}
+}
+
+export function clearFidStorage() {
+  try { localStorage.removeItem("fid"); } catch {}
+  try { document.cookie = `fid=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`; } catch {}
+}
+
 export function useFid() {
-  const [fid, setFid] = useState<number | null>(null);
+  const [fid, setFidState] = useState<number | null>(null);
   const [inside, setInside] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // set + persist helper
+  function setFid(n: number | null) {
+    setFidState(n);
+    if (n && Number.isFinite(n) && n > 0) {
+      try { localStorage.setItem("fid", String(n)); } catch {}
+      setCookie("fid", String(n));
+    }
+  }
 
   useEffect(() => {
     setInside(isInsideMini());
@@ -47,8 +69,6 @@ export function useFid() {
       if (q && /^\d+$/.test(q)) {
         const n = Number(q);
         setFid(n);
-        localStorage.setItem("fid", String(n));
-        document.cookie = `fid=${n}; path=/; samesite=lax`;
         setLoading(false);
         return;
       }
@@ -61,8 +81,6 @@ export function useFid() {
       const n = Number(mkFid);
       if (Number.isFinite(n) && n > 0) {
         setFid(n);
-        localStorage.setItem("fid", String(n));
-        document.cookie = `fid=${n}; path=/; samesite=lax`;
         setLoading(false);
         return;
       }
@@ -80,18 +98,18 @@ export function useFid() {
         const n = Number(sdkFid);
         if (Number.isFinite(n) && n > 0) {
           setFid(n);
-          localStorage.setItem("fid", String(n));
-          document.cookie = `fid=${n}; path=/; samesite=lax`;
           setLoading(false);
           return;
         }
       } catch {}
+
       // 4) Storage fallback
       try {
         const ls = localStorage.getItem("fid") || sessionStorage.getItem("fid");
         const n = Number(ls);
-        setFid(Number.isFinite(n) && n > 0 ? n : null);
+        setFidState(Number.isFinite(n) && n > 0 ? n : null);
       } catch {}
+
       setLoading(false);
     })();
   }, []);
