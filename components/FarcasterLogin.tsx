@@ -1,7 +1,8 @@
+// components/FarcasterLogin.tsx
 "use client";
 
 import { useEffect, useState } from "react";
-import { isInsideMini, miniSignin } from "@/lib/mini";
+import { isInsideMini, miniSignin } from "@/lib/miniapp";
 
 function setCookie(name: string, value: string, days = 365) {
   const d = new Date();
@@ -12,6 +13,8 @@ function getCookie(name: string) {
   const m = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
   return m ? decodeURIComponent(m[2]) : null;
 }
+
+type MiniSigninResult = { user?: { fid?: number | string } } | null;
 
 export default function FarcasterLogin({ onLogin }: { onLogin?: (fid: number) => void }) {
   const [fid, setFid] = useState<number | null>(null);
@@ -25,15 +28,19 @@ export default function FarcasterLogin({ onLogin }: { onLogin?: (fid: number) =>
     setInsideMiniApp(inside);
 
     // 1) MiniKit auto context
-    const mk: any = (globalThis as any).MiniKit;
-    if (mk?.user?.fid) {
-      const f = Number(mk.user.fid);
-      setFid(f);
-      localStorage.setItem("fid", String(f));
-      setCookie("fid", String(f));
-      onLogin?.(f);
-      setLoading(false);
-      return;
+    const w: any = window as any;
+    const mk = w?.miniKit || w?.coinbase?.miniKit || w?.MiniKit || null;
+    const mkFid = mk?.user?.fid ?? mk?.context?.user?.fid;
+    if (mkFid != null) {
+      const f = Number(mkFid);
+      if (Number.isFinite(f) && f > 0) {
+        setFid(f);
+        localStorage.setItem("fid", String(f));
+        setCookie("fid", String(f));
+        onLogin?.(f);
+        setLoading(false);
+        return;
+      }
     }
 
     // 2) Cookie/localStorage fallback
@@ -45,13 +52,13 @@ export default function FarcasterLogin({ onLogin }: { onLogin?: (fid: number) =>
     setLoading(false);
   }, [onLogin]);
 
-  /** MiniKit sign-in */
+  /** MiniKit / miniapp context “signin” (really just reading context) */
   async function handleMiniSignin() {
     setChecking(true);
     try {
-      const res = await miniSignin();
+      const res: MiniSigninResult = await miniSignin();
       const newFidRaw = res?.user?.fid;
-      const newFid = Number(newFidRaw); // <-- normalize to number
+      const newFid = Number(newFidRaw);
       if (Number.isFinite(newFid) && newFid > 0) {
         setFid(newFid);
         localStorage.setItem("fid", String(newFid));
@@ -62,7 +69,7 @@ export default function FarcasterLogin({ onLogin }: { onLogin?: (fid: number) =>
       }
     } catch (e: any) {
       console.error("MiniKit signin error:", e);
-      setError("Failed to sign in inside Warpcast.");
+      setError("Failed to read session inside Warpcast.");
     } finally {
       setChecking(false);
     }
@@ -79,7 +86,7 @@ export default function FarcasterLogin({ onLogin }: { onLogin?: (fid: number) =>
     try {
       const r = await fetch(`/api/neynar/user/${fid}`);
       if (!r.ok) throw new Error(`Neynar lookup failed (${r.status})`);
-      await r.json(); // optional: inspect result
+      await r.json(); // optional inspection
       localStorage.setItem("fid", String(fid));
       setCookie("fid", String(fid));
       onLogin?.(fid);
