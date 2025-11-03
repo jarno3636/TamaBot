@@ -1,26 +1,20 @@
 // app/my/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useReadContract } from "wagmi";
 import { base } from "viem/chains";
 import { TAMABOT_CORE } from "@/lib/abi";
 import FarcasterLogin from "@/components/FarcasterLogin";
 import { useRouter } from "next/navigation";
-import { currentFid } from "@/lib/mini";
 import { Card, Pill } from "@/components/UI";
+import { useFid } from "@/lib/useFid";
 
-export const dynamic = "force-dynamic"; // keep this
+export const dynamic = "force-dynamic";
 
 export default function MyPetPage() {
   const router = useRouter();
-
-  const [fid, setFid] = useState<number | null>(null);
-  useEffect(() => {
-    const f = currentFid();
-    const asNum = Number(f);
-    if (Number.isFinite(asNum) && asNum > 0) setFid(asNum);
-  }, []);
+  const { fid, loading } = useFid();
 
   const { data: tokenIdNumber } = useReadContract({
     address: TAMABOT_CORE.address,
@@ -28,9 +22,8 @@ export default function MyPetPage() {
     chainId: base.id,
     functionName: "tokenIdByFID",
     args: [BigInt(fid ?? 0)],
-    // ✅ Keep bigint out of cache by mapping in query.select
     query: {
-      enabled: fid !== null,
+      enabled: !!fid,
       select: (v: bigint) => Number(v ?? 0),
     } as any,
   });
@@ -38,10 +31,7 @@ export default function MyPetPage() {
   const id = useMemo(() => Number(tokenIdNumber || 0), [tokenIdNumber]);
 
   useEffect(() => {
-    if (fid && id > 0) {
-      // soft replace to avoid back-stack clutter
-      router.replace(`/tamabot/${id}`);
-    }
+    if (fid && id > 0) router.replace(`/tamabot/${id}`);
   }, [fid, id, router]);
 
   return (
@@ -56,9 +46,9 @@ export default function MyPetPage() {
               <Pill>Jump to your pet</Pill>
             </div>
 
-            {!fid && (
+            {!fid && !loading && (
               <div className="mt-5">
-                <FarcasterLogin onLogin={setFid} />
+                <FarcasterLogin />
               </div>
             )}
 
