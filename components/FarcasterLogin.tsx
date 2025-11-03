@@ -2,68 +2,38 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { isInsideMini, miniSignin } from "@/lib/miniapp";
+import { miniSignin } from "@/lib/miniapp";
+import { useFid, isInsideMini, clearFidStorage } from "@/lib/useFid";
 
 function setCookie(name: string, value: string, days = 365) {
   const d = new Date();
   d.setTime(d.getTime() + days * 24 * 60 * 60 * 1000);
   document.cookie = `${name}=${encodeURIComponent(value)}; expires=${d.toUTCString()}; path=/; samesite=lax`;
 }
-function getCookie(name: string) {
-  const m = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
-  return m ? decodeURIComponent(m[2]) : null;
-}
 
 type MiniSigninResult = { user?: { fid?: number | string } } | null;
 
 export default function FarcasterLogin({ onLogin }: { onLogin?: (fid: number) => void }) {
-  const [fid, setFid] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { fid, setFid, loading } = useFid();
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [insideMiniApp, setInsideMiniApp] = useState(false);
+  const insideMiniApp = isInsideMini();
 
+  // Notify parent when fid becomes available
   useEffect(() => {
-    const inside = isInsideMini();
-    setInsideMiniApp(inside);
+    if (fid && onLogin) onLogin(fid);
+  }, [fid, onLogin]);
 
-    // 1) MiniKit auto context
-    const w: any = window as any;
-    const mk = w?.miniKit || w?.coinbase?.miniKit || w?.MiniKit || null;
-    const mkFid = mk?.user?.fid ?? mk?.context?.user?.fid;
-    if (mkFid != null) {
-      const f = Number(mkFid);
-      if (Number.isFinite(f) && f > 0) {
-        setFid(f);
-        localStorage.setItem("fid", String(f));
-        setCookie("fid", String(f));
-        onLogin?.(f);
-        setLoading(false);
-        return;
-      }
-    }
-
-    // 2) Cookie/localStorage fallback
-    const saved = Number(getCookie("fid") || localStorage.getItem("fid") || "");
-    if (Number.isFinite(saved) && saved > 0) {
-      setFid(saved);
-      onLogin?.(saved);
-    }
-    setLoading(false);
-  }, [onLogin]);
-
-  /** MiniKit / miniapp context “signin” (really just reading context) */
+  /** MiniKit / miniapp context “signin” (reads context) */
   async function handleMiniSignin() {
     setChecking(true);
     try {
       const res: MiniSigninResult = await miniSignin();
-      const newFidRaw = res?.user?.fid;
-      const newFid = Number(newFidRaw);
-      if (Number.isFinite(newFid) && newFid > 0) {
-        setFid(newFid);
-        localStorage.setItem("fid", String(newFid));
-        setCookie("fid", String(newFid));
-        onLogin?.(newFid);
+      const raw = res?.user?.fid;
+      const n = Number(raw);
+      if (Number.isFinite(n) && n > 0) {
+        setFid(n);
+        setCookie("fid", String(n));
       } else {
         throw new Error("No valid FID returned from MiniKit");
       }
@@ -86,10 +56,8 @@ export default function FarcasterLogin({ onLogin }: { onLogin?: (fid: number) =>
     try {
       const r = await fetch(`/api/neynar/user/${fid}`);
       if (!r.ok) throw new Error(`Neynar lookup failed (${r.status})`);
-      await r.json(); // optional inspection
-      localStorage.setItem("fid", String(fid));
+      await r.json(); // ok
       setCookie("fid", String(fid));
-      onLogin?.(fid);
     } catch (e: any) {
       setError(e?.message || String(e));
     } finally {
@@ -108,9 +76,8 @@ export default function FarcasterLogin({ onLogin }: { onLogin?: (fid: number) =>
         </div>
         <button
           onClick={() => {
+            clearFidStorage();
             setFid(null);
-            localStorage.removeItem("fid");
-            setCookie("fid", "", -1);
           }}
           className="text-sm underline text-zinc-400 hover:text-white"
         >
@@ -137,7 +104,10 @@ export default function FarcasterLogin({ onLogin }: { onLogin?: (fid: number) =>
             className="border border-white/20 rounded-lg px-3 py-2 w-40 bg-black/40 text-white placeholder:text-white/40"
             placeholder="Enter your FID"
             inputMode="numeric"
-            onChange={(e) => setFid(e.target.value ? Number(e.target.value) : null)}
+            onChange={(e) => {
+              const n = e.target.value ? Number(e.target.value) : NaN;
+              if (Number.isFinite(n) && n > 0) setFid(n);
+            }}
           />
           <button
             onClick={confirmWithNeynar}
