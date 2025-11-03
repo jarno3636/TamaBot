@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import PetCard from "@/components/PetCard";
 import { TAMABOT_CORE } from "@/lib/abi";
 import { useReadContract } from "wagmi";
@@ -14,22 +14,11 @@ import { StatMeter } from "@/components/StatMeter";
 
 export const dynamic = "force-dynamic";
 
-type RawState = readonly [
-  bigint, // level
-  bigint, // xp
-  bigint, // mood
-  bigint, // hunger
-  bigint, // energy
-  bigint, // cleanliness
-  bigint, // lastTick
-  bigint  // fid
-];
-
 export default function Page({ params }: { params: { id: string } }) {
   const id = Number(params.id);
   const validId = Number.isFinite(id) && id > 0;
 
-  // tokenURI (already string; no bigint risk)
+  // tokenURI (string; no bigint risk)
   const { data: tokenUri, isLoading: loadingUri } = useReadContract({
     address: TAMABOT_CORE.address,
     abi: TAMABOT_CORE.abi,
@@ -39,27 +28,39 @@ export default function Page({ params }: { params: { id: string } }) {
     query: { enabled: validId } as any,
   });
 
-  // on-chain state — map to plain numbers inside query.select (keeps cache JSON-safe)
-  const { data: state, isLoading: loadingState } = useReadContract({
+  // on-chain state (tuple of bigints) -> map to plain numbers in useMemo
+  const { data: sRaw, isLoading: loadingState } = useReadContract({
     address: TAMABOT_CORE.address,
     abi: TAMABOT_CORE.abi,
     chainId: base.id,
     functionName: "getState",
     args: [BigInt(validId ? id : 0)],
-    query: {
-      enabled: validId,
-      select: (s: RawState) => ({
-        level: Number(s?.[0] ?? 0n),
-        xp: Number(s?.[1] ?? 0n),
-        mood: Number(s?.[2] ?? 0n),
-        hunger: Number(s?.[3] ?? 0n),
-        energy: Number(s?.[4] ?? 0n),
-        cleanliness: Number(s?.[5] ?? 0n),
-        lastTick: Number(s?.[6] ?? 0n),
-        fid: Number(s?.[7] ?? 0n),
-      }),
-    } as any,
+    query: { enabled: validId } as any,
   });
+
+  const state = useMemo(() => {
+    if (!sRaw) return null;
+    const a = sRaw as readonly [
+      bigint, // level
+      bigint, // xp
+      bigint, // mood
+      bigint, // hunger
+      bigint, // energy
+      bigint, // cleanliness
+      bigint, // lastTick
+      bigint  // fid
+    ];
+    return {
+      level: Number(a[0] ?? 0n),
+      xp: Number(a[1] ?? 0n),
+      mood: Number(a[2] ?? 0n),
+      hunger: Number(a[3] ?? 0n),
+      energy: Number(a[4] ?? 0n),
+      cleanliness: Number(a[5] ?? 0n),
+      lastTick: Number(a[6] ?? 0n),
+      fid: Number(a[7] ?? 0n),
+    };
+  }, [sRaw]);
 
   // ===== Share helpers =====
   const shareUrl = typeof window !== "undefined" ? window.location.href : "";
@@ -69,9 +70,7 @@ export default function Page({ params }: { params: { id: string } }) {
     try {
       const ok = await composeCast({ text: `${shareText} ${shareUrl}` });
       if (ok) return;
-    } catch {
-      /* fall through */
-    }
+    } catch {}
     const url = `https://warpcast.com/~/compose?text=${encodeURIComponent(
       `${shareText} ${shareUrl}`
     )}`;
