@@ -39,34 +39,35 @@ export default function Nav() {
           "radial-gradient(900px 420px at 10% -20%, rgba(58,166,216,.14), transparent 70%),radial-gradient(900px 420px at 110% -30%, rgba(234,122,42,.18), transparent 70%),linear-gradient(180deg, rgba(8,9,12,.90), rgba(8,9,12,.58))",
       }}
     >
-      <nav className="container mx-auto flex items-center justify-between px-4 py-3" role="navigation">
-        {/* Left: avatar (taps to open Farcaster profile if available) */}
+      {/* Increased height (py-3 → py-4) */}
+      <nav className="container mx-auto flex items-center justify-between px-4 py-4" role="navigation">
+        {/* Left: avatar */}
         <button
           onClick={() => (fid ? openProfile(fid) : undefined)}
-          className="relative h-10 w-10 rounded-full overflow-hidden border border-white/20 hover:border-white/40 transition"
+          className="relative h-12 w-12 rounded-full overflow-hidden border border-white/20 hover:border-white/40 transition"
           title={fid ? `Open Farcaster (FID ${fid})` : "Not signed in"}
         >
           {avatar ? (
-            <Image src={avatar} alt="Farcaster avatar" fill sizes="40px" className="object-cover" />
+            <Image src={avatar} alt="Farcaster avatar" fill sizes="48px" className="object-cover" />
           ) : (
             <span className="absolute inset-0 flex items-center justify-center text-2xl">🥚</span>
           )}
         </button>
 
-        {/* Right: ONLY the burger (no desktop links, no desktop connect) */}
+        {/* Right: burger only */}
         <button
           onClick={() => setOpen(v => !v)}
           aria-label="Open menu"
           aria-expanded={open}
-          className="flex items-center justify-center h-9 w-9 rounded-lg border border-white/15 hover:bg-white/10 transition"
+          className="flex items-center justify-center h-11 w-11 rounded-lg border border-white/15 hover:bg-white/10 transition"
         >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
             <path d="M3 6h18M3 12h18M3 18h18" />
           </svg>
         </button>
       </nav>
 
-      {/* Drawer: links + ConnectPill live here */}
+      {/* Mobile drawer */}
       {open && (
         <div className="border-t border-white/10 bg-black/70 backdrop-blur-xl animate-fadeInDown">
           <div className="container mx-auto px-4 py-5 grid gap-3 text-white text-[15px]">
