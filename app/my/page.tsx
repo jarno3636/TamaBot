@@ -1,6 +1,7 @@
+// app/my/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useReadContract } from "wagmi";
 import { base } from "viem/chains";
 import { TAMABOT_CORE } from "@/lib/abi";
@@ -9,26 +10,37 @@ import { useRouter } from "next/navigation";
 import { currentFid } from "@/lib/mini";
 import { Card, Pill } from "@/components/UI";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default function MyPetPage() {
   const router = useRouter();
-  const [fid, setFid] = useState<number | null>(null);
-  useEffect(() => { setFid(currentFid()); }, []);
 
-  const { data: tokenId } = useReadContract({
+  const [fid, setFid] = useState<number | null>(null);
+  useEffect(() => {
+    const f = currentFid();
+    if (Number.isFinite(f as number) && (f as number) > 0) setFid(f as number);
+  }, []);
+
+  const { data: tokenIdNumber } = useReadContract({
     address: TAMABOT_CORE.address,
     abi: TAMABOT_CORE.abi,
     chainId: base.id,
     functionName: "tokenIdByFID",
     args: [BigInt(fid || 0)],
-    query: { enabled: Boolean(fid) } as any,
+    // ✅ Keep bigint out of cache
+    select: (v: bigint) => Number(v || 0),
+    query: { enabled: fid !== null } as any,
   });
 
-  useEffect(() => {
-    const id = Number(tokenId || 0);
-    if (fid && id > 0) router.replace(`/tamabot/${id}`);
-  }, [fid, tokenId, router]);
+  const id = useMemo(() => Number(tokenIdNumber || 0), [tokenIdNumber]);
 
-  const id = Number(tokenId || 0);
+  useEffect(() => {
+    if (fid && id > 0) {
+      // soft replace to avoid back-stack clutter
+      router.replace(`/tamabot/${id}`);
+    }
+  }, [fid, id, router]);
 
   return (
     <main className="min-h-[100svh] bg-deep-orange pb-16">
