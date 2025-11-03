@@ -9,6 +9,9 @@ type MiniAppSdk = {
     ready?: () => Promise<void> | void;
   };
   isInMiniApp?: () => boolean;
+  // some builds expose user/context
+  user?: { fid?: number | string };
+  context?: { user?: { fid?: number | string } };
 };
 
 /* ---------------- Env helpers ---------------- */
@@ -34,6 +37,22 @@ export function isBaseAppUA(): boolean {
   return /BaseWallet|Base\sApp|Base\/\d|CoinbaseWallet|CoinbaseMobile|CoinbaseApp|CBBrowser|CBWallet|Coinbase(Android|iOS)?/i.test(
     ua
   );
+}
+
+/** Broad “inside mini” detector: Warpcast UA, iframe, or MiniKit present */
+export function isInsideMini(): boolean {
+  if (typeof window === "undefined") return false;
+  const uaYes = isFarcasterUA();
+  const inIframe = (() => {
+    try {
+      return window.self !== window.top;
+    } catch {
+      return true;
+    }
+  })();
+  const w: any = window as any;
+  const hasMiniKit = !!(w?.miniKit || w?.coinbase?.miniKit || w?.MiniKit);
+  return uaYes || inIframe || hasMiniKit;
 }
 
 /* ---------------- URL helpers ---------------- */
@@ -90,10 +109,10 @@ export async function getMiniSdk(): Promise<MiniAppSdk | null> {
     const fromModule = mod?.sdk ?? mod?.default;
     if (fromModule) return fromModule;
     const g = window as any;
-    return g?.farcaster?.miniapp?.sdk || g?.sdk || null;
+    return (g?.farcaster?.miniapp?.sdk || g?.sdk || null) as MiniAppSdk | null;
   } catch {
     const g = window as any;
-    return g?.farcaster?.miniapp?.sdk || g?.sdk || null;
+    return (g?.farcaster?.miniapp?.sdk || g?.sdk || null) as MiniAppSdk | null;
   }
 }
 
@@ -114,7 +133,7 @@ export async function ensureReady(timeoutMs = 1200): Promise<void> {
 function getMiniKit(): any | null {
   if (typeof window === "undefined") return null;
   const w = window as any;
-  return w?.miniKit || w?.coinbase?.miniKit || null;
+  return w?.miniKit || w?.coinbase?.miniKit || w?.MiniKit || null;
 }
 
 async function tryBaseComposeCast(args: { text?: string; embeds?: string[] }) {
@@ -169,6 +188,14 @@ export async function openInMini(url: string): Promise<boolean> {
   return false;
 }
 
+/** Convenience: open a url via native if possible, else new tab */
+export async function openUrl(url: string): Promise<void> {
+  const ok = await openInMini(url);
+  if (!ok && typeof window !== "undefined") {
+    window.open(url, "_blank");
+  }
+}
+
 /** Unified compose helper (Base App ➜ Warpcast SDK ➜ fail) */
 export async function composeCast({
   text = "",
@@ -188,4 +215,49 @@ export async function composeCast({
   }
 
   return false;
+}
+
+/* ---------------- Farcaster identity helpers ---------------- */
+
+/** Read FID from native hosts (MiniKit or SDK); returns { user: { fid } } if present */
+export async function miniSignin(): Promise<{ user?: { fid?: number | string } } | null> {
+  if (typeof window === "undefined") return null;
+
+  // 1) Base App / MiniKit globals
+  try {
+    const mk = getMiniKit();
+    const fid = mk?.user?.fid ?? mk?.context?.user?.fid;
+    if (fid != null) return { user: { fid } };
+  } catch {}
+
+  // 2) Farcaster miniapp sdk (context-only; no explicit signin flow)
+  try {
+    const sdk = await getMiniSdk();
+    const fid =
+      (sdk as any)?.user?.fid ??
+      (sdk as any)?.context?.user?.fid ??
+      (sdk as any)?.actions?.user?.fid ??
+      null;
+    if (fid != null) return { user: { fid } };
+  } catch {}
+
+  return null;
+}
+
+/** Pull FID from env/cache for convenience (MiniKit → cookie/localStorage) */
+export function currentFid(): number | null {
+  if (typeof window === "undefined") return null;
+  const w: any = window as any;
+  const mk = w?.miniKit || w?.coinbase?.miniKit || w?.MiniKit || null;
+  const fromMk = mk?.user?.fid ?? mk?.context?.user?.fid;
+  const fidNum = Number(fromMk ?? (localStorage.getItem("fid") || ""));
+  return Number.isFinite(fidNum) && fidNum > 0 ? fidNum : null;
+}
+
+/** Open a Farcaster profile by FID (Warpcast web fallback) */
+export function openProfile(fid: number) {
+  const url = `https://warpcast.com/~/profile/${fid}`;
+  openInMini(url).then((ok) => {
+    if (!ok && typeof window !== "undefined") window.open(url, "_blank");
+  });
 }
