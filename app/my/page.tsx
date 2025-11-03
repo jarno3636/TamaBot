@@ -19,25 +19,28 @@ export default function MyPetPage() {
   const [fid, setFid] = useState<number | null>(null);
   useEffect(() => {
     const f = currentFid();
-    if (Number.isFinite(f as number) && (f as number) > 0) setFid(f as number);
+    const asNum = Number(f);
+    if (Number.isFinite(asNum) && asNum > 0) setFid(asNum);
   }, []);
 
-  const { data: tokenIdNumber } = useReadContract({
+  // Read token id for this FID. Only enable once fid is known.
+  const { data: tokenIdRaw } = useReadContract({
     address: TAMABOT_CORE.address,
     abi: TAMABOT_CORE.abi,
     chainId: base.id,
     functionName: "tokenIdByFID",
-    args: [BigInt(fid || 0)],
-    // ✅ Keep bigint out of cache
-    select: (v: bigint) => Number(v || 0),
+    args: [BigInt(fid ?? 0)],
     query: { enabled: fid !== null } as any,
   });
 
-  const id = useMemo(() => Number(tokenIdNumber || 0), [tokenIdNumber]);
+  // Convert bigint -> number outside the hook
+  const id = useMemo(() => {
+    const n = tokenIdRaw != null ? Number(tokenIdRaw as unknown as bigint) : 0;
+    return Number.isFinite(n) ? n : 0;
+  }, [tokenIdRaw]);
 
   useEffect(() => {
     if (fid && id > 0) {
-      // soft replace to avoid back-stack clutter
       router.replace(`/tamabot/${id}`);
     }
   }, [fid, id, router]);
