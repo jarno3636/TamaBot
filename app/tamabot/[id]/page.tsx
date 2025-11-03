@@ -8,7 +8,7 @@ import { TAMABOT_CORE } from "@/lib/abi";
 import { useReadContract } from "wagmi";
 import { base } from "viem/chains";
 import { Card, Pill } from "@/components/UI";
-import { composeCast, openUrl } from "@/lib/mini";
+import { composeCast, openInMini } from "@/lib/miniapp"; // ← updated import
 import { buildTweetUrl } from "@/lib/share";
 import { StatMeter } from "@/components/StatMeter";
 
@@ -53,17 +53,37 @@ export default function Page({ params }: { params: { id: string } }) {
     };
   }, [s]);
 
-  // Share helpers
+  // ===== Share helpers =====
   const shareUrl = typeof window !== "undefined" ? window.location.href : "";
   const shareText = `Meet my TamaBot #${validId ? id : ""} — evolving with my Farcaster vibe.`;
-  function shareFarcaster() {
-    try { composeCast(`${shareText} ${shareUrl}`); }
-    catch { openUrl(`https://warpcast.com/~/compose?text=${encodeURIComponent(`${shareText} ${shareUrl}`)}`); }
+
+  async function shareFarcaster() {
+    try {
+      const ok = await composeCast({ text: `${shareText} ${shareUrl}` });
+      if (ok) return;
+    } catch {
+      /* fall through */
+    }
+    const url = `https://warpcast.com/~/compose?text=${encodeURIComponent(
+      `${shareText} ${shareUrl}`
+    )}`;
+    (await openInMini(url)) || window.open(url, "_blank");
   }
-  function shareX() { openUrl(buildTweetUrl({ text: shareText, url: shareUrl })); }
+
+  function shareX() {
+    const url = buildTweetUrl({ text: shareText, url: shareUrl });
+    openInMini(url).then((ok) => {
+      if (!ok) window.open(url, "_blank");
+    });
+  }
+
   const [copied, setCopied] = useState(false);
   async function copyLink() {
-    try { await navigator.clipboard.writeText(shareUrl); setCopied(true); setTimeout(()=>setCopied(false), 1500); } catch {}
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {}
   }
 
   return (
@@ -131,7 +151,7 @@ export default function Page({ params }: { params: { id: string } }) {
 
               {loadingState && (
                 <div className="grid gap-6 lg:grid-cols-2">
-                  {[0,1,2,3].map(i=>(
+                  {[0, 1, 2, 3].map((i) => (
                     <div key={i} className="grid gap-4">
                       <div className="h-5 rounded bg-white/10 animate-pulse" />
                       <div className="h-5 rounded bg-white/10 animate-pulse" />
