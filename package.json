@@ -29,6 +29,7 @@
     "swr": "2.3.0",
     "viem": "2.38.6",
     "wagmi": "2.21.2",
+    "@wagmi/core": "2.21.2",
     "@wagmi/connectors": "6.1.2"
   },
   "devDependencies": {
@@ -42,7 +43,9 @@
     "typescript": "5.5.4"
   },
   "overrides": {
-    "viem": "2.38.6"
+    "viem": "2.38.6",
+    "wagmi": "2.21.2",
+    "@wagmi/core": "2.21.2"
   },
   "engines": {
     "node": ">=18.18.0"
