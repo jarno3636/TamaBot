@@ -14,6 +14,21 @@ import { StatMeter } from "@/components/StatMeter";
 
 export const dynamic = "force-dynamic";
 
+function toNum(x: unknown): number {
+  try {
+    if (typeof x === "number") return x;
+    if (typeof x === "bigint") return Number(x);
+    if (x != null && typeof (x as any).toString === "function") {
+      const n = Number((x as any).toString());
+      return Number.isFinite(n) ? n : 0;
+    }
+    const n = Number(x as any);
+    return Number.isFinite(n) ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
 export default function Page({ params }: { params: { id: string } }) {
   const id = Number(params.id);
   const validId = Number.isFinite(id) && id > 0;
@@ -28,7 +43,7 @@ export default function Page({ params }: { params: { id: string } }) {
     query: { enabled: validId } as any,
   });
 
-  // on-chain state (tuple of bigints) -> map to plain numbers in useMemo
+  // on-chain state (hybrid tuple+object) -> safe number mapping
   const { data: sRaw, isLoading: loadingState } = useReadContract({
     address: TAMABOT_CORE.address,
     abi: TAMABOT_CORE.abi,
@@ -40,25 +55,16 @@ export default function Page({ params }: { params: { id: string } }) {
 
   const state = useMemo(() => {
     if (!sRaw) return null;
-    const a = sRaw as readonly [
-      bigint, // level
-      bigint, // xp
-      bigint, // mood
-      bigint, // hunger
-      bigint, // energy
-      bigint, // cleanliness
-      bigint, // lastTick
-      bigint  // fid
-    ];
+    const a: any = sRaw; // viem often returns both numeric indices & named keys
     return {
-      level: Number(a[0] ?? 0n),
-      xp: Number(a[1] ?? 0n),
-      mood: Number(a[2] ?? 0n),
-      hunger: Number(a[3] ?? 0n),
-      energy: Number(a[4] ?? 0n),
-      cleanliness: Number(a[5] ?? 0n),
-      lastTick: Number(a[6] ?? 0n),
-      fid: Number(a[7] ?? 0n),
+      level:       toNum(a[0] ?? a.level),
+      xp:          toNum(a[1] ?? a.xp),
+      mood:        toNum(a[2] ?? a.mood),
+      hunger:      toNum(a[3] ?? a.hunger),
+      energy:      toNum(a[4] ?? a.energy),
+      cleanliness: toNum(a[5] ?? a.cleanliness),
+      lastTick:    toNum(a[6] ?? a.lastTick),
+      fid:         toNum(a[7] ?? a.fid),
     };
   }, [sRaw]);
 
@@ -122,7 +128,7 @@ export default function Page({ params }: { params: { id: string } }) {
             <Card className="glass glass-pad">
               {loadingUri ? (
                 <div className="animate-pulse grid gap-3">
-                  <div className="w-full aspect-square rounded-xl bg-white/10" />
+                  <div className="W-full aspect-square rounded-xl bg-white/10" />
                   <div className="h-4 w-1/2 rounded bg-white/10" />
                   <div className="h-4 w-1/3 rounded bg-white/10" />
                 </div>
