@@ -29,8 +29,7 @@
     "react-dom": "18.2.0",
     "swr": "2.3.0",
     "viem": "2.21.55",
-    "wagmi": "2.14.6",
-    "@wagmi/connectors": "5.1.10"
+    "wagmi": "2.14.6"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "5.0.0",
@@ -41,5 +40,10 @@
     "prettier": "3.3.3",
     "tsx": "4.7.0",
     "typescript": "5.5.4"
+  },
+  "overrides": {
+    "wagmi": "2.14.6",
+    "@wagmi/core": "2.14.6",
+    "viem": "2.21.55"
   }
 }
