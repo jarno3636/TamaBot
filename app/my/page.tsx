@@ -10,8 +10,8 @@ import { useRouter } from "next/navigation";
 import { currentFid } from "@/lib/mini";
 import { Card, Pill } from "@/components/UI";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+export const dynamic = "force-dynamic"; // keep this
+// ❌ export const revalidate = 0;  <-- remove this line
 
 export default function MyPetPage() {
   const router = useRouter();
@@ -23,7 +23,6 @@ export default function MyPetPage() {
     if (Number.isFinite(asNum) && asNum > 0) setFid(asNum);
   }, []);
 
-  // Read token id for this FID. Only enable once fid is known.
   const { data: tokenIdRaw } = useReadContract({
     address: TAMABOT_CORE.address,
     abi: TAMABOT_CORE.abi,
@@ -33,16 +32,13 @@ export default function MyPetPage() {
     query: { enabled: fid !== null } as any,
   });
 
-  // Convert bigint -> number outside the hook
   const id = useMemo(() => {
     const n = tokenIdRaw != null ? Number(tokenIdRaw as unknown as bigint) : 0;
     return Number.isFinite(n) ? n : 0;
   }, [tokenIdRaw]);
 
   useEffect(() => {
-    if (fid && id > 0) {
-      router.replace(`/tamabot/${id}`);
-    }
+    if (fid && id > 0) router.replace(`/tamabot/${id}`);
   }, [fid, id, router]);
 
   return (
