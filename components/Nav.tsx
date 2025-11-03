@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { currentFid, openProfile } from "@/lib/mini";
-import ConnectPill from "@/components/ConnectPill"; // ⬅️ RainbowKit-based pill
+import ConnectPill from "@/components/ConnectPill";
 
 export default function Nav() {
   const pathname = usePathname();
@@ -13,13 +13,11 @@ export default function Nav() {
   const [avatar, setAvatar] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
 
-  // Farcaster FID (if inside mini)
   useEffect(() => {
     const f = currentFid();
     if (f) setFid(f);
   }, []);
 
-  // Neynar avatar
   useEffect(() => {
     if (!fid) return;
     (async () => {
@@ -41,8 +39,8 @@ export default function Nav() {
           "radial-gradient(900px 420px at 10% -20%, rgba(58,166,216,.14), transparent 70%),radial-gradient(900px 420px at 110% -30%, rgba(234,122,42,.18), transparent 70%),linear-gradient(180deg, rgba(8,9,12,.90), rgba(8,9,12,.58))",
       }}
     >
-      <nav className="container mx-auto flex items-center justify-between px-4 py-3">
-        {/* Left: Farcaster avatar */}
+      <nav className="container mx-auto flex items-center justify-between px-4 py-3" role="navigation">
+        {/* Left: avatar (taps to open Farcaster profile if available) */}
         <button
           onClick={() => (fid ? openProfile(fid) : undefined)}
           className="relative h-10 w-10 rounded-full overflow-hidden border border-white/20 hover:border-white/40 transition"
@@ -55,44 +53,28 @@ export default function Nav() {
           )}
         </button>
 
-        {/* Center: desktop links only */}
-        <div className="hidden md:flex items-center gap-6 text-[15px] font-medium">
-          <a href="/"      className={`nav-pill ${is("/") ? "nav-pill--active" : ""}`}>Home</a>
-          <a href="/mint"  className={`nav-pill ${is("/mint") ? "nav-pill--active" : ""}`}>Mint</a>
-          <a href="/my"    className={`nav-pill ${is("/my") ? "nav-pill--active" : ""}`}>My&nbsp;Pet</a>
-          <a href="/about" className={`nav-pill ${is("/about") ? "nav-pill--active" : ""}`}>About</a>
-        </div>
-
-        {/* Right: desktop connect + mobile burger */}
-        <div className="flex items-center gap-3">
-          {/* Desktop connect (RainbowKit pill) */}
-          <div className="hidden md:block">
-            <ConnectPill />
-          </div>
-
-          {/* Mobile menu toggle */}
-          <button
-            onClick={() => setOpen((v) => !v)}
-            aria-label="Open menu"
-            className="md:hidden flex items-center justify-center h-9 w-9 rounded-lg border border-white/15 hover:bg-white/10 transition"
-          >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <path d="M3 6h18M3 12h18M3 18h18" />
-            </svg>
-          </button>
-        </div>
+        {/* Right: ONLY the burger (no desktop links, no desktop connect) */}
+        <button
+          onClick={() => setOpen(v => !v)}
+          aria-label="Open menu"
+          aria-expanded={open}
+          className="flex items-center justify-center h-9 w-9 rounded-lg border border-white/15 hover:bg-white/10 transition"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+            <path d="M3 6h18M3 12h18M3 18h18" />
+          </svg>
+        </button>
       </nav>
 
-      {/* Mobile drawer: links + connect (no duplicate desktop links) */}
+      {/* Drawer: links + ConnectPill live here */}
       {open && (
-        <div className="md:hidden border-t border-white/10 bg-black/70 backdrop-blur-xl animate-fadeInDown">
+        <div className="border-t border-white/10 bg-black/70 backdrop-blur-xl animate-fadeInDown">
           <div className="container mx-auto px-4 py-5 grid gap-3 text-white text-[15px]">
             <a href="/"      onClick={() => setOpen(false)} className={`nav-pill ${is("/") ? "nav-pill--active" : ""}`}>Home</a>
             <a href="/mint"  onClick={() => setOpen(false)} className={`nav-pill ${is("/mint") ? "nav-pill--active" : ""}`}>Mint</a>
             <a href="/my"    onClick={() => setOpen(false)} className={`nav-pill ${is("/my") ? "nav-pill--active" : ""}`}>My&nbsp;Pet</a>
             <a href="/about" onClick={() => setOpen(false)} className={`nav-pill ${is("/about") ? "nav-pill--active" : ""}`}>About</a>
 
-            {/* Mobile connect; stop propagation so the drawer stays open while modal is active */}
             <div
               className="pt-3 border-t border-white/10"
               onMouseDown={(e) => e.stopPropagation()}
