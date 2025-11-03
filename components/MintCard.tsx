@@ -1,3 +1,4 @@
+// components/MintCard.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -5,26 +6,23 @@ import { useAccount, useReadContract, useWriteContract, useWaitForTransactionRec
 import { useRouter, useSearchParams } from "next/navigation";
 import { TAMABOT_CORE } from "@/lib/abi";
 import { formatEther } from "viem";
-
-function detectMiniFid(): number | null {
-  const mk: any = (globalThis as any).MiniKit;
-  return mk?.user?.fid ? Number(mk.user.fid) : null;
-}
+import { useFid } from "@/lib/useFid";
 
 export default function MintCard() {
   const router = useRouter();
   const qs = useSearchParams();
   const { address } = useAccount();
+  const { fid: detectedFid } = useFid();
 
-  // ---------- FID detection ----------
+  // ---------- FID detection + manual override ----------
   const [fid, setFid] = useState<string>("");
+
   useEffect(() => {
     const fromQuery = qs?.get("fid");
-    const mini = detectMiniFid();
-    if (mini && !fid) setFid(String(mini));
+    if (!fid && detectedFid) setFid(String(detectedFid));
     else if (fromQuery && !fid) setFid(fromQuery);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [detectedFid]);
 
   const fidNum = /^\d+$/.test(fid) ? Number(fid) : null;
   const canMint = useMemo(() => !!address && fidNum !== null, [address, fidNum]);
