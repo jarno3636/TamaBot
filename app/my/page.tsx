@@ -11,7 +11,6 @@ import { currentFid } from "@/lib/mini";
 import { Card, Pill } from "@/components/UI";
 
 export const dynamic = "force-dynamic"; // keep this
-// ❌ export const revalidate = 0;  <-- remove this line
 
 export default function MyPetPage() {
   const router = useRouter();
@@ -23,22 +22,26 @@ export default function MyPetPage() {
     if (Number.isFinite(asNum) && asNum > 0) setFid(asNum);
   }, []);
 
-  const { data: tokenIdRaw } = useReadContract({
+  const { data: tokenIdNumber } = useReadContract({
     address: TAMABOT_CORE.address,
     abi: TAMABOT_CORE.abi,
     chainId: base.id,
     functionName: "tokenIdByFID",
     args: [BigInt(fid ?? 0)],
-    query: { enabled: fid !== null } as any,
+    // ✅ Keep bigint out of cache by mapping in query.select
+    query: {
+      enabled: fid !== null,
+      select: (v: bigint) => Number(v ?? 0),
+    } as any,
   });
 
-  const id = useMemo(() => {
-    const n = tokenIdRaw != null ? Number(tokenIdRaw as unknown as bigint) : 0;
-    return Number.isFinite(n) ? n : 0;
-  }, [tokenIdRaw]);
+  const id = useMemo(() => Number(tokenIdNumber || 0), [tokenIdNumber]);
 
   useEffect(() => {
-    if (fid && id > 0) router.replace(`/tamabot/${id}`);
+    if (fid && id > 0) {
+      // soft replace to avoid back-stack clutter
+      router.replace(`/tamabot/${id}`);
+    }
   }, [fid, id, router]);
 
   return (
