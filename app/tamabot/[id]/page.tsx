@@ -2,23 +2,34 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import PetCard from "@/components/PetCard";
 import { TAMABOT_CORE } from "@/lib/abi";
 import { useReadContract } from "wagmi";
 import { base } from "viem/chains";
 import { Card, Pill } from "@/components/UI";
-import { composeCast, openInMini } from "@/lib/miniapp"; // ← updated import
+import { composeCast, openInMini } from "@/lib/miniapp";
 import { buildTweetUrl } from "@/lib/share";
 import { StatMeter } from "@/components/StatMeter";
 
 export const dynamic = "force-dynamic";
 
+type RawState = readonly [
+  bigint, // level
+  bigint, // xp
+  bigint, // mood
+  bigint, // hunger
+  bigint, // energy
+  bigint, // cleanliness
+  bigint, // lastTick
+  bigint  // fid
+];
+
 export default function Page({ params }: { params: { id: string } }) {
   const id = Number(params.id);
   const validId = Number.isFinite(id) && id > 0;
 
-  // tokenURI
+  // tokenURI (already string; no bigint risk)
   const { data: tokenUri, isLoading: loadingUri } = useReadContract({
     address: TAMABOT_CORE.address,
     abi: TAMABOT_CORE.abi,
@@ -28,30 +39,27 @@ export default function Page({ params }: { params: { id: string } }) {
     query: { enabled: validId } as any,
   });
 
-  // on-chain state
-  const { data: s, isLoading: loadingState } = useReadContract({
+  // on-chain state — map to plain numbers inside query.select (keeps cache JSON-safe)
+  const { data: state, isLoading: loadingState } = useReadContract({
     address: TAMABOT_CORE.address,
     abi: TAMABOT_CORE.abi,
     chainId: base.id,
     functionName: "getState",
     args: [BigInt(validId ? id : 0)],
-    query: { enabled: validId } as any,
+    query: {
+      enabled: validId,
+      select: (s: RawState) => ({
+        level: Number(s?.[0] ?? 0n),
+        xp: Number(s?.[1] ?? 0n),
+        mood: Number(s?.[2] ?? 0n),
+        hunger: Number(s?.[3] ?? 0n),
+        energy: Number(s?.[4] ?? 0n),
+        cleanliness: Number(s?.[5] ?? 0n),
+        lastTick: Number(s?.[6] ?? 0n),
+        fid: Number(s?.[7] ?? 0n),
+      }),
+    } as any,
   });
-
-  const state = useMemo(() => {
-    if (!s) return null as any;
-    const [level, xp, mood, hunger, energy, cleanliness, lastTick, fid] = s as any;
-    return {
-      level: Number(level),
-      xp: Number(xp),
-      mood: Number(mood),
-      hunger: Number(hunger),
-      energy: Number(energy),
-      cleanliness: Number(cleanliness),
-      lastTick: Number(lastTick),
-      fid: Number(fid),
-    };
-  }, [s]);
 
   // ===== Share helpers =====
   const shareUrl = typeof window !== "undefined" ? window.location.href : "";
