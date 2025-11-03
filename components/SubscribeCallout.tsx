@@ -1,3 +1,4 @@
+// components/SubscribeCallout.tsx
 "use client";
 
 import { useState } from "react";
@@ -8,14 +9,12 @@ const CHANNEL_URL = `https://warpcast.com/~/channel/${CHAN}`;
 
 async function openPreferMini(url: string) {
   try {
-    // MiniKit
     const w = window as any;
     const mk = w?.miniKit || w?.coinbase?.miniKit || w?.MiniKit;
     if (mk?.openUrl) return void mk.openUrl(url);
     if (mk?.openURL) return void mk.openURL(url);
   } catch {}
   try {
-    // Farcaster SDK
     const mod = (await import("@farcaster/miniapp-sdk")) as any;
     const sdk = mod?.sdk ?? mod?.default;
     if (sdk?.actions?.openUrl) return void sdk.actions.openUrl(url);
@@ -31,7 +30,7 @@ export default function SubscribeCallout() {
   const [err, setErr] = useState<string | null>(null);
 
   async function onJoinChannel() {
-    await openPreferMini(CHANNEL_URL); // opens native join UI in Warpcast
+    await openPreferMini(CHANNEL_URL);
   }
 
   async function onSubscribeBackend() {
@@ -65,7 +64,6 @@ export default function SubscribeCallout() {
               {insideMini || isFarcasterUA() ? " You're in Warpcast—perfect!" : ""}
             </div>
           </div>
-
           <div className="flex gap-2">
             <button
               onClick={onJoinChannel}
@@ -76,19 +74,14 @@ export default function SubscribeCallout() {
             <button
               onClick={onSubscribeBackend}
               disabled={!fid || busy}
-              className="px-4 py-2 rounded-xl bg-white/90 text-black hover:bg-white font-semibold disabled:opacity-60"
+              className="px-4 py-2 rounded-xl bg-white/90 text-black hover:bg:white font-semibold disabled:opacity-60"
               title={!fid ? "Sign in with Farcaster first" : ""}
             >
               {busy ? "Saving…" : "Subscribe"}
             </button>
           </div>
         </div>
-
-        {!fid && (
-          <div className="text-xs mt-2 opacity-80">
-            Tip: sign in (or open from Warpcast) so we can link your FID.
-          </div>
-        )}
+        {!fid && <div className="text-xs mt-2 opacity-80">Sign in (or open from Warpcast) so we can link your FID.</div>}
         {err && <div className="text-xs mt-2 text-red-300">{err}</div>}
       </div>
     </div>
