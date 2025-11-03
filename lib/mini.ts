@@ -1,191 +1,107 @@
-// lib/miniapp.ts
+// lib/mini.ts
+"use client";
 
-/** Farcaster Mini App SDK shape (tolerant to older builds) */
-type MiniAppSdk = {
-  actions?: {
-    openUrl?: (url: string | { url: string }) => Promise<void> | void;
-    openURL?: (url: string) => Promise<void> | void; // legacy
-    composeCast?: (args: { text?: string; embeds?: string[] }) => Promise<void> | void;
-    ready?: () => Promise<void> | void;
-  };
-  isInMiniApp?: () => boolean;
+import {
+  SITE_URL,
+  MINIAPP_URL,
+  isFarcasterUA,
+  isBaseAppUA,
+  buildFarcasterComposeUrl,
+  fcPreferMini,
+  ensureReady,
+  getMiniSdk,
+  openInMini,
+  composeCast,
+} from "./miniapp";
+
+/** Basic UA/iframe check — matches your MiniAppGate heuristic */
+export function isInsideMini(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const inIframe = window.self !== window.top;
+    const pathHint = window.location?.pathname?.startsWith?.("/mini");
+    return isFarcasterUA() || inIframe || !!pathHint;
+  } catch {
+    return isFarcasterUA();
+  }
+}
+
+/** Alias some projects call `insideMini()` directly */
+export const insideMini = isInsideMini;
+
+/** Signal “ready” to Warpcast/Base so splash doesn’t hang */
+export async function miniReady(timeoutMs = 1200): Promise<void> {
+  // 1) Farcaster SDK
+  await ensureReady(timeoutMs);
+
+  // 2) Base MiniKit (if present)
+  try {
+    const w = window as any;
+    const mk = w?.miniKit || w?.coinbase?.miniKit || null;
+    if (mk?.setFrameReady) await Promise.resolve(mk.setFrameReady());
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Best-effort FID detection (URL param ➜ MiniKit context ➜ storage) */
+export function currentFid(): number | null {
+  if (typeof window === "undefined") return null;
+
+  // URL ?fid=123
+  const p = new URLSearchParams(window.location.search);
+  const fromQuery = p.get("fid");
+  if (fromQuery && /^\d+$/.test(fromQuery)) return Number(fromQuery);
+
+  // Base MiniKit context
+  try {
+    const w = window as any;
+    const fid = w?.miniKit?.context?.fid || w?.coinbase?.miniKit?.context?.fid;
+    if (fid && /^\d+$/.test(String(fid))) return Number(fid);
+  } catch {
+    /* ignore */
+  }
+
+  // Local/session storage fallbacks used in some flows
+  try {
+    const ls = window.localStorage?.getItem("fid") || window.sessionStorage?.getItem("fid");
+    if (ls && /^\d+$/.test(ls)) return Number(ls);
+  } catch {
+    /* ignore */
+  }
+
+  return null;
+}
+
+/** Open a user’s Farcaster profile (FID) in the native host when possible */
+export async function openProfile(fid?: number | null): Promise<void> {
+  if (!fid) return;
+  const url = `https://warpcast.com/~/profiles/${fid}`;
+  const handled = await openInMini(url);
+  if (!handled && typeof window !== "undefined") window.open(url, "_blank", "noopener,noreferrer");
+}
+
+/** Open any URL via Mini host first; fallback to web */
+export async function openUrl(url: string): Promise<void> {
+  const handled = await openInMini(url);
+  if (!handled && typeof window !== "undefined") window.open(url, "_blank", "noopener,noreferrer");
+}
+
+/** Simple sign-in launcher (adjust path if you have a specific route) */
+export async function miniSignin(): Promise<void> {
+  // If you have a real login route, put it here:
+  const loginUrl = `${SITE_URL}/login`;
+  await openUrl(loginUrl);
+}
+
+/** Re-exports used elsewhere */
+export {
+  SITE_URL,
+  MINIAPP_URL,
+  isFarcasterUA,
+  isBaseAppUA,
+  buildFarcasterComposeUrl,
+  fcPreferMini,
+  getMiniSdk,
+  composeCast,
 };
-
-/* ---------------- Env helpers ---------------- */
-
-export const SITE_URL =
-  (typeof process !== "undefined" && (process as any).env?.NEXT_PUBLIC_SITE_URL) ||
-  "https://tamabot.vercel.app";
-
-export const MINIAPP_URL =
-  (typeof process !== "undefined" && (process as any).env?.NEXT_PUBLIC_FC_MINIAPP_URL) ||
-  "";
-
-/* ---------------- UA heuristics ---------------- */
-
-export function isFarcasterUA(): boolean {
-  if (typeof navigator === "undefined") return false;
-  return /Warpcast|Farcaster|FarcasterMini/i.test(navigator.userAgent);
-}
-
-export function isBaseAppUA(): boolean {
-  if (typeof navigator === "undefined") return false;
-  const ua = navigator.userAgent || "";
-  return /BaseWallet|Base\sApp|Base\/\d|CoinbaseWallet|CoinbaseMobile|CoinbaseApp|CBBrowser|CBWallet|Coinbase(Android|iOS)?/i.test(
-    ua
-  );
-}
-
-/* ---------------- URL helpers ---------------- */
-
-function toAbsoluteUrl(input: string, base = SITE_URL): string {
-  try {
-    return new URL(input, base).toString();
-  } catch {
-    try {
-      return new URL(base).toString();
-    } catch {
-      return "https://tamabot.vercel.app";
-    }
-  }
-}
-
-/** Prefer Mini App URL inside Warpcast; else normal site (absolute). */
-export function fcPreferMini(pathOrAbs = ""): string {
-  const base = isFarcasterUA() && MINIAPP_URL ? MINIAPP_URL : SITE_URL;
-  const absBase = toAbsoluteUrl(base);
-  if (!pathOrAbs) return absBase;
-  if (/^https?:\/\//i.test(pathOrAbs)) return pathOrAbs;
-  const sep = pathOrAbs.startsWith("/") ? "" : "/";
-  return `${absBase}${sep}${pathOrAbs}`;
-}
-
-/* ---------------- Farcaster composer helpers ---------------- */
-
-export function buildFarcasterComposeUrl({
-  text = "",
-  embeds = [] as string[],
-}: {
-  text?: string;
-  embeds?: string[];
-} = {}): string {
-  const url = new URL("https://warpcast.com/~/compose");
-  if (text) url.searchParams.set("text", text);
-  for (const e of embeds || []) {
-    const abs = e ? toAbsoluteUrl(e, SITE_URL) : "";
-    if (abs) url.searchParams.append("embeds[]", abs);
-  }
-  return url.toString();
-}
-
-/* ---------------- SDK loaders ---------------- */
-
-export async function getMiniSdk(): Promise<MiniAppSdk | null> {
-  if (typeof window === "undefined") return null;
-  try {
-    const mod = (await import("@farcaster/miniapp-sdk")) as {
-      sdk?: MiniAppSdk;
-      default?: MiniAppSdk;
-    };
-    const fromModule = mod?.sdk ?? mod?.default;
-    if (fromModule) return fromModule;
-    const g = window as any;
-    return g?.farcaster?.miniapp?.sdk || g?.sdk || null;
-  } catch {
-    const g = window as any;
-    return g?.farcaster?.miniapp?.sdk || g?.sdk || null;
-  }
-}
-
-/** Call sdk.actions.ready() quickly so we never hang splash */
-export async function ensureReady(timeoutMs = 1200): Promise<void> {
-  try {
-    const sdk = await getMiniSdk();
-    if (!sdk?.actions?.ready) return;
-    await Promise.race<void>([
-      Promise.resolve(sdk.actions.ready()),
-      new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
-    ]);
-  } catch {}
-}
-
-/* ===================== Base App (MiniKit globals) ===================== */
-
-function getMiniKit(): any | null {
-  if (typeof window === "undefined") return null;
-  const w = window as any;
-  return w?.miniKit || w?.coinbase?.miniKit || null;
-}
-
-async function tryBaseComposeCast(args: { text?: string; embeds?: string[] }) {
-  if (!isBaseAppUA()) return false;
-  try {
-    const mk = getMiniKit();
-    if (mk?.composeCast) {
-      await mk.composeCast(args);
-      return true;
-    }
-  } catch {}
-  return false;
-}
-
-/** Try to open a URL natively (Base MiniKit ➜ Farcaster SDK), else let caller fall back to web */
-export async function openInMini(url: string): Promise<boolean> {
-  if (!url) return false;
-  const safe = toAbsoluteUrl(url, SITE_URL);
-
-  // 1) Base App MiniKit
-  try {
-    const mk = getMiniKit();
-    if (mk?.openUrl) {
-      await mk.openUrl(safe);
-      return true;
-    }
-    if (mk?.openURL) {
-      await mk.openURL(safe);
-      return true;
-    }
-  } catch {}
-
-  // 2) Farcaster Mini App SDK (Warpcast)
-  try {
-    const sdk = await getMiniSdk();
-    if (sdk?.actions?.openUrl) {
-      try {
-        await sdk.actions.openUrl(safe);
-        return true;
-      } catch {
-        await (sdk.actions.openUrl as any)({ url: safe });
-        return true;
-      }
-    }
-    if (sdk?.actions?.openURL) {
-      await sdk.actions.openURL(safe);
-      return true;
-    }
-  } catch {}
-
-  // 3) Not handled
-  return false;
-}
-
-/** Unified compose helper (Base App ➜ Warpcast SDK ➜ fail) */
-export async function composeCast({
-  text = "",
-  embeds = [] as string[],
-} = {}): Promise<boolean> {
-  const normalizedEmbeds = (embeds || []).map((e) => toAbsoluteUrl(e, SITE_URL));
-
-  if (await tryBaseComposeCast({ text, embeds: normalizedEmbeds })) return true;
-
-  const sdk = await getMiniSdk();
-  if (sdk?.actions?.composeCast && isFarcasterUA()) {
-    try {
-      await ensureReady();
-      await sdk.actions.composeCast({ text, embeds: normalizedEmbeds });
-      return true;
-    } catch {}
-  }
-
-  return false;
-}
