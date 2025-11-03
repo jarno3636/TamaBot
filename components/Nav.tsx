@@ -1,10 +1,11 @@
+// components/Nav.tsx
 "use client";
 
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { currentFid, openProfile } from "@/lib/mini";
-import ConnectWallet from "@/components/ConnectWallet";
+import ConnectPill from "@/components/ConnectPill"; // ⬅️ RainbowKit-based pill
 
 export default function Nav() {
   const pathname = usePathname();
@@ -12,7 +13,13 @@ export default function Nav() {
   const [avatar, setAvatar] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
 
-  useEffect(() => { const f = currentFid(); if (f) setFid(f); }, []);
+  // Farcaster FID (if inside mini)
+  useEffect(() => {
+    const f = currentFid();
+    if (f) setFid(f);
+  }, []);
+
+  // Neynar avatar
   useEffect(() => {
     if (!fid) return;
     (async () => {
@@ -48,40 +55,50 @@ export default function Nav() {
           )}
         </button>
 
-        {/* DESKTOP: links + connect (only ≥ md) */}
+        {/* Center: desktop links only */}
         <div className="hidden md:flex items-center gap-6 text-[15px] font-medium">
           <a href="/"      className={`nav-pill ${is("/") ? "nav-pill--active" : ""}`}>Home</a>
           <a href="/mint"  className={`nav-pill ${is("/mint") ? "nav-pill--active" : ""}`}>Mint</a>
           <a href="/my"    className={`nav-pill ${is("/my") ? "nav-pill--active" : ""}`}>My&nbsp;Pet</a>
           <a href="/about" className={`nav-pill ${is("/about") ? "nav-pill--active" : ""}`}>About</a>
-          <div className="ml-2">
-            <ConnectWallet />
-          </div>
         </div>
 
-        {/* MOBILE: burger only (links live in dropdown) */}
-        <button
-          onClick={() => setOpen(v => !v)}
-          aria-label="Open menu"
-          className="md:hidden flex items-center justify-center h-9 w-9 rounded-lg border border-white/15 hover:bg-white/10 transition"
-        >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-            <path d="M3 6h18M3 12h18M3 18h18"/>
-          </svg>
-        </button>
+        {/* Right: desktop connect + mobile burger */}
+        <div className="flex items-center gap-3">
+          {/* Desktop connect (RainbowKit pill) */}
+          <div className="hidden md:block">
+            <ConnectPill />
+          </div>
+
+          {/* Mobile menu toggle */}
+          <button
+            onClick={() => setOpen((v) => !v)}
+            aria-label="Open menu"
+            className="md:hidden flex items-center justify-center h-9 w-9 rounded-lg border border-white/15 hover:bg-white/10 transition"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <path d="M3 6h18M3 12h18M3 18h18" />
+            </svg>
+          </button>
+        </div>
       </nav>
 
-      {/* MOBILE MENU (only < md, never render desktop links here) */}
+      {/* Mobile drawer: links + connect (no duplicate desktop links) */}
       {open && (
         <div className="md:hidden border-t border-white/10 bg-black/70 backdrop-blur-xl animate-fadeInDown">
           <div className="container mx-auto px-4 py-5 grid gap-3 text-white text-[15px]">
-            <a href="/"      onClick={()=>setOpen(false)} className={`nav-pill ${is("/") ? "nav-pill--active" : ""}`}>Home</a>
-            <a href="/mint"  onClick={()=>setOpen(false)} className={`nav-pill ${is("/mint") ? "nav-pill--active" : ""}`}>Mint</a>
-            <a href="/my"    onClick={()=>setOpen(false)} className={`nav-pill ${is("/my") ? "nav-pill--active" : ""}`}>My&nbsp;Pet</a>
-            <a href="/about" onClick={()=>setOpen(false)} className={`nav-pill ${is("/about") ? "nav-pill--active" : ""}`}>About</a>
+            <a href="/"      onClick={() => setOpen(false)} className={`nav-pill ${is("/") ? "nav-pill--active" : ""}`}>Home</a>
+            <a href="/mint"  onClick={() => setOpen(false)} className={`nav-pill ${is("/mint") ? "nav-pill--active" : ""}`}>Mint</a>
+            <a href="/my"    onClick={() => setOpen(false)} className={`nav-pill ${is("/my") ? "nav-pill--active" : ""}`}>My&nbsp;Pet</a>
+            <a href="/about" onClick={() => setOpen(false)} className={`nav-pill ${is("/about") ? "nav-pill--active" : ""}`}>About</a>
 
-            <div className="pt-3 border-t border-white/10" onMouseDown={(e)=>e.stopPropagation()} onClick={(e)=>e.stopPropagation()}>
-              <ConnectWallet />
+            {/* Mobile connect; stop propagation so the drawer stays open while modal is active */}
+            <div
+              className="pt-3 border-t border-white/10"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ConnectPill />
             </div>
           </div>
         </div>
