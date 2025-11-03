@@ -1,6 +1,14 @@
 // app/providers.tsx
 "use client";
 
+////////////////////////////////////////////////////////////////////////////////
+// Guard: allow JSON.stringify on BigInt during SSR/prerender
+declare global { interface BigInt { toJSON(): string } }
+if (typeof (BigInt.prototype as any).toJSON !== "function") {
+  (BigInt.prototype as any).toJSON = function () { return this.toString(); };
+}
+////////////////////////////////////////////////////////////////////////////////
+
 import "@rainbow-me/rainbowkit/styles.css";
 import { useMemo, useEffect, type ReactNode } from "react";
 import {
