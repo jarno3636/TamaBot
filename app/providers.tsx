@@ -24,6 +24,12 @@ function AutoReconnect() {
   return null;
 }
 
+// 🔧 Transform BigInt -> string during dehydration to avoid JSON errors at build time
+function serializeData(data: unknown): unknown {
+  if (typeof data === "bigint") return data.toString();
+  return data;
+}
+
 export default function Providers({ children }: { children: ReactNode }) {
   const theme = useMemo(
     () =>
@@ -36,8 +42,7 @@ export default function Providers({ children }: { children: ReactNode }) {
     []
   );
 
-  // ✅ Serialize dehydrated cache so BigInt can't crash JSON during prerender
-  const dehydratedState = dehydrate(queryClient, { serializeData: true });
+  const dehydratedState = dehydrate(queryClient, { serializeData });
 
   return (
     <QueryClientProvider client={queryClient}>
