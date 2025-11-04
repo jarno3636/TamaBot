@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Providers from "./providers";
 import Nav from "@/components/Nav";
-import MiniDebug from "@/components/MiniDebug"; // ← debug badge
+import MiniDebug from "@/components/MiniDebug"; // debug badge
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://tamabot.vercel.app";
 const ABS = (p: string) => new URL(p, SITE).toString();
@@ -20,7 +20,8 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "TamaBot — Farcaster Pet on Base",
-    description: "Adopt, evolve, and share your on-chain AI pet directly from Warpcast.",
+    description:
+      "Adopt, evolve, and share your on-chain AI pet directly from Warpcast.",
     url: SITE,
     siteName: "TamaBot",
     images: [{ url: ABS("/og.png"), width: 1200, height: 630, alt: "TamaBot preview" }],
@@ -49,6 +50,7 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // Warpcast Mini App embed (enables “Open in Warpcast” launch UI)
   const miniAppEmbed = {
     version: "1",
     imageUrl: ABS("/og.png"),
@@ -67,8 +69,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <head>
+        {/* Official Farcaster Mini App SDK (safe no-op on web) */}
+        <script async src="https://cdn.farcaster.xyz/sdk/miniapp/v2.js"></script>
         {/* Base MiniKit (safe no-op on web) */}
-        <script src="https://cdn.jsdelivr.net/npm/@farcaster/mini-kit/dist/minikit.js" async />
+        <script async src="https://cdn.jsdelivr.net/npm/@farcaster/mini-kit/dist/minikit.js"></script>
 
         {/* Icons */}
         <link rel="icon" href="/favicon.ico" />
@@ -81,12 +85,41 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="format-detection" content="telephone=no" />
+
+        {/* Ultra-early “ready” pings (covers multiple Warpcast host shapes) */}
+        <script
+          id="fc-miniapp-ready"
+          dangerouslySetInnerHTML={{
+            __html: `
+(function(){
+  if (window.__fcReadyInjected) return; window.__fcReadyInjected = true;
+  var attempts = 0, maxAttempts = 50, done = false;
+
+  function ping(){
+    if (done) return;
+    try { window.farcaster?.actions?.ready?.(); } catch(e){}
+    try { window.farcaster?.miniapp?.sdk?.actions?.ready?.(); } catch(e){}
+    try { window.Farcaster?.mini?.sdk?.actions?.ready?.(); } catch(e){}
+    attempts++;
+    if (attempts >= maxAttempts) stop();
+  }
+  function stop(){ done = true; try{ clearInterval(iv); }catch(_){} }
+  var iv = setInterval(ping, 150);
+  // fire immediately + on key lifecycle moments
+  ping();
+  document.addEventListener('DOMContentLoaded', ping, { once: true });
+  window.addEventListener('pageshow', ping);
+  window.addEventListener('focus', ping);
+})();
+          `,
+          }}
+        />
       </head>
 
       <body className="min-h-screen bg-[#0a0b10] text-white antialiased">
         <Providers>
           <Nav />
-          {/* Note: you already wrap pages with a <main> here; avoid also returning a <main> from page components if possible to prevent nested <main> tags. */}
+          {/* Note: You already render a <main> here—avoid returning another <main> from pages to prevent nested <main> tags. */}
           <main className="mx-auto max-w-6xl px-4 pb-16 pt-6">{children}</main>
         </Providers>
 
