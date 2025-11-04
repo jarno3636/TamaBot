@@ -5,13 +5,11 @@ import { Suspense } from "react";
 import MintCard from "@/components/MintCard";
 import { Card, Pill } from "@/components/UI";
 import { useMiniContext } from "@/lib/useMiniContext";
-import FarcasterLogin from "@/components/FarcasterLogin";
-import SubscribeCallout from "@/components/SubscribeCallout";
 
 export const dynamic = "force-dynamic";
 
 export default function MintPage() {
-  const { inMini } = useMiniContext();
+  const { inMini, fid } = useMiniContext();
 
   return (
     <main className="min-h-[100svh] bg-deep-orange pb-16">
@@ -35,12 +33,11 @@ export default function MintPage() {
               </Suspense>
             </div>
 
-            {/* Mini-only helpers: lightweight sign-in badge + subscribe */}
-            {inMini && (
-              <div className="mt-6 grid gap-3">
-                <FarcasterLogin />
-                <SubscribeCallout />
-              </div>
+            {/* Optional: gentle hint only if in the app but FID not yet present */}
+            {inMini && !fid && (
+              <p className="mt-4 text-xs text-white/70">
+                Detected Farcaster app. If FID doesn’t appear, close and reopen the mini app to refresh context.
+              </p>
             )}
           </Card>
         </section>
