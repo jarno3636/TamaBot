@@ -5,12 +5,11 @@ import { useEffect, useState } from "react";
 import { useMiniContext, isInMini } from "@/lib/useMiniContext";
 
 export default function FarcasterLogin({ onLogin }: { onLogin?: (fid: number) => void }) {
-  const { loading, inMini, fid } = useMiniContext();
+  const { loading, fid } = useMiniContext();
   const [manual, setManual] = useState<number | null>(null);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Auto-link when mini context provides a FID
   useEffect(() => {
     if (fid) {
       try { localStorage.setItem("fid", String(fid)); } catch {}
@@ -18,23 +17,12 @@ export default function FarcasterLogin({ onLogin }: { onLogin?: (fid: number) =>
     }
   }, [fid, onLogin]);
 
-  if (loading) {
-    return <div className="text-sm text-zinc-500 animate-pulse">Detecting Farcaster session…</div>;
-  }
+  if (loading) return <div className="text-sm text-zinc-500 animate-pulse">Detecting Farcaster session…</div>;
+  if (fid) return <div className="rounded-xl bg-green-100 px-3 py-1 text-sm text-green-800 inline-block">Signed in (FID {fid})</div>;
 
-  if (fid) {
-    return (
-      <div className="rounded-xl bg-green-100 px-3 py-1 text-sm text-green-800 inline-block">
-        Signed in (FID {fid})
-      </div>
-    );
-  }
-
-  // Outside the mini: allow manual verify via Neynar
   async function confirmWithNeynar() {
     if (!manual) return;
-    setChecking(true);
-    setError(null);
+    setChecking(true); setError(null);
     try {
       const r = await fetch(`/api/neynar/user/${manual}`);
       if (!r.ok) throw new Error(`Neynar lookup failed (${r.status})`);
@@ -50,11 +38,8 @@ export default function FarcasterLogin({ onLogin }: { onLogin?: (fid: number) =>
   return (
     <div className="space-y-2">
       <div className="text-sm text-white/80">Sign in with Farcaster</div>
-
       {isInMini() ? (
-        <div className="text-xs text-zinc-400">
-          Detected Farcaster app. If this message stays, close and reopen the mini app to refresh context.
-        </div>
+        <div className="text-xs text-zinc-400">Detected Farcaster app. If this message stays, close and reopen the mini app to refresh context.</div>
       ) : (
         <div className="flex gap-2">
           <input
@@ -66,16 +51,11 @@ export default function FarcasterLogin({ onLogin }: { onLogin?: (fid: number) =>
               setManual(Number.isFinite(n) && n > 0 ? n : null);
             }}
           />
-          <button
-            onClick={confirmWithNeynar}
-            disabled={checking || !manual}
-            className="rounded-lg bg-purple-600 text-white px-3 py-2 disabled:opacity-50"
-          >
+          <button onClick={confirmWithNeynar} disabled={checking || !manual} className="rounded-lg bg-purple-600 text-white px-3 py-2 disabled:opacity-50">
             {checking ? "Checking…" : "Confirm"}
           </button>
         </div>
       )}
-
       {error && <div className="text-sm text-red-400">{error}</div>}
     </div>
   );
