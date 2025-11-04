@@ -3,7 +3,13 @@
 
 import { useEffect, useRef, useState } from "react";
 
-type MiniUserRaw = { fid?: number | string; username?: string; pfpUrl?: string; pfp_url?: string };
+type MiniUserRaw = {
+  fid?: number | string;
+  username?: string;
+  pfpUrl?: string;
+  pfp_url?: string;
+};
+
 type MiniAppSdk = {
   actions?: { ready?: () => Promise<void> | void };
   user?: MiniUserRaw;
@@ -52,7 +58,12 @@ export function useMiniContext() {
         // Heuristic “in mini/webview”
         const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
         const looksLikeWebView = /Warpcast|Farcaster|FarcasterMini|Base\sApp|Coinbase|ReactNativeWebView/i.test(ua);
-        setInMini(looksLikeWebView || (() => { try { return window.self !== window.top; } catch { return true; } })());
+        setInMini(
+          looksLikeWebView ||
+            (() => {
+              try { return window.self !== window.top; } catch { return true; }
+            })()
+        );
 
         // 1) Best effort: dynamic import SDK if present
         let sdk: MiniAppSdk | null = null;
@@ -61,65 +72,80 @@ export function useMiniContext() {
           sdk = (mod?.sdk ?? mod?.default) || null;
         } catch {}
 
-        // 2) Ask host to get ready (no-op if not supported)
-        try { await Promise.race([Promise.resolve(sdk?.actions?.ready?.()), new Promise(r => setTimeout(r, 800))]); } catch {}
+        // 2) Tell host we're ready (no-op if not supported)
+        try {
+          await Promise.race([
+            Promise.resolve(sdk?.actions?.ready?.()),
+            new Promise((r) => setTimeout(r, 800)),
+          ]);
+        } catch {}
 
         // 3) Read from SDK/context if available
         const fromSdk = num(sdk?.user?.fid ?? sdk?.context?.user?.fid);
 
         // 4) Listen for WebView postMessage context (some Warpcast builds)
         let postMessageFid: number | null = null;
-        let postMessageUser: MiniUserRaw | null = null;
+        let postMessageUser: MiniUserRaw | undefined = undefined;
 
         const onMsg = (ev: MessageEvent) => {
           try {
-            const data = ev?.data || ev;
-            // Accept a few shapes
-            const maybe =
+            const data: any = ev?.data ?? ev;
+            const maybe: any =
               data?.context?.user ??
               data?.user ??
               (typeof data === "string" ? JSON.parse(data) : null);
             const f = num(maybe?.fid);
             if (f && alive.current) {
               postMessageFid = f;
-              postMessageUser = maybe;
+              postMessageUser = maybe as MiniUserRaw;
               setFid(f);
               persistFid(f);
-              setUser({ fid: f, username: maybe?.username, pfpUrl: maybe?.pfpUrl || maybe?.pfp_url });
+              setUser({
+                fid: f,
+                username: maybe?.username,
+                pfpUrl: maybe?.pfpUrl || maybe?.pfp_url,
+              });
             }
-          } catch {}
+          } catch {
+            // ignore malformed messages
+          }
         };
 
         window.addEventListener("message", onMsg);
-        // Proactively ask the host for context (harmless if ignored)
+        // Proactively ask host for context (harmless if ignored)
         try {
-          // common patterns some clients listen for
           window.parent?.postMessage?.({ type: "farcaster:context:request" }, "*");
-          (window as any).ReactNativeWebView?.postMessage?.(JSON.stringify({ type: "context:request" }));
+          (window as any).ReactNativeWebView?.postMessage?.(
+            JSON.stringify({ type: "context:request" })
+          );
         } catch {}
 
         // Give the host a short time to reply
-        await new Promise(r => setTimeout(r, 900));
+        await new Promise((r) => setTimeout(r, 900));
         window.removeEventListener("message", onMsg);
 
         // 5) Fallback: URL/localStorage
         const fromStorage = readStoredFid();
 
         const resolved = fromSdk ?? postMessageFid ?? fromStorage ?? null;
-        const resolvedUser: MiniUser | null =
-          postMessageUser
-            ? {
-                fid: num(postMessageUser.fid) ?? undefined,
-                username: postMessageUser.username,
-                pfpUrl: postMessageUser.pfpUrl || postMessageUser.pfp_url,
-              }
-            : (sdk?.user || sdk?.context?.user)
-            ? {
-                fid: num((sdk?.user || sdk?.context?.user)?.fid) ?? undefined,
-                username: (sdk?.user || sdk?.context?.user)?.username,
-                pfpUrl: (sdk?.user || sdk?.context?.user)?.pfpUrl || (sdk?.user || sdk?.context?.user)?.pfp_url,
-              }
-            : null;
+
+        // Build a normalized user object (avoid TS 'never' by copying to a local)
+        const pmu: MiniUserRaw | undefined = postMessageUser;
+        const baseUser = (sdk?.user || sdk?.context?.user) as MiniUserRaw | undefined;
+
+        const resolvedUser: MiniUser | null = pmu
+          ? {
+              fid: num(pmu.fid) ?? undefined,
+              username: pmu.username,
+              pfpUrl: pmu.pfpUrl || pmu.pfp_url,
+            }
+          : baseUser
+          ? {
+              fid: num(baseUser.fid) ?? undefined,
+              username: baseUser.username,
+              pfpUrl: baseUser.pfpUrl || baseUser.pfp_url,
+            }
+          : null;
 
         if (alive.current) {
           setFid(resolved);
