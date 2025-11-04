@@ -31,25 +31,35 @@ function serializeData(data: unknown): unknown {
   return data;
 }
 
-/** Lazy Neynar provider so build never fails */
-function NeynarProviderLazy({ children }: { children: ReactNode }) {
+/** Hardened Neynar wrapper: never throws, only runs when enabled + clientId set */
+function NeynarProviderSafe({ children }: { children: ReactNode }) {
+  const enabled =
+    (typeof window !== "undefined" && process.env.NEXT_PUBLIC_NEYNAR_ENABLED === "true") ||
+    process.env.NEXT_PUBLIC_NEYNAR_ENABLED === "true";
+
   const clientId =
     (typeof window !== "undefined" && process.env.NEXT_PUBLIC_NEYNAR_CLIENT_ID) ||
     process.env.NEXT_PUBLIC_NEYNAR_CLIENT_ID;
 
-  if (!clientId) return <>{children}</>;
+  if (!enabled || !clientId) return <>{children}</>;
 
-  let Provider: any = null;
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const mod = require("@neynar/react");
-    Provider = mod?.NeynarProvider ?? mod?.default ?? null;
-  } catch {
-    Provider = null;
-  }
-  if (!Provider) return <>{children}</>;
+    const neynar = require("@neynar/react");
+    const Provider = neynar.NeynarProvider || neynar.default;
+    if (!Provider) return <>{children}</>;
 
-  return <Provider clientId={clientId}>{children}</Provider>;
+    // Their widgets sometimes expect Theme; if it exists, use it. If not, just Provider.
+    const Theme = neynar.Theme || ((p: any) => <>{p.children}</>);
+    return (
+      <Provider clientId={clientId}>
+        <Theme>{children}</Theme>
+      </Provider>
+    );
+  } catch {
+    // Package/peer deps not present → silently skip
+    return <>{children}</>;
+  }
 }
 
 export default function Providers({ children }: { children: ReactNode }) {
@@ -77,7 +87,7 @@ export default function Providers({ children }: { children: ReactNode }) {
             modalSize="compact"
             appInfo={{ appName: "TamaBot" }}
           >
-            <NeynarProviderLazy>{children}</NeynarProviderLazy>
+            <NeynarProviderSafe>{children}</NeynarProviderSafe>
           </RainbowKitProvider>
         </WagmiProvider>
       </HydrationBoundary>
