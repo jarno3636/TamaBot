@@ -19,7 +19,7 @@ export default function Nav() {
   const [open, setOpen] = useState(false);
   const [neynarReady, setNeynarReady] = useState(false);
 
-  // detect provider-ready flag set by Providers
+  // Optional: detect provider flag set in Providers
   useEffect(() => {
     if (typeof window === "undefined") return;
     const tick = () => setNeynarReady((window as any).__NEYNAR_READY__ === true);
@@ -28,7 +28,7 @@ export default function Nav() {
     return () => clearInterval(id);
   }, []);
 
-  // fallback fetch for avatar
+  // Fallback fetch for avatar if mini context lacks pfp
   useEffect(() => {
     let ok = true;
     (async () => {
@@ -57,11 +57,12 @@ export default function Nav() {
           "radial-gradient(900px 420px at 10% -20%, rgba(58,166,216,.14), transparent 70%),radial-gradient(900px 420px at 110% -30%, rgba(234,122,42,.18), transparent 70%),linear-gradient(180deg, rgba(8,9,12,.90), rgba(8,9,12,.58))",
       }}
     >
+      {/* One-row, no-wrap bar */}
       <nav
         className="container mx-auto flex flex-row flex-nowrap items-center justify-between px-5 py-6 min-h-[72px]"
         role="navigation"
       >
-        {/* LEFT: avatar (never wraps) */}
+        {/* LEFT: avatar (never wraps/shrinks) */}
         <div className="shrink-0 h-14 w-14 rounded-full overflow-hidden border border-white/25">
           {showNeynar ? (
             <Suspense fallback={<div className="h-full w-full flex items-center justify-center text-2xl">🥚</div>}>
@@ -84,7 +85,7 @@ export default function Nav() {
           )}
         </div>
 
-        {/* RIGHT: burger (never wraps) */}
+        {/* RIGHT: burger (never wraps/shrinks) */}
         <button
           onClick={() => setOpen(v => !v)}
           aria-label="Open menu"
