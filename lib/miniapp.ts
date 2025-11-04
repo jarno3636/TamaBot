@@ -1,6 +1,6 @@
 // lib/miniapp.ts
+/** Low-level Farcaster/Base Mini interop (no React hooks) */
 
-/** Farcaster Mini App SDK shape (tolerant to older builds) */
 type MiniAppSdk = {
   actions?: {
     openUrl?: (url: string | { url: string }) => Promise<void> | void;
@@ -9,7 +9,6 @@ type MiniAppSdk = {
     ready?: () => Promise<void> | void;
   };
   isInMiniApp?: () => boolean;
-  // some builds expose user/context
   user?: { fid?: number | string };
   context?: { user?: { fid?: number | string } };
 };
@@ -39,7 +38,7 @@ export function isBaseAppUA(): boolean {
   );
 }
 
-/** Broad “inside mini” detector: Warpcast UA, iframe, or MiniKit present */
+/** Broad “inside mini” detector: Farcaster UA, iframe, or MiniKit present */
 export function isInsideMini(): boolean {
   if (typeof window === "undefined") return false;
   const uaYes = isFarcasterUA();
@@ -69,7 +68,7 @@ function toAbsoluteUrl(input: string, base = SITE_URL): string {
   }
 }
 
-/** Prefer Mini App URL inside Warpcast; else normal site (absolute). */
+/** Prefer Mini App URL inside Farcaster; else normal site (absolute). */
 export function fcPreferMini(pathOrAbs = ""): string {
   const base = isFarcasterUA() && MINIAPP_URL ? MINIAPP_URL : SITE_URL;
   const absBase = toAbsoluteUrl(base);
@@ -191,9 +190,7 @@ export async function openInMini(url: string): Promise<boolean> {
 /** Convenience: open a url via native if possible, else new tab */
 export async function openUrl(url: string): Promise<void> {
   const ok = await openInMini(url);
-  if (!ok && typeof window !== "undefined") {
-    window.open(url, "_blank");
-  }
+  if (!ok && typeof window !== "undefined") window.open(url, "_blank");
 }
 
 /** Unified compose helper (Base App ➜ Warpcast SDK ➜ fail) */
@@ -215,49 +212,4 @@ export async function composeCast({
   }
 
   return false;
-}
-
-/* ---------------- Farcaster identity helpers ---------------- */
-
-/** Read FID from native hosts (MiniKit or SDK); returns { user: { fid } } if present */
-export async function miniSignin(): Promise<{ user?: { fid?: number | string } } | null> {
-  if (typeof window === "undefined") return null;
-
-  // 1) Base App / MiniKit globals
-  try {
-    const mk = getMiniKit();
-    const fid = mk?.user?.fid ?? mk?.context?.user?.fid;
-    if (fid != null) return { user: { fid } };
-  } catch {}
-
-  // 2) Farcaster miniapp sdk (context-only; no explicit signin flow)
-  try {
-    const sdk = await getMiniSdk();
-    const fid =
-      (sdk as any)?.user?.fid ??
-      (sdk as any)?.context?.user?.fid ??
-      (sdk as any)?.actions?.user?.fid ??
-      null;
-    if (fid != null) return { user: { fid } };
-  } catch {}
-
-  return null;
-}
-
-/** Pull FID from env/cache for convenience (MiniKit → cookie/localStorage) */
-export function currentFid(): number | null {
-  if (typeof window === "undefined") return null;
-  const w: any = window as any;
-  const mk = w?.miniKit || w?.coinbase?.miniKit || w?.MiniKit || null;
-  const fromMk = mk?.user?.fid ?? mk?.context?.user?.fid;
-  const fidNum = Number(fromMk ?? (localStorage.getItem("fid") || ""));
-  return Number.isFinite(fidNum) && fidNum > 0 ? fidNum : null;
-}
-
-/** Open a Farcaster profile by FID (Warpcast web fallback) */
-export function openProfile(fid: number) {
-  const url = `https://warpcast.com/~/profile/${fid}`;
-  openInMini(url).then((ok) => {
-    if (!ok && typeof window !== "undefined") window.open(url, "_blank");
-  });
 }
