@@ -3,19 +3,29 @@
 
 import dynamic from "next/dynamic";
 
+const enabled =
+  (typeof window !== "undefined" && process.env.NEXT_PUBLIC_NEYNAR_ENABLED === "true") ||
+  process.env.NEXT_PUBLIC_NEYNAR_ENABLED === "true";
+
 /**
- * Neynar recently names this component `NeynarUserDropdown`.
- * Some older builds exported `UserDropdown`. Grab whichever exists.
+ * Try to load Neynar avatar dropdown, but never throw.
+ * Works with both `NeynarUserDropdown` and older `UserDropdown`.
  */
-const NeynarUserDropdown = dynamic(
-  async () => {
-    const mod: any = await import("@neynar/react");
-    return mod.NeynarUserDropdown ?? mod.UserDropdown;
-  },
-  { ssr: false }
-);
+const LazyDropdown = enabled
+  ? dynamic(
+      async () => {
+        try {
+          const mod: any = await import("@neynar/react");
+          return mod.NeynarUserDropdown ?? mod.UserDropdown ?? (() => null);
+        } catch {
+          return () => null;
+        }
+      },
+      { ssr: false, loading: () => null }
+    )
+  : (() => null as any);
 
 export default function NeynarUser(props: Record<string, any>) {
-  // You can pass props like placement/theme per their docs if desired
-  return <NeynarUserDropdown {...props} />;
+  if (!enabled) return null;
+  return <LazyDropdown {...props} />;
 }
