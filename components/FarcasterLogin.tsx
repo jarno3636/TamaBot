@@ -10,11 +10,17 @@ export default function FarcasterLogin({ onLogin }: { onLogin?: (fid: number) =>
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Auto-link when mini context provides a FID
   useEffect(() => {
-    if (fid && onLogin) onLogin(fid);
+    if (fid) {
+      try { localStorage.setItem("fid", String(fid)); } catch {}
+      onLogin?.(fid);
+    }
   }, [fid, onLogin]);
 
-  if (loading) return <div className="text-sm text-zinc-500 animate-pulse">Detecting Farcaster session…</div>;
+  if (loading) {
+    return <div className="text-sm text-zinc-500 animate-pulse">Detecting Farcaster session…</div>;
+  }
 
   if (fid) {
     return (
@@ -24,13 +30,15 @@ export default function FarcasterLogin({ onLogin }: { onLogin?: (fid: number) =>
     );
   }
 
-  // Outside mini: allow manual verify via Neynar
+  // Outside the mini: allow manual verify via Neynar
   async function confirmWithNeynar() {
     if (!manual) return;
-    setChecking(true); setError(null);
+    setChecking(true);
+    setError(null);
     try {
       const r = await fetch(`/api/neynar/user/${manual}`);
       if (!r.ok) throw new Error(`Neynar lookup failed (${r.status})`);
+      try { localStorage.setItem("fid", String(manual)); } catch {}
       onLogin?.(manual);
     } catch (e: any) {
       setError(e?.message || "Failed to verify");
@@ -42,8 +50,11 @@ export default function FarcasterLogin({ onLogin }: { onLogin?: (fid: number) =>
   return (
     <div className="space-y-2">
       <div className="text-sm text-white/80">Sign in with Farcaster</div>
+
       {isInMini() ? (
-        <div className="text-xs text-zinc-400">Detected Warpcast/Base. If this persists, reopen the mini app.</div>
+        <div className="text-xs text-zinc-400">
+          Detected Farcaster app. If this message stays, close and reopen the mini app to refresh context.
+        </div>
       ) : (
         <div className="flex gap-2">
           <input
@@ -64,6 +75,7 @@ export default function FarcasterLogin({ onLogin }: { onLogin?: (fid: number) =>
           </button>
         </div>
       )}
+
       {error && <div className="text-sm text-red-400">{error}</div>}
     </div>
   );
