@@ -4,34 +4,59 @@
 import { useEffect, useState } from "react";
 import { sdk } from "@farcaster/miniapp-sdk";
 
-/** True if running inside a Farcaster-compatible mini host */
-export function isInMini(): boolean {
-  try {
-    // SDK signal OR MiniKit globals present OR in iframe
-    const hasSdk = !!sdk?.isInMiniApp?.();
-    if (hasSdk) return true;
-
-    if (typeof window !== "undefined") {
-      const w = window as any;
-      const hasMiniKit = !!(w?.miniKit || w?.coinbase?.miniKit || w?.MiniKit);
-      if (hasMiniKit) return true;
-      try {
-        if (window.self !== window.top) return true; // embedded mini
-      } catch {
-        return true; // cross-origin iframe
-      }
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
-
-export type MiniUser = {
+type MiniUser = {
   fid?: number;
   username?: string;
   pfpUrl?: string;
 };
+
+function getFromQuery(): number | null {
+  try {
+    const f = new URLSearchParams(window.location.search).get("fid");
+    const n = f ? Number(f) : NaN;
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+function getFromMiniGlobals(): number | null {
+  try {
+    const w = window as any;
+    const mk = w?.miniKit || w?.coinbase?.miniKit || w?.MiniKit || null;
+    const raw = mk?.user?.fid ?? mk?.context?.user?.fid ?? mk?.context?.fid;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+function getFromLocal(): number | null {
+  try {
+    const v =
+      window.localStorage.getItem("fid") ||
+      window.sessionStorage.getItem("fid") ||
+      "";
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Basic UA/iframe heuristics for running inside Farcaster mini */
+export function isInMini(): boolean {
+  try {
+    if (sdk?.isInMiniApp?.()) return true;
+    const ua = navigator.userAgent || "";
+    if (/Farcaster|Warpcast|FarcasterMini/i.test(ua)) return true;
+    // iframe
+    return window.self !== window.top;
+  } catch {
+    return false;
+  }
+}
 
 export function useMiniContext() {
   const [loading, setLoading] = useState(true);
@@ -43,59 +68,54 @@ export function useMiniContext() {
   useEffect(() => {
     (async () => {
       try {
-        const inside = isInMini();
-        setInMini(inside);
+        setInMini(isInMini());
 
-        // Hide splash if the SDK exposes ready()
+        // Hide splash if supported (don’t block)
         try {
-          const ready = (sdk as any)?.actions?.ready;
-          if (typeof ready === "function") {
-            await Promise.race([
-              Promise.resolve(ready()),
-              new Promise((r) => setTimeout(r, 800)),
-            ]);
-          }
-        } catch {
-          /* ignore */
+          await Promise.race([
+            Promise.resolve(sdk?.actions?.ready?.()),
+            new Promise((r) => setTimeout(r, 600)),
+          ]);
+        } catch {}
+
+        // 1) preferred: sdk.context.user
+        const c: any =
+          (sdk as any)?.context ||
+          (sdk as any)?.ctx ||
+          null;
+
+        setCtx(c);
+
+        const fromSdk =
+          Number((c?.user?.fid ?? c?.fid) ?? NaN) ||
+          Number(((sdk as any)?.user?.fid ?? (sdk as any)?.context?.user?.fid) ?? NaN);
+
+        // 2) globals (Base MiniKit, etc.)
+        const fromGlobals = getFromMiniGlobals();
+
+        // 3) URL ?fid=
+        const fromQuery = getFromQuery();
+
+        // 4) local cache
+        const fromLocal = getFromLocal();
+
+        const candidate =
+          (Number.isFinite(fromSdk) && fromSdk > 0 && Number(fromSdk)) ||
+          fromGlobals ||
+          fromQuery ||
+          fromLocal ||
+          null;
+
+        if (candidate) {
+          setFid(candidate);
+          try { localStorage.setItem("fid", String(candidate)); } catch {}
         }
 
-        // ---- Read context from any available host ----
-        let context: any = null;
-        let u: any = null;
-
-        if (typeof window !== "undefined") {
-          const w = window as any;
-          const sc: any = sdk as any;
-          const mk = w?.miniKit || w?.coinbase?.miniKit || w?.MiniKit || null;
-
-          // Farcaster miniapp sdk often exposes context/user (not typed)
-          context =
-            sc?.context ??
-            w?.farcaster?.miniapp?.context ??
-            null;
-
-          // Unified user object from either SDK context or MiniKit
-          u =
-            context?.user ??
-            mk?.user ??
-            mk?.context?.user ??
-            null;
-        }
-
-        setCtx(context);
-
-        const rawFid = Number(
-          (u && (u.fid ?? u.user?.fid)) ??
-            (context?.user?.fid) ??
-            NaN
-        );
-        const f = Number.isFinite(rawFid) && rawFid > 0 ? rawFid : null;
-        setFid(f);
-
+        // Optional mini user fields if present
         setUser({
-          fid: f ?? undefined,
-          username: u?.username ?? context?.user?.username,
-          pfpUrl: u?.pfpUrl ?? u?.pfp_url ?? context?.user?.pfpUrl ?? context?.user?.pfp_url,
+          fid: candidate ?? undefined,
+          username: c?.user?.username,
+          pfpUrl: c?.user?.pfpUrl || c?.user?.pfp_url,
         });
       } finally {
         setLoading(false);
