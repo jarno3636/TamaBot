@@ -6,28 +6,27 @@ import { useAccount, useReadContract, useWriteContract, useWaitForTransactionRec
 import { useRouter, useSearchParams } from "next/navigation";
 import { TAMABOT_CORE } from "@/lib/abi";
 import { formatEther } from "viem";
-import { useFid } from "@/lib/useFid";
+import { useMiniContext } from "@/lib/useMiniContext";
 
 export default function MintCard() {
   const router = useRouter();
   const qs = useSearchParams();
   const { address } = useAccount();
-  const { fid: detectedFid } = useFid();
+  const { fid: ctxFid } = useMiniContext();
 
-  // ---------- FID detection + manual override ----------
+  // local override if user types one on web
   const [fid, setFid] = useState<string>("");
 
   useEffect(() => {
     const fromQuery = qs?.get("fid");
-    if (!fid && detectedFid) setFid(String(detectedFid));
+    if (!fid && ctxFid) setFid(String(ctxFid));
     else if (fromQuery && !fid) setFid(fromQuery);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [detectedFid]);
+  }, [ctxFid]);
 
   const fidNum = /^\d+$/.test(fid) ? Number(fid) : null;
   const canMint = useMemo(() => !!address && fidNum !== null, [address, fidNum]);
 
-  // ---------- Read mint fee ----------
   const { data: fee } = useReadContract({
     address: TAMABOT_CORE.address,
     abi: TAMABOT_CORE.abi,
@@ -35,7 +34,6 @@ export default function MintCard() {
   });
   const feeEth = fee ? formatEther(fee as bigint) : "0";
 
-  // ---------- Write: mint ----------
   const { writeContract, data: hash, error: werr, isPending } = useWriteContract();
   const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({ hash });
 
@@ -50,7 +48,6 @@ export default function MintCard() {
     });
   }
 
-  // ---------- After mint: resolve tokenId and route ----------
   const { data: tokenId } = useReadContract({
     address: TAMABOT_CORE.address,
     abi: TAMABOT_CORE.abi,
@@ -91,21 +88,13 @@ export default function MintCard() {
           {isPending || confirming ? "Minting…" : `Mint (${feeEth} ETH)`}
         </button>
         {hash && (
-          <a
-            className="btn-ghost"
-            href={`https://basescan.org/tx/${hash}`}
-            target="_blank"
-            rel="noreferrer"
-          >
+          <a className="btn-ghost" href={`https://basescan.org/tx/${hash}`} target="_blank" rel="noreferrer">
             View tx on BaseScan
           </a>
         )}
       </div>
 
-      {isSuccess && !tokenId && (
-        <div className="text-emerald-400">Mint confirmed. Resolving your token ID…</div>
-      )}
-
+      {isSuccess && !tokenId && <div className="text-emerald-400">Mint confirmed. Resolving your token ID…</div>}
       {werr && <div className="text-red-400 text-sm break-words">{String(werr.message)}</div>}
     </div>
   );
