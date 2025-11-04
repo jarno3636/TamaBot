@@ -4,10 +4,24 @@
 import { useEffect, useState } from "react";
 import { sdk } from "@farcaster/miniapp-sdk";
 
-/** True if running inside Warpcast/Base Mini */
+/** True if running inside a Farcaster-compatible mini host */
 export function isInMini(): boolean {
   try {
-    return !!sdk?.isInMiniApp?.();
+    // SDK signal OR MiniKit globals present OR in iframe
+    const hasSdk = !!sdk?.isInMiniApp?.();
+    if (hasSdk) return true;
+
+    if (typeof window !== "undefined") {
+      const w = window as any;
+      const hasMiniKit = !!(w?.miniKit || w?.coinbase?.miniKit || w?.MiniKit);
+      if (hasMiniKit) return true;
+      try {
+        if (window.self !== window.top) return true; // embedded mini
+      } catch {
+        return true; // cross-origin iframe
+      }
+    }
+    return false;
   } catch {
     return false;
   }
@@ -29,23 +43,59 @@ export function useMiniContext() {
   useEffect(() => {
     (async () => {
       try {
-        setInMini(!!sdk?.isInMiniApp?.());
-        if (sdk?.actions?.ready) {
-          // Hide splash quickly
-          await Promise.race([
-            Promise.resolve(sdk.actions.ready()),
-            new Promise((r) => setTimeout(r, 800)),
-          ]);
+        const inside = isInMini();
+        setInMini(inside);
+
+        // Hide splash if the SDK exposes ready()
+        try {
+          const ready = (sdk as any)?.actions?.ready;
+          if (typeof ready === "function") {
+            await Promise.race([
+              Promise.resolve(ready()),
+              new Promise((r) => setTimeout(r, 800)),
+            ]);
+          }
+        } catch {
+          /* ignore */
         }
-        const c = sdk?.context;
-        setCtx(c);
-        const rawFid = Number(c?.user?.fid);
+
+        // ---- Read context from any available host ----
+        let context: any = null;
+        let u: any = null;
+
+        if (typeof window !== "undefined") {
+          const w = window as any;
+          const sc: any = sdk as any;
+          const mk = w?.miniKit || w?.coinbase?.miniKit || w?.MiniKit || null;
+
+          // Farcaster miniapp sdk often exposes context/user (not typed)
+          context =
+            sc?.context ??
+            w?.farcaster?.miniapp?.context ??
+            null;
+
+          // Unified user object from either SDK context or MiniKit
+          u =
+            context?.user ??
+            mk?.user ??
+            mk?.context?.user ??
+            null;
+        }
+
+        setCtx(context);
+
+        const rawFid = Number(
+          (u && (u.fid ?? u.user?.fid)) ??
+            (context?.user?.fid) ??
+            NaN
+        );
         const f = Number.isFinite(rawFid) && rawFid > 0 ? rawFid : null;
         setFid(f);
+
         setUser({
           fid: f ?? undefined,
-          username: c?.user?.username,
-          pfpUrl: c?.user?.pfpUrl || c?.user?.pfp_url,
+          username: u?.username ?? context?.user?.username,
+          pfpUrl: u?.pfpUrl ?? u?.pfp_url ?? context?.user?.pfpUrl ?? context?.user?.pfp_url,
         });
       } finally {
         setLoading(false);
