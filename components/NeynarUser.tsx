@@ -1,31 +1,35 @@
 // components/NeynarUser.tsx
 "use client";
 
-import dynamic from "next/dynamic";
+import { useEffect, useState } from "react";
 
-const enabled =
-  (typeof window !== "undefined" && process.env.NEXT_PUBLIC_NEYNAR_ENABLED === "true") ||
-  process.env.NEXT_PUBLIC_NEYNAR_ENABLED === "true";
+export default function NeynarUser() {
+  const [Comp, setComp] = useState<React.ComponentType | null>(null);
 
-/**
- * Try to load Neynar avatar dropdown, but never throw.
- * Works with both `NeynarUserDropdown` and older `UserDropdown`.
- */
-const LazyDropdown = enabled
-  ? dynamic(
-      async () => {
-        try {
-          const mod: any = await import("@neynar/react");
-          return mod.NeynarUserDropdown ?? mod.UserDropdown ?? (() => null);
-        } catch {
-          return () => null;
-        }
-      },
-      { ssr: false, loading: () => null }
-    )
-  : (() => null as any);
+  useEffect(() => {
+    let alive = true;
 
-export default function NeynarUser(props: Record<string, any>) {
-  if (!enabled) return null;
-  return <LazyDropdown {...props} />;
+    async function boot() {
+      // Don’t attempt without provider flag
+      if (typeof window === "undefined" || (window as any).__NEYNAR_READY__ !== true) return;
+
+      try {
+        const mod: any = await import("@neynar/react");
+        const C = mod?.UserButton || mod?.UserDropdown || null; // try both
+        if (alive && C) setComp(() => C);
+      } catch {
+        // swallow—fallback below
+      }
+    }
+    boot();
+    return () => { alive = false; };
+  }, []);
+
+  if (!Comp) {
+    // tiny, inert fallback to keep layout stable
+    return <div className="h-14 w-14 rounded-full overflow-hidden border border-white/25 flex items-center justify-center text-2xl">🥚</div>;
+  }
+
+  // Most Neynar components take no required props when provider is present
+  return <Comp />;
 }
