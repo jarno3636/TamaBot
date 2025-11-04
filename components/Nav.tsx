@@ -2,16 +2,27 @@
 "use client";
 
 import Image from "next/image";
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useMiniContext } from "@/lib/useMiniContext";
 import ConnectPill from "@/components/ConnectPill";
+
+// Dynamically load Neynar's UserDropdown on the client only
+const NeynarUserDropdown = dynamic(
+  async () => (await import("@neynar/react")).UserDropdown,
+  { ssr: false, loading: () => null }
+);
 
 export default function Nav() {
   const pathname = usePathname();
   const { fid, user } = useMiniContext();
   const [avatar, setAvatar] = useState<string | null>(user?.pfpUrl ?? null);
   const [open, setOpen] = useState(false);
+
+  // Only render Neynar UI if client ID is present (avoids rendering a broken widget)
+  const hasNeynarClient =
+    typeof process !== "undefined" && !!process.env.NEXT_PUBLIC_NEYNAR_CLIENT_ID;
 
   // If the mini context didn't include a pfp, fetch from Neynar.
   useEffect(() => {
@@ -47,7 +58,7 @@ export default function Nav() {
     >
       {/* 50% taller header with extra spacing */}
       <nav className="container mx-auto flex items-center gap-4 px-5 py-6" role="navigation">
-        {/* Left: avatar */}
+        {/* Left: avatar (fallback if Neynar widget unavailable) */}
         <a
           href={fid ? `https://warpcast.com/~/profiles/${fid}` : undefined}
           className="relative h-14 w-14 rounded-full overflow-hidden border border-white/25 hover:border-white/50 transition"
@@ -62,10 +73,17 @@ export default function Nav() {
           )}
         </a>
 
-        {/* Spacer pushes burger to the right */}
+        {/* Spacer pushes right-side controls */}
         <div className="flex-1" />
 
-        {/* Right: burger */}
+        {/* Right: Neynar user dropdown (preferred), then burger */}
+        {hasNeynarClient && (
+          <div className="hidden sm:flex items-center">
+            {/* Neynar handles avatar/name/menu when signed in */}
+            <NeynarUserDropdown />
+          </div>
+        )}
+
         <button
           onClick={() => setOpen((v) => !v)}
           aria-label="Open menu"
@@ -82,6 +100,13 @@ export default function Nav() {
       {open && (
         <div className="border-t border-white/10 bg-black/70 backdrop-blur-xl animate-fadeInDown">
           <div className="container mx-auto px-5 py-6 grid gap-4 text-white text-[16px]">
+            {hasNeynarClient && (
+              <div className="mb-2">
+                {/* Also show Neynar menu inside the drawer on mobile */}
+                <NeynarUserDropdown />
+              </div>
+            )}
+
             <a href="/"      onClick={() => setOpen(false)} className={`nav-pill ${is("/") ? "nav-pill--active" : ""}`}>Home</a>
             <a href="/mint"  onClick={() => setOpen(false)} className={`nav-pill ${is("/mint") ? "nav-pill--active" : ""}`}>Mint</a>
             <a href="/my"    onClick={() => setOpen(false)} className={`nav-pill ${is("/my") ? "nav-pill--active" : ""}`}>My&nbsp;Pet</a>
