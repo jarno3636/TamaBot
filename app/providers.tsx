@@ -1,7 +1,6 @@
 // app/providers.tsx
 "use client";
 
-/* --------- BigInt safe JSON --------- */
 declare global { interface BigInt { toJSON(): string } }
 if (typeof (BigInt.prototype as any).toJSON !== "function") {
   (BigInt.prototype as any).toJSON = function () { return this.toString(); };
@@ -10,10 +9,7 @@ if (typeof (BigInt.prototype as any).toJSON !== "function") {
 import "@rainbow-me/rainbowkit/styles.css";
 import { useMemo, type ReactNode, useEffect } from "react";
 import {
-  QueryClient,
-  QueryClientProvider,
-  HydrationBoundary,
-  dehydrate,
+  QueryClient, QueryClientProvider, HydrationBoundary, dehydrate,
 } from "@tanstack/react-query";
 import { WagmiProvider, useReconnect } from "wagmi";
 import { RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
@@ -30,34 +26,30 @@ function AutoReconnect() {
   return null;
 }
 
-// Serialize BigInt during dehydration
 function serializeData(data: unknown): unknown {
   if (typeof data === "bigint") return data.toString();
   return data;
 }
 
-/** Lazy Neynar provider so builds never fail if the lib is missing */
+/** Lazy Neynar provider so build never fails */
 function NeynarProviderLazy({ children }: { children: ReactNode }) {
   const clientId =
     (typeof window !== "undefined" && process.env.NEXT_PUBLIC_NEYNAR_CLIENT_ID) ||
     process.env.NEXT_PUBLIC_NEYNAR_CLIENT_ID;
 
-  // If no client id, skip entirely
   if (!clientId) return <>{children}</>;
 
-  // Dynamic import inside a client component
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const AnyProvider = (require("neynar-react")?.NeynarProvider ||
-                       require("neynar-react")?.default ||
-                       null) as any;
+  let Provider: any = null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const mod = require("@neynar/react");
+    Provider = mod?.NeynarProvider ?? mod?.default ?? null;
+  } catch {
+    Provider = null;
+  }
+  if (!Provider) return <>{children}</>;
 
-  if (!AnyProvider) return <>{children}</>;
-
-  return (
-    <AnyProvider clientId={clientId}>
-      {children}
-    </AnyProvider>
-  );
+  return <Provider clientId={clientId}>{children}</Provider>;
 }
 
 export default function Providers({ children }: { children: ReactNode }) {
