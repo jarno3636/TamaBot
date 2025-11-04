@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Providers from "./providers";
 import Nav from "@/components/Nav";
+import MiniDebug from "@/components/MiniDebug"; // ← debug badge
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://tamabot.vercel.app";
 const ABS = (p: string) => new URL(p, SITE).toString();
@@ -38,19 +39,16 @@ export const metadata: Metadata = {
   themeColor: "#0a0b10",
   viewport: "width=device-width, initial-scale=1, viewport-fit=cover",
   other: {
-    // ✅ Farcaster Frame metadata (kept simple; your /api/frame can expand if needed)
+    // Farcaster Frame (simple; your /api/frame can enhance)
     "fc:frame": "vNext",
     "fc:frame:image": ABS("/og.png"),
     "fc:frame:button:1": "Open TamaBot",
     "fc:frame:button:1:action": "post",
-
-    // Some parsers still read this directly:
     "og:image": ABS("/og.png"),
   },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  // Farcaster Mini App embed – enables “Open in Warpcast” mini-app launch UI
   const miniAppEmbed = {
     version: "1",
     imageUrl: ABS("/og.png"),
@@ -69,14 +67,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <head>
-        {/* Farcaster / Base MiniKit (safe no-op on web) */}
+        {/* Base MiniKit (safe no-op on web) */}
         <script src="https://cdn.jsdelivr.net/npm/@farcaster/mini-kit/dist/minikit.js" async />
 
         {/* Icons */}
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
-        {/* ✅ Warpcast Mini App embed */}
+        {/* Warpcast Mini App embed */}
         <meta name="fc:miniapp" content={JSON.stringify(miniAppEmbed)} />
 
         {/* iOS PWA niceties */}
@@ -88,8 +86,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen bg-[#0a0b10] text-white antialiased">
         <Providers>
           <Nav />
+          {/* Note: you already wrap pages with a <main> here; avoid also returning a <main> from page components if possible to prevent nested <main> tags. */}
           <main className="mx-auto max-w-6xl px-4 pb-16 pt-6">{children}</main>
         </Providers>
+
+        {/* Debug badge (renders only when NEXT_PUBLIC_MINI_DEBUG=true) */}
+        <MiniDebug />
       </body>
     </html>
   );
