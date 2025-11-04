@@ -19,7 +19,11 @@ export default function MintCard() {
   const fidNum = /^\d+$/.test(fid) ? Number(fid) : null;
   const canMint = useMemo(() => !!address && fidNum !== null, [address, fidNum]);
 
-  const { data: fee } = useReadContract({ address: TAMABOT_CORE.address, abi: TAMABOT_CORE.abi, functionName: "mintFee" });
+  const { data: fee } = useReadContract({
+    address: TAMABOT_CORE.address,
+    abi: TAMABOT_CORE.abi,
+    functionName: "mintFee",
+  });
   const feeEth = fee ? formatEther(fee as bigint) : "0";
 
   const { writeContract, data: hash, error: werr, isPending } = useWriteContract();
@@ -59,7 +63,7 @@ export default function MintCard() {
 
       <label className="text-sm opacity-80">Detected FID{fid ? ":" : ""} {fid ? <b>{fid}</b> : "…"}</label>
 
-      {/* Optional: keep input for web override */}
+      {/* Keep input to allow web override; it will prefill inside mini */}
       <input
         className="px-3 py-2 rounded-xl bg-black/30 border border-white/15 focus:outline-none focus:ring-2 focus:ring-white/30"
         value={fid}
