@@ -43,8 +43,8 @@ function persistFid(fid: number) {
   } catch {}
 }
 
-function isMiniUserRaw(x: any): x is MiniUserRaw {
-  return x && typeof x === "object";
+function isMiniUserRaw(x: unknown): x is MiniUserRaw {
+  return !!x && typeof x === "object";
 }
 
 /* --------------- Hook ---------------- */
@@ -93,7 +93,7 @@ export function useMiniContext() {
 
         // 4) Listen for WebView postMessage context (some Warpcast builds)
         let postMessageFid: number | null = null;
-        let postMessageUser: MiniUserRaw | undefined = undefined;
+        let postMessageUser: unknown = undefined; // <— keep as unknown, narrow later
 
         const onMsg = (ev: MessageEvent) => {
           try {
@@ -104,16 +104,17 @@ export function useMiniContext() {
               (typeof data === "string" ? JSON.parse(data) : null);
 
             if (isMiniUserRaw(maybe)) {
-              const f = num(maybe.fid);
+              const f = num((maybe as MiniUserRaw).fid);
               if (f && alive.current) {
                 postMessageFid = f;
-                postMessageUser = maybe;
+                postMessageUser = maybe as MiniUserRaw;
                 setFid(f);
                 persistFid(f);
+                const mu = maybe as MiniUserRaw;
                 setUser({
                   fid: f,
-                  username: maybe.username,
-                  pfpUrl: maybe.pfpUrl || maybe.pfp_url,
+                  username: mu.username,
+                  pfpUrl: mu.pfpUrl || mu.pfp_url,
                 });
               }
             }
@@ -140,21 +141,23 @@ export function useMiniContext() {
 
         const resolved = fromSdk ?? postMessageFid ?? fromStorage ?? null;
 
-        // Build a normalized user object (use simple if/else to keep TS happy)
+        // Build a normalized user object
         let resolvedUser: MiniUser | null = null;
-        if (postMessageUser && isMiniUserRaw(postMessageUser)) {
-          const f = num(postMessageUser.fid) ?? undefined;
+        if (isMiniUserRaw(postMessageUser)) {
+          const pmu = postMessageUser as MiniUserRaw;
+          const f = num(pmu.fid) ?? undefined;
           resolvedUser = {
             fid: f,
-            username: postMessageUser.username,
-            pfpUrl: postMessageUser.pfpUrl || postMessageUser.pfp_url,
+            username: pmu.username,
+            pfpUrl: pmu.pfpUrl || pmu.pfp_url,
           };
-        } else if (sdkUser && isMiniUserRaw(sdkUser)) {
-          const f = num(sdkUser.fid) ?? undefined;
+        } else if (isMiniUserRaw(sdkUser)) {
+          const su = sdkUser as MiniUserRaw;
+          const f = num(su.fid) ?? undefined;
           resolvedUser = {
             fid: f,
-            username: sdkUser.username,
-            pfpUrl: sdkUser.pfpUrl || sdkUser.pfp_url,
+            username: su.username,
+            pfpUrl: su.pfpUrl || su.pfp_url,
           };
         }
 
