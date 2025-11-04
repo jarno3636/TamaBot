@@ -2,33 +2,18 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useMiniContext } from "@/lib/useMiniContext";
 import ConnectPill from "@/components/ConnectPill";
-import NeynarUser from "@/components/NeynarUser";
-
-const NEYNAR_ENV =
-  (typeof window !== "undefined" && process.env.NEXT_PUBLIC_NEYNAR_ENABLED === "true") ||
-  process.env.NEXT_PUBLIC_NEYNAR_ENABLED === "true";
 
 export default function Nav() {
   const pathname = usePathname();
   const { fid, user } = useMiniContext();
   const [avatar, setAvatar] = useState<string | null>(user?.pfpUrl ?? null);
   const [open, setOpen] = useState(false);
-  const [neynarReady, setNeynarReady] = useState(false);
 
-  // Optional: detect provider flag set in Providers
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const tick = () => setNeynarReady((window as any).__NEYNAR_READY__ === true);
-    tick();
-    const id = setInterval(tick, 400);
-    return () => clearInterval(id);
-  }, []);
-
-  // Fallback fetch for avatar if mini context lacks pfp
+  // fallback avatar via your Neynar proxy if mini didn’t provide a pfp
   useEffect(() => {
     let ok = true;
     (async () => {
@@ -39,15 +24,12 @@ export default function Nav() {
         if (!ok) return;
         const p = j?.result?.user?.pfp_url || j?.user?.pfp_url || j?.pfp_url || null;
         if (typeof p === "string") setAvatar(p);
-      } catch {
-        if (ok) setAvatar(null);
-      }
+      } catch {}
     })();
     return () => { ok = false; };
   }, [fid, avatar]);
 
   const is = (p: string) => (p === "/" ? pathname === "/" : pathname.startsWith(p));
-  const showNeynar = NEYNAR_ENV && neynarReady;
 
   return (
     <header
@@ -57,35 +39,26 @@ export default function Nav() {
           "radial-gradient(900px 420px at 10% -20%, rgba(58,166,216,.14), transparent 70%),radial-gradient(900px 420px at 110% -30%, rgba(234,122,42,.18), transparent 70%),linear-gradient(180deg, rgba(8,9,12,.90), rgba(8,9,12,.58))",
       }}
     >
-      {/* One-row, no-wrap bar */}
       <nav
-        className="container mx-auto flex flex-row flex-nowrap items-center justify-between px-5 py-6 min-h-[72px]"
+        className="container mx-auto flex flex-row flex-nowrap items-center justify-between gap-4 px-5 py-6 min-h-[72px]"
         role="navigation"
       >
-        {/* LEFT: avatar (never wraps/shrinks) */}
-        <div className="shrink-0 h-14 w-14 rounded-full overflow-hidden border border-white/25">
-          {showNeynar ? (
-            <Suspense fallback={<div className="h-full w-full flex items-center justify-center text-2xl">🥚</div>}>
-              <NeynarUser />
-            </Suspense>
+        {/* left: avatar */}
+        <a
+          href={fid ? `https://warpcast.com/~/profiles/${fid}` : undefined}
+          className="relative shrink-0 h-14 w-14 rounded-full overflow-hidden border border-white/25 hover:border-white/50 transition"
+          title={fid ? `FID ${fid}` : "Not signed in"}
+          target={fid ? "_blank" : undefined}
+          rel={fid ? "noreferrer" : undefined}
+        >
+          {avatar ? (
+            <Image src={avatar} alt="Farcaster avatar" fill sizes="56px" className="object-cover" />
           ) : (
-            <a
-              href={fid ? `https://warpcast.com/~/profiles/${fid}` : undefined}
-              className="block h-full w-full"
-              title={fid ? `FID ${fid}` : "Not signed in"}
-              target={fid ? "_blank" : undefined}
-              rel={fid ? "noreferrer" : undefined}
-            >
-              {avatar ? (
-                <Image src={avatar} alt="Farcaster avatar" fill sizes="56px" className="object-cover" />
-              ) : (
-                <span className="flex h-full w-full items-center justify-center text-2xl">🥚</span>
-              )}
-            </a>
+            <span className="absolute inset-0 flex items-center justify-center text-2xl">🥚</span>
           )}
-        </div>
+        </a>
 
-        {/* RIGHT: burger (never wraps/shrinks) */}
+        {/* right: burger */}
         <button
           onClick={() => setOpen(v => !v)}
           aria-label="Open menu"
