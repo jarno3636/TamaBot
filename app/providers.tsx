@@ -31,35 +31,43 @@ function serializeData(data: unknown): unknown {
   return data;
 }
 
-/** Hardened Neynar wrapper: never throws, only runs when enabled + clientId set */
-function NeynarProviderSafe({ children }: { children: ReactNode }) {
-  const enabled =
-    (typeof window !== "undefined" && process.env.NEXT_PUBLIC_NEYNAR_ENABLED === "true") ||
-    process.env.NEXT_PUBLIC_NEYNAR_ENABLED === "true";
-
+/** Safe Neynar provider — never throws if lib or clientId are missing */
+function NeynarProviderLazy({ children }: { children: ReactNode }) {
   const clientId =
     (typeof window !== "undefined" && process.env.NEXT_PUBLIC_NEYNAR_CLIENT_ID) ||
     process.env.NEXT_PUBLIC_NEYNAR_CLIENT_ID;
 
-  if (!enabled || !clientId) return <>{children}</>;
+  // default: mark not-ready
+  useEffect(() => {
+    if (typeof window !== "undefined") (window as any).__NEYNAR_READY__ = false;
+  }, []);
 
+  if (!clientId) return <>{children}</>;
+
+  let Provider: any = null;
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const neynar = require("@neynar/react");
-    const Provider = neynar.NeynarProvider || neynar.default;
-    if (!Provider) return <>{children}</>;
-
-    // Their widgets sometimes expect Theme; if it exists, use it. If not, just Provider.
-    const Theme = neynar.Theme || ((p: any) => <>{p.children}</>);
-    return (
-      <Provider clientId={clientId}>
-        <Theme>{children}</Theme>
-      </Provider>
-    );
+    const mod = require("@neynar/react");
+    Provider = mod?.NeynarProvider ?? mod?.default ?? null;
   } catch {
-    // Package/peer deps not present → silently skip
-    return <>{children}</>;
+    Provider = null;
   }
+  if (!Provider) return <>{children}</>;
+
+  // Flag ready after mount
+  function Flag() {
+    useEffect(() => {
+      if (typeof window !== "undefined") (window as any).__NEYNAR_READY__ = true;
+    }, []);
+    return null;
+  }
+
+  return (
+    <Provider clientId={clientId}>
+      <Flag />
+      {children}
+    </Provider>
+  );
 }
 
 export default function Providers({ children }: { children: ReactNode }) {
@@ -87,7 +95,7 @@ export default function Providers({ children }: { children: ReactNode }) {
             modalSize="compact"
             appInfo={{ appName: "TamaBot" }}
           >
-            <NeynarProviderSafe>{children}</NeynarProviderSafe>
+            <NeynarProviderLazy>{children}</NeynarProviderLazy>
           </RainbowKitProvider>
         </WagmiProvider>
       </HydrationBoundary>
