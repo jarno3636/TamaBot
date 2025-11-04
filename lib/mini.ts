@@ -1,6 +1,11 @@
 // lib/mini.ts
 "use client";
 
+/**
+ * High-level Mini helpers for React code to import from.
+ * We re-export the canonical low-level pieces from miniapp.ts.
+ */
+
 import {
   SITE_URL,
   MINIAPP_URL,
@@ -12,29 +17,18 @@ import {
   getMiniSdk,
   openInMini,
   composeCast,
+  isInsideMini, // <- canonical detector (re-exported)
 } from "./miniapp";
 
-/** Basic UA/iframe check — matches your MiniAppGate heuristic */
-export function isInsideMini(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    const inIframe = window.self !== window.top;
-    const pathHint = window.location?.pathname?.startsWith?.("/mini");
-    return isFarcasterUA() || inIframe || !!pathHint;
-  } catch {
-    return isFarcasterUA();
-  }
-}
-
-/** Alias some projects call `insideMini()` directly */
+/** Alias some places call `insideMini()` directly */
 export const insideMini = isInsideMini;
 
-/** Signal “ready” to Warpcast/Base so splash doesn’t hang */
+/** Signal “ready” to Farcaster/Base so splash doesn’t hang */
 export async function miniReady(timeoutMs = 1200): Promise<void> {
-  // 1) Farcaster SDK
+  // Farcaster SDK
   await ensureReady(timeoutMs);
 
-  // 2) Base MiniKit (if present)
+  // Base MiniKit (if present)
   try {
     const w = window as any;
     const mk = w?.miniKit || w?.coinbase?.miniKit || null;
@@ -44,31 +38,40 @@ export async function miniReady(timeoutMs = 1200): Promise<void> {
   }
 }
 
-/** Best-effort FID detection (URL param ➜ MiniKit context ➜ storage) */
-export function currentFid(): number | null {
+/** Best-effort FID detection (URL param ➜ MiniKit context ➜ SDK ➜ storage) */
+export async function currentFid(): Promise<number | null> {
   if (typeof window === "undefined") return null;
 
-  // URL ?fid=123
-  const p = new URLSearchParams(window.location.search);
-  const fromQuery = p.get("fid");
-  if (fromQuery && /^\d+$/.test(fromQuery)) return Number(fromQuery);
+  // 1) URL ?fid=123
+  try {
+    const p = new URLSearchParams(window.location.search);
+    const q = p.get("fid");
+    if (q && /^\d+$/.test(q)) return Number(q);
+  } catch {}
 
-  // Base MiniKit context
+  // 2) Base MiniKit globals
   try {
     const w = window as any;
-    const fid = w?.miniKit?.context?.fid || w?.coinbase?.miniKit?.context?.fid;
-    if (fid && /^\d+$/.test(String(fid))) return Number(fid);
-  } catch {
-    /* ignore */
-  }
+    const mk = w?.miniKit || w?.coinbase?.miniKit || w?.MiniKit || null;
+    const mkFid = mk?.user?.fid ?? mk?.context?.user?.fid;
+    const n = Number(mkFid);
+    if (Number.isFinite(n) && n > 0) return n;
+  } catch {}
 
-  // Local/session storage fallbacks used in some flows
+  // 3) Farcaster MiniApp SDK context
   try {
-    const ls = window.localStorage?.getItem("fid") || window.sessionStorage?.getItem("fid");
-    if (ls && /^\d+$/.test(ls)) return Number(ls);
-  } catch {
-    /* ignore */
-  }
+    const sdk = await getMiniSdk();
+    const raw = (sdk as any)?.user?.fid ?? (sdk as any)?.context?.user?.fid ?? null;
+    const n = Number(raw);
+    if (Number.isFinite(n) && n > 0) return n;
+  } catch {}
+
+  // 4) Storage fallback
+  try {
+    const ls = localStorage.getItem("fid") || sessionStorage.getItem("fid");
+    const n = Number(ls);
+    if (Number.isFinite(n) && n > 0) return n;
+  } catch {}
 
   return null;
 }
@@ -76,6 +79,7 @@ export function currentFid(): number | null {
 /** Open a user’s Farcaster profile (FID) in the native host when possible */
 export async function openProfile(fid?: number | null): Promise<void> {
   if (!fid) return;
+  // Correct path is plural: /~/profiles/<fid>
   const url = `https://warpcast.com/~/profiles/${fid}`;
   const handled = await openInMini(url);
   if (!handled && typeof window !== "undefined") window.open(url, "_blank", "noopener,noreferrer");
@@ -87,14 +91,13 @@ export async function openUrl(url: string): Promise<void> {
   if (!handled && typeof window !== "undefined") window.open(url, "_blank", "noopener,noreferrer");
 }
 
-/** Simple sign-in launcher (adjust path if you have a specific route) */
+/** Simple sign-in launcher (optional route) */
 export async function miniSignin(): Promise<void> {
-  // If you have a real login route, put it here:
   const loginUrl = `${SITE_URL}/login`;
   await openUrl(loginUrl);
 }
 
-/** Re-exports used elsewhere */
+/** Re-exports for convenience */
 export {
   SITE_URL,
   MINIAPP_URL,
@@ -102,6 +105,8 @@ export {
   isBaseAppUA,
   buildFarcasterComposeUrl,
   fcPreferMini,
+  ensureReady,
   getMiniSdk,
+  openInMini,
   composeCast,
 };
