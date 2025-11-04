@@ -4,22 +4,19 @@
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { currentFid, openProfile } from "@/lib/mini";
+import { openProfile } from "@/lib/mini";
 import ConnectPill from "@/components/ConnectPill";
+import { useMiniContext } from "@/lib/useMiniContext";
 
 export default function Nav() {
   const pathname = usePathname();
-  const [fid, setFid] = useState<number | null>(null);
-  const [avatar, setAvatar] = useState<string | null>(null);
+  const { fid, user } = useMiniContext(); // mini context first
+  const [avatar, setAvatar] = useState<string | null>(user?.pfpUrl ?? null);
   const [open, setOpen] = useState(false);
 
+  // Fallback: fetch avatar via Neynar if mini context didn't supply it
   useEffect(() => {
-    const f = currentFid();
-    if (f) setFid(f);
-  }, []);
-
-  useEffect(() => {
-    if (!fid) return;
+    if (avatar || !fid) return;
     (async () => {
       try {
         const r = await fetch(`/api/neynar/user/${fid}`);
@@ -27,7 +24,7 @@ export default function Nav() {
         setAvatar(j?.result?.user?.pfp_url || j?.user?.pfp_url || null);
       } catch {}
     })();
-  }, [fid]);
+  }, [fid, avatar]);
 
   const is = (p: string) => (p === "/" ? pathname === "/" : pathname.startsWith(p));
 
@@ -39,13 +36,13 @@ export default function Nav() {
           "radial-gradient(900px 420px at 10% -20%, rgba(58,166,216,.14), transparent 70%),radial-gradient(900px 420px at 110% -30%, rgba(234,122,42,.18), transparent 70%),linear-gradient(180deg, rgba(8,9,12,.90), rgba(8,9,12,.58))",
       }}
     >
-      {/* Increased height (py-3 → py-4) */}
+      {/* Taller header (py-4) */}
       <nav className="container mx-auto flex items-center justify-between px-4 py-4" role="navigation">
-        {/* Left: avatar */}
+        {/* Left: avatar (taps to Farcaster profile if available) */}
         <button
           onClick={() => (fid ? openProfile(fid) : undefined)}
           className="relative h-12 w-12 rounded-full overflow-hidden border border-white/20 hover:border-white/40 transition"
-          title={fid ? `Open Farcaster (FID ${fid})` : "Not signed in"}
+          title={fid ? `Open Farcaster profile (FID ${fid})` : "Not signed in"}
         >
           {avatar ? (
             <Image src={avatar} alt="Farcaster avatar" fill sizes="48px" className="object-cover" />
@@ -54,7 +51,7 @@ export default function Nav() {
           )}
         </button>
 
-        {/* Right: burger only */}
+        {/* Right: burger only (links + connect live in drawer) */}
         <button
           onClick={() => setOpen(v => !v)}
           aria-label="Open menu"
@@ -67,7 +64,7 @@ export default function Nav() {
         </button>
       </nav>
 
-      {/* Mobile drawer */}
+      {/* Drawer */}
       {open && (
         <div className="border-t border-white/10 bg-black/70 backdrop-blur-xl animate-fadeInDown">
           <div className="container mx-auto px-4 py-5 grid gap-3 text-white text-[15px]">
