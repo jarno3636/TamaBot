@@ -8,13 +8,13 @@ import { TAMABOT_CORE } from "@/lib/abi";
 import FarcasterLogin from "@/components/FarcasterLogin";
 import { useRouter } from "next/navigation";
 import { Card, Pill } from "@/components/UI";
-import { useFid } from "@/lib/useFid";
+import { useMiniContext } from "@/lib/useMiniContext";
 
 export const dynamic = "force-dynamic";
 
 export default function MyPetPage() {
   const router = useRouter();
-  const { fid, loading } = useFid();
+  const { fid, loading, inMini } = useMiniContext();
 
   const { data: tokenIdNumber } = useReadContract({
     address: TAMABOT_CORE.address,
@@ -46,25 +46,22 @@ export default function MyPetPage() {
               <Pill>Jump to your pet</Pill>
             </div>
 
-            {!fid && !loading && (
+            {!fid && !loading && !inMini && (
               <div className="mt-5">
+                {/* Only show manual login if NOT in mini */}
                 <FarcasterLogin />
               </div>
             )}
 
             {fid && id === 0 && (
               <div className="mt-6">
-                <p className="text-white/90">
-                  No pet found for FID <b>{fid}</b>.
-                </p>
-                <a href="/mint" className="btn-pill btn-pill--orange mt-3 inline-block">
-                  Mint your TamaBot
-                </a>
+                <p className="text-white/90">No pet found for FID <b>{fid}</b>.</p>
+                <a href="/mint" className="btn-pill btn-pill--orange mt-3 inline-block">Mint your TamaBot</a>
               </div>
             )}
 
             <p className="mt-6 text-sm text-white/80">
-              Tip: inside the Farcaster Mini this auto-detects your FID and deep-links to your pet.
+              Inside the Farcaster Mini, your FID loads automatically.
             </p>
           </Card>
         </section>
