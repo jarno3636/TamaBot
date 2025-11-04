@@ -1,16 +1,14 @@
 // app/providers.tsx
 "use client";
 
-////////////////////////////////////////////////////////////////////////////////
-// Guard: allow JSON.stringify on BigInt during SSR/prerender
+/* --------- BigInt safe JSON --------- */
 declare global { interface BigInt { toJSON(): string } }
 if (typeof (BigInt.prototype as any).toJSON !== "function") {
   (BigInt.prototype as any).toJSON = function () { return this.toString(); };
 }
-////////////////////////////////////////////////////////////////////////////////
 
 import "@rainbow-me/rainbowkit/styles.css";
-import { useMemo, useEffect, type ReactNode } from "react";
+import { useMemo, type ReactNode, useEffect } from "react";
 import {
   QueryClient,
   QueryClientProvider,
@@ -32,10 +30,34 @@ function AutoReconnect() {
   return null;
 }
 
-// 🔧 Transform BigInt -> string during dehydration to avoid JSON errors at build time
+// Serialize BigInt during dehydration
 function serializeData(data: unknown): unknown {
   if (typeof data === "bigint") return data.toString();
   return data;
+}
+
+/** Lazy Neynar provider so builds never fail if the lib is missing */
+function NeynarProviderLazy({ children }: { children: ReactNode }) {
+  const clientId =
+    (typeof window !== "undefined" && process.env.NEXT_PUBLIC_NEYNAR_CLIENT_ID) ||
+    process.env.NEXT_PUBLIC_NEYNAR_CLIENT_ID;
+
+  // If no client id, skip entirely
+  if (!clientId) return <>{children}</>;
+
+  // Dynamic import inside a client component
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const AnyProvider = (require("neynar-react")?.NeynarProvider ||
+                       require("neynar-react")?.default ||
+                       null) as any;
+
+  if (!AnyProvider) return <>{children}</>;
+
+  return (
+    <AnyProvider clientId={clientId}>
+      {children}
+    </AnyProvider>
+  );
 }
 
 export default function Providers({ children }: { children: ReactNode }) {
@@ -63,7 +85,7 @@ export default function Providers({ children }: { children: ReactNode }) {
             modalSize="compact"
             appInfo={{ appName: "TamaBot" }}
           >
-            {children}
+            <NeynarProviderLazy>{children}</NeynarProviderLazy>
           </RainbowKitProvider>
         </WagmiProvider>
       </HydrationBoundary>
