@@ -1,12 +1,18 @@
+// app/mint/page.tsx
 "use client";
 
 import { Suspense } from "react";
 import MintCard from "@/components/MintCard";
 import { Card, Pill } from "@/components/UI";
+import { useMiniContext } from "@/lib/useMiniContext";
+import FarcasterLogin from "@/components/FarcasterLogin";
+import SubscribeCallout from "@/components/SubscribeCallout";
 
 export const dynamic = "force-dynamic";
 
 export default function MintPage() {
+  const { inMini } = useMiniContext();
+
   return (
     <main className="min-h-[100svh] bg-deep-orange pb-16">
       <div className="mx-auto max-w-4xl px-5 pt-8">
@@ -28,6 +34,14 @@ export default function MintPage() {
                 <MintCard />
               </Suspense>
             </div>
+
+            {/* Mini-only helpers: lightweight sign-in badge + subscribe */}
+            {inMini && (
+              <div className="mt-6 grid gap-3">
+                <FarcasterLogin />
+                <SubscribeCallout />
+              </div>
+            )}
           </Card>
         </section>
       </div>
