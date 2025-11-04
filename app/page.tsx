@@ -1,16 +1,16 @@
+// app/page.tsx
 "use client";
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { isInsideMini, miniReady } from "@/lib/mini";
+import { useMemo } from "react";
 import { buildTweetUrl, farcasterComposeUrl } from "@/lib/share";
 import FarcasterLogin from "@/components/FarcasterLogin";
 import SubscribeCallout from "@/components/SubscribeCallout";
+import { useMiniContext } from "@/lib/useMiniContext";
 
 export default function Home() {
-  const [inside, setInside] = useState(false);
-  useEffect(() => { setInside(isInsideMini()); miniReady(); }, []);
+  const { inMini } = useMiniContext();
 
   const base =
     typeof window !== "undefined"
@@ -61,7 +61,7 @@ export default function Home() {
               <Link href="/my"   className="btn-pill btn-pill--blue">See my pet</Link>
             </div>
 
-            {inside && (
+            {inMini && (
               <div style={{ marginTop: 20 }}>
                 <div style={{ marginBottom: 12 }}><FarcasterLogin /></div>
                 <SubscribeCallout />
