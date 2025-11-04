@@ -3,7 +3,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-// Tolerant SDK shape (Warpcast Mini + Base MiniKit)
+/** Super-tolerant SDK shape (Warpcast Mini + Base MiniKit) */
 type MiniAppSdk = {
   isInMiniApp?: () => boolean;
   actions?: {
@@ -13,6 +13,10 @@ type MiniAppSdk = {
   user?: { fid?: number | string; username?: string; pfpUrl?: string; pfp_url?: string };
   context?: { user?: { fid?: number | string; username?: string; pfpUrl?: string; pfp_url?: string } };
 };
+
+const DEBUG =
+  (typeof window !== "undefined" && process.env.NEXT_PUBLIC_MINI_DEBUG === "true") ||
+  process.env.NEXT_PUBLIC_MINI_DEBUG === "true";
 
 function num(n: unknown): number | null {
   const x = Number((n as any) ?? NaN);
@@ -35,23 +39,70 @@ function persistFid(fid: number) {
   } catch {}
 }
 
-function getMiniKit(): any | null {
+function getMk(): any | null {
   if (typeof window === "undefined") return null;
   const w = window as any;
   return w?.miniKit || w?.coinbase?.miniKit || w?.MiniKit || null;
 }
 
-export type MiniUser = { fid?: number; username?: string; pfpUrl?: string };
-
-export function isInMini(): boolean {
+function isWarpUA(): boolean {
   if (typeof navigator === "undefined") return false;
-  const ua = navigator.userAgent || "";
-  const warp = /Warpcast|Farcaster|FarcasterMini/i.test(ua);
-  const baseUA = /Base\sApp|Coinbase|CoinbaseWallet|CBBrowser|CBWallet/i.test(ua);
+  return /Warpcast|Farcaster|FarcasterMini/i.test(navigator.userAgent || "");
+}
+function isBaseUA(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /Base\sApp|Coinbase|CoinbaseWallet|CBBrowser|CBWallet/i.test(navigator.userAgent || "");
+}
+
+function isInMiniHeuristic(): boolean {
   let iframe = false;
   try { iframe = window.self !== window.top; } catch { iframe = true; }
-  return warp || baseUA || iframe || !!getMiniKit();
+  return isWarpUA() || isBaseUA() || iframe || !!getMk();
 }
+
+/** Try *everywhere* the FID might exist on the page right now */
+async function findFidOnce(): Promise<{ fid: number | null; rawUser: any | null; where?: string[] }> {
+  const where: string[] = [];
+  const w: any = typeof window !== "undefined" ? window : {};
+
+  // 0) URL ?fid=...
+  try {
+    const q = new URLSearchParams(window.location.search).get("fid");
+    const n = q && /^\d+$/.test(q) ? Number(q) : null;
+    if (n) { where.push("url"); return { fid: n, rawUser: null, where }; }
+  } catch {}
+
+  // 1) Base MiniKit globals
+  try {
+    const mk = getMk();
+    const mkUser = mk?.user ?? mk?.context?.user;
+    const n = num(mkUser?.fid);
+    if (n) { where.push("minikit"); return { fid: n, rawUser: mkUser ?? null, where }; }
+  } catch {}
+
+  // 2) Farcaster miniapp SDK (module or globals)
+  try {
+    const mod = (await import("@farcaster/miniapp-sdk").catch(() => null)) as { sdk?: MiniAppSdk; default?: MiniAppSdk } | null;
+    const sdk: any = mod?.sdk ?? mod?.default ?? w?.farcaster?.miniapp?.sdk ?? w?.sdk ?? null;
+
+    const ctxUser =
+      sdk?.user ??
+      sdk?.context?.user ??
+      w?.farcaster?.miniapp?.context?.user ??
+      null;
+
+    const n = num(ctxUser?.fid);
+    if (n) { where.push("farcaster-sdk"); return { fid: n, rawUser: ctxUser, where }; }
+  } catch {}
+
+  // 3) Storage fallback
+  const fromStore = readStoredFid();
+  if (fromStore) { where.push("storage"); return { fid: fromStore, rawUser: null, where }; }
+
+  return { fid: null, rawUser: null, where };
+}
+
+export type MiniUser = { fid?: number; username?: string; pfpUrl?: string };
 
 export function useMiniContext() {
   const [loading, setLoading] = useState(true);
@@ -65,77 +116,48 @@ export function useMiniContext() {
   useEffect(() => {
     (async () => {
       try {
-        setInMini(isInMini());
+        setInMini(isInMiniHeuristic());
 
-        // Dynamic import avoids SSR issues
-        let sdk: MiniAppSdk | null = null;
+        // Ready signals (don’t hang splash)
         try {
-          const mod = (await import("@farcaster/miniapp-sdk").catch(() => null)) as
-            | { sdk?: MiniAppSdk; default?: MiniAppSdk }
-            | null;
-          sdk = (mod?.sdk ?? mod?.default) || null;
-        } catch {}
-
-        const w: any = typeof window !== "undefined" ? window : {};
-        const mk = w?.miniKit || w?.coinbase?.miniKit || w?.MiniKit || null;
-
-        // Signal ready (don’t hang splash)
-        try {
+          const mod = (await import("@farcaster/miniapp-sdk").catch(() => null)) as any;
+          const sdk = mod?.sdk ?? mod?.default ?? null;
           await Promise.race([
             Promise.resolve(sdk?.actions?.ready?.()),
-            new Promise((r) => setTimeout(r, 900)),
+            new Promise((r) => setTimeout(r, 800)),
           ]);
-          if (mk?.setFrameReady) await Promise.resolve(mk.setFrameReady());
         } catch {}
+        try { getMk()?.setFrameReady?.(); } catch {}
 
-        // Try URL ?fid= first
-        let detectedFid: number | null = null;
-        try {
-          const q = new URLSearchParams(window.location.search).get("fid");
-          detectedFid = q && /^\d+$/.test(q) ? Number(q) : null;
-        } catch {}
+        // First attempt
+        let { fid: f, rawUser, where } = await findFidOnce();
+        if (DEBUG) console.log("[mini] initial detect:", { f, where });
 
-        // Then MiniKit / SDK
-        const fromMkFid = num(mk?.user?.fid ?? mk?.context?.user?.fid);
-        const fromSdkFid = num((sdk as any)?.user?.fid ?? (sdk as any)?.context?.user?.fid);
-
-        detectedFid = detectedFid ?? fromMkFid ?? fromSdkFid ?? readStoredFid();
-
-        // Late hydration poll (~1.2s)
-        if (!detectedFid && (sdk || mk)) {
-          const start = Date.now();
-          while (!detectedFid && Date.now() - start < 1200) {
-            await new Promise((r) => setTimeout(r, 120));
-            const refMkFid = num(mk?.user?.fid ?? mk?.context?.user?.fid);
-            const refSdkFid = num((sdk as any)?.user?.fid ?? (sdk as any)?.context?.user?.fid);
-            detectedFid = refMkFid ?? refSdkFid ?? null;
-          }
+        // Slow poll up to ~3s (to catch late context hydration in Warpcast)
+        const deadline = Date.now() + 3000;
+        while (!f && Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 150));
+          const found = await findFidOnce();
+          if (found.fid) { f = found.fid; rawUser = found.rawUser; where = found.where; break; }
         }
+        if (DEBUG) console.log("[mini] final detect:", { f, where });
 
         if (!alive.current) return;
 
-        if (detectedFid) {
-          setFid(detectedFid);
-          persistFid(detectedFid);
+        if (f) {
+          setFid(f);
+          persistFid(f);
         } else {
           setFid(null);
         }
 
-        const rawUser =
-          mk?.user ??
-          mk?.context?.user ??
-          (sdk as any)?.user ??
-          (sdk as any)?.context?.user ??
-          null;
-
+        const u = rawUser ?? getMk()?.user ?? getMk()?.context?.user ?? null;
         setUser(
-          rawUser
-            ? {
-                fid: num(rawUser.fid) ?? undefined,
-                username: rawUser.username,
-                pfpUrl: rawUser.pfpUrl || rawUser.pfp_url,
-              }
-            : null
+          u ? {
+            fid: num(u?.fid) ?? undefined,
+            username: u?.username,
+            pfpUrl: u?.pfpUrl || u?.pfp_url,
+          } : null
         );
       } finally {
         if (alive.current) setLoading(false);
