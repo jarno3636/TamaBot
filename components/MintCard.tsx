@@ -3,30 +3,39 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { TAMABOT_CORE } from "@/lib/abi";
 import { formatEther } from "viem";
 import { useMiniContext } from "@/lib/useMiniContext";
 
 export default function MintCard() {
   const router = useRouter();
-  const qs = useSearchParams();
   const { address } = useAccount();
-  const { fid: ctxFid } = useMiniContext();
+  const { inMini, fid: miniFid } = useMiniContext();
 
-  // local override if user types one on web
+  // ---------- FID detection ----------
   const [fid, setFid] = useState<string>("");
 
+  // prefer mini context; fall back to previously stored value
   useEffect(() => {
-    const fromQuery = qs?.get("fid");
-    if (!fid && ctxFid) setFid(String(ctxFid));
-    else if (fromQuery && !fid) setFid(fromQuery);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctxFid]);
+    if (miniFid && !fid) setFid(String(miniFid));
+    if (!miniFid && !fid) {
+      const cached = (typeof window !== "undefined" && (localStorage.getItem("fid") || "")) || "";
+      if (cached) setFid(cached);
+    }
+  }, [miniFid, fid]);
+
+  // keep a cached copy after user lands once (helps between routes)
+  useEffect(() => {
+    if (fid) {
+      try { localStorage.setItem("fid", fid); } catch {}
+    }
+  }, [fid]);
 
   const fidNum = /^\d+$/.test(fid) ? Number(fid) : null;
   const canMint = useMemo(() => !!address && fidNum !== null, [address, fidNum]);
 
+  // ---------- Read mint fee ----------
   const { data: fee } = useReadContract({
     address: TAMABOT_CORE.address,
     abi: TAMABOT_CORE.abi,
@@ -34,6 +43,7 @@ export default function MintCard() {
   });
   const feeEth = fee ? formatEther(fee as bigint) : "0";
 
+  // ---------- Write: mint ----------
   const { writeContract, data: hash, error: werr, isPending } = useWriteContract();
   const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({ hash });
 
@@ -43,11 +53,12 @@ export default function MintCard() {
       address: TAMABOT_CORE.address,
       abi: TAMABOT_CORE.abi,
       functionName: "mint",
-      args: [BigInt(fidNum!)],
+      args: [BigInt(fidNum!)],        // ✅ always the detected FID
       value: (fee as bigint) ?? 0n,
     });
   }
 
+  // ---------- After mint: resolve tokenId and route ----------
   const { data: tokenId } = useReadContract({
     address: TAMABOT_CORE.address,
     abi: TAMABOT_CORE.abi,
@@ -65,14 +76,23 @@ export default function MintCard() {
     <div className="glass glass-pad grid gap-4">
       <h2 className="text-xl md:text-2xl font-extrabold">Mint your TamaBot</h2>
 
-      <label className="text-sm opacity-80">Farcaster FID</label>
-      <input
-        className="px-3 py-2 rounded-xl bg-black/30 border border-white/15 focus:outline-none focus:ring-2 focus:ring-white/30"
-        value={fid}
-        onChange={(e) => setFid(e.target.value.trim())}
-        placeholder="e.g. 12345"
-        inputMode="numeric"
-      />
+      {/* Inside the Farcaster client we just show what we detected and lock the field */}
+      {inMini ? (
+        <div className="text-sm text-white/90">
+          Detected FID: <b>{fid || "…"}</b>
+        </div>
+      ) : (
+        <>
+          <label className="text-sm opacity-80">Farcaster FID</label>
+          <input
+            className="px-3 py-2 rounded-xl bg-black/30 border border-white/15 focus:outline-none focus:ring-2 focus:ring-white/30"
+            value={fid}
+            onChange={(e) => setFid(e.target.value.trim())}
+            placeholder="e.g. 12345"
+            inputMode="numeric"
+          />
+        </>
+      )}
 
       <div className="pill-row">
         <span className="pill-note pill-note--yellow text-sm">Mint fee: {fee ? `${feeEth} ETH` : "…"}</span>
@@ -94,7 +114,9 @@ export default function MintCard() {
         )}
       </div>
 
-      {isSuccess && !tokenId && <div className="text-emerald-400">Mint confirmed. Resolving your token ID…</div>}
+      {isSuccess && !tokenId && (
+        <div className="text-emerald-400">Mint confirmed. Resolving your token ID…</div>
+      )}
       {werr && <div className="text-red-400 text-sm break-words">{String(werr.message)}</div>}
     </div>
   );
