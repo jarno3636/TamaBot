@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.600.0",
+    "@coinbase/onchainkit": "1.0.2",
     "@coinbase/wallet-sdk": "3.9.3",
     "@farcaster/miniapp-sdk": "latest",
     "@farcaster/miniapp-wagmi-connector": "1.1.0",
@@ -41,7 +42,8 @@
     "hardhat": "2.26.5",
     "prettier": "3.3.3",
     "tsx": "4.7.0",
-    "typescript": "5.5.4"
+    "typescript": "5.5.4",
+    "pino-pretty": "10.3.1"
   },
   "overrides": {
     "wagmi": "2.14.6",
