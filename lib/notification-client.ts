@@ -1,5 +1,5 @@
 // lib/notification-client.ts
-import type { FrameNotificationDetails, SendNotificationRequest } from "@farcaster/frame-sdk";
+import type { FrameNotificationDetails, SendNotificationRequest } from "./frame-notifications";
 import { env } from "./env";
 import { getUserNotificationDetails } from "./notifications";
 
@@ -44,10 +44,12 @@ export async function sendFrameNotification({
   const bodyJson = await response.json().catch(() => ({}));
 
   if (response.status === 200) {
-    const rateLimited = Array.isArray(bodyJson?.result?.rateLimitedTokens) && bodyJson.result.rateLimitedTokens.length > 0;
+    const rateLimited =
+      Array.isArray(bodyJson?.result?.rateLimitedTokens) &&
+      bodyJson.result.rateLimitedTokens.length > 0;
     if (rateLimited) return { state: "rate_limit" };
     return { state: "success" };
   }
 
-  return { state: "error", error: bodyJson };
+  return { state: "error", error: bodyJson });
 }
