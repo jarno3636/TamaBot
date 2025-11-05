@@ -11,11 +11,7 @@ type MiniUserRaw = {
   pfp_url?: string;
 };
 
-type MiniAppSdk = {
-  actions?: { ready?: () => Promise<void> | void };
-  user?: MiniUserRaw;
-  context?: { user?: MiniUserRaw };
-};
+type MiniUser = { fid?: number; username?: string; pfpUrl?: string };
 
 /* --------------- Utils ---------------- */
 function num(n: unknown): number | null {
@@ -43,13 +39,9 @@ function persistFid(fid: number) {
   } catch {}
 }
 
-function isMiniUserRaw(x: unknown): x is MiniUserRaw {
-  return !!x && typeof x === "object";
-}
+const isObj = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object";
 
 /* --------------- Hook ---------------- */
-export type MiniUser = { fid?: number; username?: string; pfpUrl?: string };
-
 export function useMiniContext() {
   const [loading, setLoading] = useState(true);
   const [inMini, setInMini] = useState(false);
@@ -62,109 +54,76 @@ export function useMiniContext() {
   useEffect(() => {
     (async () => {
       try {
-        // Heuristic “in mini/webview”
+        // Detect “embedded / webview”
         const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
-        const looksLikeWebView = /Warpcast|Farcaster|FarcasterMini|Base\sApp|Coinbase|ReactNativeWebView/i.test(ua);
-        setInMini(
-          looksLikeWebView ||
-            (() => {
-              try { return window.self !== window.top; } catch { return true; }
-            })()
-        );
+        const looksLikeWebView = /Warpcast|Farcaster|FarcasterMini|Base\\sApp|Coinbase|ReactNativeWebView/i.test(ua);
+        setInMini(looksLikeWebView || (() => { try { return window.self !== window.top; } catch { return true; } })());
 
-        // 1) Try dynamic SDK import (optional)
-        let sdk: MiniAppSdk | null = null;
+        /* ---------- 1) Canonical path: v2 SDK global ---------- */
+        let ctxUser: MiniUserRaw | null = null;
         try {
-          const mod = (await import("@farcaster/miniapp-sdk").catch(() => null)) as any;
-          sdk = (mod?.sdk ?? mod?.default) || null;
+          const fc: any = (window as any).Farcaster?.mini?.sdk;
+          if (fc?.context) {
+            const ctx = await fc.context(); // { user: {...} } in v2
+            const raw = (ctx && (ctx.user || (ctx.requesterUser ?? null))) || null;
+            if (raw) ctxUser = raw as MiniUserRaw;
+          }
         } catch {}
 
-        // 2) Tell host we’re ready (don’t hang)
-        try {
-          await Promise.race([
-            Promise.resolve(sdk?.actions?.ready?.()),
-            new Promise((r) => setTimeout(r, 800)),
-          ]);
-        } catch {}
+        /* ---------- 2) Older globals (rare, but harmless) ---------- */
+        if (!ctxUser) {
+          const g: any = (window as any);
+          const maybe = g.farcaster?.user || g.farcaster?.context?.user || null;
+          if (maybe) ctxUser = maybe as MiniUserRaw;
+        }
 
-        // 3) Read from SDK/context if available
-        const sdkUser = (sdk?.user || sdk?.context?.user) as MiniUserRaw | undefined;
-        const fromSdk = num(sdkUser?.fid);
-
-        // 4) Listen for WebView postMessage context (some Warpcast builds)
-        let postMessageFid: number | null = null;
-        let postMessageUser: unknown = undefined; // <— keep as unknown, narrow later
+        /* ---------- 3) Message bridge fallback ---------- */
+        let pmFid: number | null = null;
+        let pmUser: MiniUserRaw | null = null;
 
         const onMsg = (ev: MessageEvent) => {
           try {
-            const data: any = ev?.data ?? ev;
-            const maybe =
-              data?.context?.user ??
-              data?.user ??
-              (typeof data === "string" ? JSON.parse(data) : null);
-
-            if (isMiniUserRaw(maybe)) {
-              const f = num((maybe as MiniUserRaw).fid);
+            const d: any = ev?.data ?? ev;
+            const maybe = d?.context?.user || d?.user || (typeof d === "string" ? JSON.parse(d) : null);
+            if (isObj(maybe)) {
+              const f = num((maybe as any).fid);
               if (f && alive.current) {
-                postMessageFid = f;
-                postMessageUser = maybe as MiniUserRaw;
+                pmFid = f;
+                pmUser = maybe as MiniUserRaw;
                 setFid(f);
                 persistFid(f);
-                const mu = maybe as MiniUserRaw;
-                setUser({
-                  fid: f,
-                  username: mu.username,
-                  pfpUrl: mu.pfpUrl || mu.pfp_url,
-                });
+                setUser({ fid: f, username: (maybe as any).username, pfpUrl: (maybe as any).pfpUrl || (maybe as any).pfp_url });
               }
             }
-          } catch {
-            // ignore malformed messages
-          }
+          } catch {}
         };
 
         window.addEventListener("message", onMsg);
-        // Proactively ask the host for context (harmless if ignored)
         try {
           window.parent?.postMessage?.({ type: "farcaster:context:request" }, "*");
-          (window as any).ReactNativeWebView?.postMessage?.(
-            JSON.stringify({ type: "context:request" })
-          );
+          (window as any).ReactNativeWebView?.postMessage?.(JSON.stringify({ type: "context:request" }));
         } catch {}
 
-        // Give the host a short time to reply
-        await new Promise((r) => setTimeout(r, 900));
+        await new Promise(r => setTimeout(r, 900));
         window.removeEventListener("message", onMsg);
 
-        // 5) Fallback: URL/localStorage
+        /* ---------- 4) Resolve best source ---------- */
         const fromStorage = readStoredFid();
-
-        const resolved = fromSdk ?? postMessageFid ?? fromStorage ?? null;
-
-        // Build a normalized user object
-        let resolvedUser: MiniUser | null = null;
-        if (isMiniUserRaw(postMessageUser)) {
-          const pmu = postMessageUser as MiniUserRaw;
-          const f = num(pmu.fid) ?? undefined;
-          resolvedUser = {
-            fid: f,
-            username: pmu.username,
-            pfpUrl: pmu.pfpUrl || pmu.pfp_url,
-          };
-        } else if (isMiniUserRaw(sdkUser)) {
-          const su = sdkUser as MiniUserRaw;
-          const f = num(su.fid) ?? undefined;
-          resolvedUser = {
-            fid: f,
-            username: su.username,
-            pfpUrl: su.pfpUrl || su.pfp_url,
-          };
-        }
+        const resolvedUser = (pmUser ?? ctxUser) || null;
+        const resolvedFid = num(resolvedUser?.fid) ?? pmFid ?? fromStorage ?? null;
 
         if (alive.current) {
-          setFid(resolved);
-          if (resolved) persistFid(resolved);
-          setUser(resolvedUser);
+          setFid(resolvedFid);
+          if (resolvedFid) persistFid(resolvedFid);
+          setUser(
+            resolvedUser
+              ? {
+                  fid: num(resolvedUser.fid) ?? undefined,
+                  username: resolvedUser.username,
+                  pfpUrl: resolvedUser.pfpUrl || resolvedUser.pfp_url,
+                }
+              : null
+          );
         }
       } finally {
         if (alive.current) setLoading(false);
@@ -174,3 +133,5 @@ export function useMiniContext() {
 
   return { loading, inMini, fid, user };
 }
+
+export type { MiniUser };
