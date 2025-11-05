@@ -4,6 +4,7 @@ import "./globals.css";
 import Providers from "./providers";
 import Nav from "@/components/Nav";
 import MiniDebug from "@/components/MiniDebug"; // debug badge
+import AppReady from "@/components/AppReady";   // <-- client-side ready pings
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://tamabot.vercel.app";
 const ABS = (p: string) => new URL(p, SITE).toString();
@@ -13,15 +14,10 @@ export const metadata: Metadata = {
   title: "TamaBot",
   description: "On-chain Farcaster pet on Base",
   alternates: { canonical: SITE },
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: { index: true, follow: true },
-  },
+  robots: { index: true, follow: true, googleBot: { index: true, follow: true } },
   openGraph: {
     title: "TamaBot — Farcaster Pet on Base",
-    description:
-      "Adopt, evolve, and share your on-chain AI pet directly from Warpcast.",
+    description: "Adopt, evolve, and share your on-chain AI pet directly from Warpcast.",
     url: SITE,
     siteName: "TamaBot",
     images: [{ url: ABS("/og.png"), width: 1200, height: 630, alt: "TamaBot preview" }],
@@ -32,15 +28,11 @@ export const metadata: Metadata = {
     description: "On-chain Farcaster pet on Base",
     images: [ABS("/og.png")],
   },
-  icons: {
-    icon: "/favicon.ico",
-    apple: "/apple-touch-icon.png",
-  },
+  icons: { icon: "/favicon.ico", apple: "/apple-touch-icon.png" },
   manifest: "/site.webmanifest",
   themeColor: "#0a0b10",
   viewport: "width=device-width, initial-scale=1, viewport-fit=cover",
   other: {
-    // Farcaster Frame (simple; your /api/frame can enhance)
     "fc:frame": "vNext",
     "fc:frame:image": ABS("/og.png"),
     "fc:frame:button:1": "Open TamaBot",
@@ -69,9 +61,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <head>
-        {/* Official Farcaster Mini App SDK (safe no-op on web) */}
+        {/* ✅ Official Farcaster Mini App SDK (v2) */}
         <script async src="https://cdn.farcaster.xyz/sdk/miniapp/v2.js"></script>
-        {/* Base MiniKit (safe no-op on web) */}
+
+        {/* (Optional) Coinbase/Base MiniKit – harmless on web */}
         <script async src="https://cdn.jsdelivr.net/npm/@farcaster/mini-kit/dist/minikit.js"></script>
 
         {/* Icons */}
@@ -86,7 +79,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="format-detection" content="telephone=no" />
 
-        {/* Ultra-early “ready” pings (covers multiple Warpcast host shapes) */}
+        {/* Ultra-early “ready” pings (covers multiple host shapes) */}
         <script
           id="fc-miniapp-ready"
           dangerouslySetInnerHTML={{
@@ -94,32 +87,30 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 (function(){
   if (window.__fcReadyInjected) return; window.__fcReadyInjected = true;
   var attempts = 0, maxAttempts = 50, done = false;
-
   function ping(){
     if (done) return;
     try { window.farcaster?.actions?.ready?.(); } catch(e){}
     try { window.farcaster?.miniapp?.sdk?.actions?.ready?.(); } catch(e){}
     try { window.Farcaster?.mini?.sdk?.actions?.ready?.(); } catch(e){}
-    attempts++;
-    if (attempts >= maxAttempts) stop();
+    attempts++; if (attempts >= maxAttempts) { done = true; try{ clearInterval(iv); }catch(_){} }
   }
-  function stop(){ done = true; try{ clearInterval(iv); }catch(_){} }
   var iv = setInterval(ping, 150);
-  // fire immediately + on key lifecycle moments
   ping();
   document.addEventListener('DOMContentLoaded', ping, { once: true });
   window.addEventListener('pageshow', ping);
   window.addEventListener('focus', ping);
 })();
-          `,
-          }}
+`}}
         />
       </head>
 
       <body className="min-h-screen bg-[#0a0b10] text-white antialiased">
+        {/* Client helper that also pings ready() a bit after hydration */}
+        <AppReady />
+
         <Providers>
           <Nav />
-          {/* Note: You already render a <main> here—avoid returning another <main> from pages to prevent nested <main> tags. */}
+          {/* Avoid returning another <main> from pages to prevent nested mains */}
           <main className="mx-auto max-w-6xl px-4 pb-16 pt-6">{children}</main>
         </Providers>
 
