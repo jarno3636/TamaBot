@@ -7,6 +7,9 @@ import { useEffect, useRef, useState } from "react";
 type MiniUserRaw = { fid?: number | string; username?: string; pfpUrl?: string; pfp_url?: string };
 export type MiniUser = { fid?: number; username?: string; pfpUrl?: string };
 
+// ✅ Strict variant used only after we’ve verified fid is a number
+type MiniUserStrict = { fid: number; username?: string; pfpUrl?: string };
+
 type MiniSdk = {
   isInMiniApp?: (timeoutMs?: number) => Promise<boolean>;
   getCapabilities?: () => Promise<string[]>;
@@ -105,15 +108,20 @@ export function useMiniContext() {
 
         // 5) Race a postMessage context
         if (!bestUser?.fid) {
-          let pmUser: MiniUser | null = null;
+          // ✅ Make pmUser strictly typed *only after* fid is validated
+          let pmUser: MiniUserStrict | null = null;
+
           const onMsg = (ev: MessageEvent) => {
             try {
               const d: any = ev?.data ?? ev;
               const raw = d?.context?.user ?? d?.user ?? (typeof d === "string" ? JSON.parse(d) : null);
               const u = normUser(raw);
-              if (u?.fid && alive.current) pmUser = u;
+              if (u?.fid && typeof u.fid === "number" && alive.current) {
+                pmUser = { fid: u.fid, username: u.username, pfpUrl: u.pfpUrl };
+              }
             } catch {}
           };
+
           window.addEventListener("message", onMsg);
           try {
             window.parent?.postMessage?.({ type: "farcaster:context:request" }, "*");
@@ -122,10 +130,8 @@ export function useMiniContext() {
           await new Promise((r) => setTimeout(r, 900));
           window.removeEventListener("message", onMsg);
 
-          // ✅ Guarded check so TS never narrows to 'never'
-          if (pmUser && typeof pmUser.fid === "number") {
-            bestUser = pmUser;
-          }
+          // ✅ No optional read; pmUser has required `fid: number` if set
+          if (pmUser) bestUser = pmUser;
         }
 
         // 6) Final fallback (web/dev)
