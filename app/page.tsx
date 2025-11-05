@@ -1,7 +1,7 @@
 // app/page.tsx
 import type { Metadata } from "next";
 import { env } from "@/lib/env";
-import dynamic from "next/dynamic";
+import NextDynamic from "next/dynamic"; // 👈 renamed to avoid collision
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 const appUrl = env.NEXT_PUBLIC_URL;
 
 // Render the real home on the client to avoid SSR calling MiniKit / indexedDB
-const HomeClient = dynamic(() => import("@/components/_HomeClient"), { ssr: false });
+const HomeClient = NextDynamic(() => import("@/components/_HomeClient"), { ssr: false });
 
 export async function generateMetadata(): Promise<Metadata> {
   const frame = {
