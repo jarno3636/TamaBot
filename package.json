@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.600.0",
-    "@coinbase/onchainkit": "0.46.4",
+    "@coinbase/onchainkit": "1.0.2",
     "@coinbase/wallet-sdk": "3.9.3",
     "@farcaster/miniapp-sdk": "latest",
     "@farcaster/miniapp-wagmi-connector": "1.1.0",
@@ -27,9 +27,9 @@
     "@tanstack/react-query": "5.59.0",
     "@walletconnect/ethereum-provider": "2.21.1",
     "dotenv": "16.4.5",
-    "next": "14.2.15",
-    "react": "18.2.0",
-    "react-dom": "18.2.0",
+    "next": "^15.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
     "swr": "2.3.3",
     "viem": "2.21.55",
     "wagmi": "2.14.6"
@@ -37,8 +37,8 @@
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "5.0.0",
     "@types/node": "20.11.30",
-    "@types/react": "18.2.66",
-    "@types/react-dom": "18.2.23",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
     "hardhat": "2.26.5",
     "prettier": "3.3.3",
     "tsx": "4.7.0",
