@@ -16,6 +16,10 @@ import { RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
 import { base } from "viem/chains";
 import { wagmiConfig } from "@/lib/wallet";
 
+// ⬇️ NEW: MiniKit + your context
+import { MiniKitProvider } from "@coinbase/onchainkit/minikit";
+import { MiniAppProvider } from "@/contexts/miniapp-context"; // ensure this path exists
+
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 10_000, refetchOnWindowFocus: false } },
 });
@@ -37,7 +41,6 @@ function NeynarProviderLazy({ children }: { children: ReactNode }) {
     (typeof window !== "undefined" && process.env.NEXT_PUBLIC_NEYNAR_CLIENT_ID) ||
     process.env.NEXT_PUBLIC_NEYNAR_CLIENT_ID;
 
-  // default: mark not-ready
   useEffect(() => {
     if (typeof window !== "undefined") (window as any).__NEYNAR_READY__ = false;
   }, []);
@@ -54,7 +57,6 @@ function NeynarProviderLazy({ children }: { children: ReactNode }) {
   }
   if (!Provider) return <>{children}</>;
 
-  // Flag ready after mount
   function Flag() {
     useEffect(() => {
       if (typeof window !== "undefined") (window as any).__NEYNAR_READY__ = true;
@@ -95,7 +97,16 @@ export default function Providers({ children }: { children: ReactNode }) {
             modalSize="compact"
             appInfo={{ appName: "TamaBot" }}
           >
-            <NeynarProviderLazy>{children}</NeynarProviderLazy>
+            {/* ⬇️ NEW: MiniKit wraps your MiniApp context */}
+            <MiniKitProvider
+              projectId={process.env.NEXT_PUBLIC_MINIKIT_PROJECT_ID as string}
+              chain={base}
+              notificationProxyUrl="/api/notification"
+            >
+              <MiniAppProvider>
+                <NeynarProviderLazy>{children}</NeynarProviderLazy>
+              </MiniAppProvider>
+            </MiniKitProvider>
           </RainbowKitProvider>
         </WagmiProvider>
       </HydrationBoundary>
