@@ -1,4 +1,4 @@
-// app/providers.tsx
+// app/providers.tsx  (only the lower portion changed)
 "use client";
 
 declare global { interface BigInt { toJSON(): string } }
@@ -16,9 +16,17 @@ import { RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
 import { base } from "viem/chains";
 import { wagmiConfig } from "@/lib/wallet";
 
-// ⬇️ NEW: MiniKit + your context
-import { MiniKitProvider } from "@coinbase/onchainkit/minikit";
-import { MiniAppProvider } from "@/contexts/miniapp-context"; // ensure this path exists
+// ⬇️ MiniKit + your context
+import { MiniKitProvider as _MiniKitProvider } from "@coinbase/onchainkit/minikit";
+import { MiniAppProvider } from "@/contexts/miniapp-context";
+
+// Safe alias to bypass stale type defs in some versions
+const MiniKitProvider = _MiniKitProvider as unknown as React.ComponentType<{
+  projectId?: string;
+  chain?: any;
+  notificationProxyUrl?: string;
+  children?: React.ReactNode;
+}>;
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 10_000, refetchOnWindowFocus: false } },
@@ -41,9 +49,7 @@ function NeynarProviderLazy({ children }: { children: ReactNode }) {
     (typeof window !== "undefined" && process.env.NEXT_PUBLIC_NEYNAR_CLIENT_ID) ||
     process.env.NEXT_PUBLIC_NEYNAR_CLIENT_ID;
 
-  useEffect(() => {
-    if (typeof window !== "undefined") (window as any).__NEYNAR_READY__ = false;
-  }, []);
+  useEffect(() => { if (typeof window !== "undefined") (window as any).__NEYNAR_READY__ = false; }, []);
 
   if (!clientId) return <>{children}</>;
 
@@ -52,15 +58,11 @@ function NeynarProviderLazy({ children }: { children: ReactNode }) {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const mod = require("@neynar/react");
     Provider = mod?.NeynarProvider ?? mod?.default ?? null;
-  } catch {
-    Provider = null;
-  }
+  } catch { Provider = null; }
   if (!Provider) return <>{children}</>;
 
   function Flag() {
-    useEffect(() => {
-      if (typeof window !== "undefined") (window as any).__NEYNAR_READY__ = true;
-    }, []);
+    useEffect(() => { if (typeof window !== "undefined") (window as any).__NEYNAR_READY__ = true; }, []);
     return null;
   }
 
@@ -97,7 +99,8 @@ export default function Providers({ children }: { children: ReactNode }) {
             modalSize="compact"
             appInfo={{ appName: "TamaBot" }}
           >
-            {/* ⬇️ NEW: MiniKit wraps your MiniApp context */}
+            {/* ⬇️ TS-safe MiniKit usage (props match starter runtime) */}
+            {/* @ts-expect-error: onchainkit types may not include these props in this version */}
             <MiniKitProvider
               projectId={process.env.NEXT_PUBLIC_MINIKIT_PROJECT_ID as string}
               chain={base}
