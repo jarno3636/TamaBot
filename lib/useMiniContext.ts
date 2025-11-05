@@ -8,7 +8,6 @@ type MiniUserRaw = { fid?: number | string; username?: string; pfpUrl?: string; 
 export type MiniUser = { fid?: number; username?: string; pfpUrl?: string };
 
 type MiniSdk = {
-  // from @farcaster/miniapp-sdk
   isInMiniApp?: (timeoutMs?: number) => Promise<boolean>;
   getCapabilities?: () => Promise<string[]>;
   context?: any | Promise<any> | (() => any | Promise<any>);
@@ -66,7 +65,7 @@ export function useMiniContext() {
   useEffect(() => {
     (async () => {
       try {
-        // 1) Dynamic import (won’t break builds if package is missing)
+        // 1) Dynamic import (safe in builds)
         let sdk: MiniSdk | null = null;
         try {
           const mod: any = await import("@farcaster/miniapp-sdk");
@@ -75,11 +74,11 @@ export function useMiniContext() {
           sdk = null;
         }
 
-        // 2) Official detection (fast, cached in SDK)
+        // 2) Official detection
         const isMini = (await (sdk?.isInMiniApp?.(150).catch(() => false))) || false;
         setInMini(isMini);
 
-        // 3) Tell host we’re ready (don’t hang if not supported)
+        // 3) Ready ping (non-blocking)
         try {
           await Promise.race([
             Promise.resolve(sdk?.actions?.ready?.()),
@@ -87,21 +86,15 @@ export function useMiniContext() {
           ]);
         } catch {}
 
-        // 4) If we’re in a Mini App, try official context + capabilities first
+        // 4) Prefer official context + capabilities
         let bestUser: MiniUser | null = null;
 
         if (isMini) {
-          // Context can be a function or a promise/value
-          let ctx: any = undefined;
           try {
             const c = sdk?.context;
-            ctx = typeof c === "function" ? await c() : await c;
-          } catch {
-            ctx = undefined;
-          }
-          bestUser = normUser(ctx);
-
-          // Capabilities are optional
+            const ctx = typeof c === "function" ? await c() : await c;
+            bestUser = normUser(ctx);
+          } catch {}
           try {
             const caps = await sdk?.getCapabilities?.();
             if (Array.isArray(caps)) setCapabilities(caps);
@@ -110,7 +103,7 @@ export function useMiniContext() {
           }
         }
 
-        // 5) Race in a postMessage context (some hosts only reply this way)
+        // 5) Race a postMessage context
         if (!bestUser?.fid) {
           let pmUser: MiniUser | null = null;
           const onMsg = (ev: MessageEvent) => {
@@ -128,10 +121,14 @@ export function useMiniContext() {
           } catch {}
           await new Promise((r) => setTimeout(r, 900));
           window.removeEventListener("message", onMsg);
-          if (pmUser?.fid) bestUser = pmUser;
+
+          // ✅ Guarded check so TS never narrows to 'never'
+          if (pmUser && typeof pmUser.fid === "number") {
+            bestUser = pmUser;
+          }
         }
 
-        // 6) Final fallback for web/dev
+        // 6) Final fallback (web/dev)
         if (!bestUser?.fid) {
           const stored = readStoredFid();
           if (stored) bestUser = { fid: stored };
