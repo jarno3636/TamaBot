@@ -1,16 +1,13 @@
 // app/page.tsx
 import type { Metadata } from "next";
 import { env } from "@/lib/env";
-import NextDynamic from "next/dynamic"; // 👈 renamed to avoid collision
+import HomeClient from "@/components/_HomeClient"; // 👈 normal import of a client component
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const runtime = "nodejs";
 
 const appUrl = env.NEXT_PUBLIC_URL;
-
-// Render the real home on the client to avoid SSR calling MiniKit / indexedDB
-const HomeClient = NextDynamic(() => import("@/components/_HomeClient"), { ssr: false });
 
 export async function generateMetadata(): Promise<Metadata> {
   const frame = {
@@ -37,12 +34,10 @@ export async function generateMetadata(): Promise<Metadata> {
       url: appUrl,
       images: [`${appUrl}/og.png`],
     },
-    other: {
-      "fc:frame": JSON.stringify(frame),
-    },
+    other: { "fc:frame": JSON.stringify(frame) },
   };
 }
 
 export default function Page() {
-  return <HomeClient />;
+  return <HomeClient />; // ✅ renders client-only code without SSR
 }
