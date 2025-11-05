@@ -1,84 +1,113 @@
-// contexts/miniapp-context.tsx
 "use client";
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useRef,
-  type ReactNode,
-} from "react";
-import { useAddFrame, useMiniKit } from "@coinbase/onchainkit/minikit";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 
-interface MiniAppContextType {
-  isFrameReady: boolean;
-  setFrameReady: () => void;
-  addFrame: () => Promise<{ url: string; token: string } | null>;
+type MiniEnv =
+  | "none"          // normal web
+  | "farcaster_v2"  // window.farcaster.miniapp.sdk
+  | "farcaster_v1"  // window.Farcaster.mini.sdk (older)
+  | "minikit";      // @coinbase/onchainkit/minikit (MiniKitProvider)
+
+type MiniState = {
+  inMini: boolean;
+  env: MiniEnv;
+  isReady: boolean;
+  user?: unknown | null;           // whatever the host yields
+  forceDemo: (on: boolean) => void;
+};
+
+const Ctx = createContext<MiniState>({
+  inMini: false,
+  env: "none",
+  isReady: false,
+  user: null,
+  forceDemo: () => {},
+});
+
+function detectEnv(): MiniEnv {
+  // v2 (current)
+  // @ts-ignore
+  if (typeof window !== "undefined" && window.farcaster?.miniapp?.sdk) return "farcaster_v2";
+  // legacy
+  // @ts-ignore
+  if (typeof window !== "undefined" && window.Farcaster?.mini?.sdk)   return "farcaster_v1";
+  // MiniKit (OnchainKit)
+  // @ts-ignore
+  if (typeof window !== "undefined" && window.miniKit?.getUser)       return "minikit";
+  return "none";
 }
 
-const MiniAppContext = createContext<MiniAppContextType | undefined>(undefined);
+export function MiniAppProvider({ children }: { children: React.ReactNode }) {
+  const [env, setEnv] = useState<MiniEnv>("none");
+  const [isReady, setReady] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [demo, setDemo] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    const sp = new URLSearchParams(window.location.search);
+    return sp.has("demo") || sp.has("miniapp");
+  });
 
-export function MiniAppProvider({ children }: { children: ReactNode }) {
-  // ⬇️ Guard: don’t crash if MiniKit context isn’t available during prerender/not-found render
-  let mk:
-    | { isFrameReady: boolean; setFrameReady: () => void; context: any }
-    | null = null;
-  try {
-    mk = useMiniKit();
-  } catch {
-    mk = null;
-  }
+  // Poll for injected SDKs (Warpcast/Base app injects after load)
+  useEffect(() => {
+    let tries = 0;
+    const max = 80; // ~12s
+    const iv = setInterval(async () => {
+      const e = detectEnv();
+      setEnv(e);
 
-  // If we can’t access MiniKit yet, provide safe no-ops so server/prerender doesn’t explode
-  const isFrameReady = mk?.isFrameReady ?? false;
-  const setFrameReady = mk?.setFrameReady ?? (() => {});
-  const context = mk?.context ?? null;
-
-  let addFrameInner: (() => Promise<{ url: string; token: string } | null>) | null = null;
-  try {
-    const addFrame = useAddFrame();
-    addFrameInner = async () => {
+      // ping "ready" if available
       try {
-        const r = await addFrame();
-        return r ?? null;
-      } catch {
-        return null;
-      }
+        // @ts-ignore
+        window.farcaster?.actions?.ready?.();
+      } catch {}
+      try {
+        // @ts-ignore
+        window.farcaster?.miniapp?.sdk?.actions?.ready?.();
+      } catch {}
+      try {
+        // @ts-ignore
+        window.Farcaster?.mini?.sdk?.actions?.ready?.();
+      } catch {}
+
+      // try to grab a user if the host exposes it
+      try {
+        if (e === "farcaster_v2") {
+          // @ts-ignore
+          const u = await window.farcaster?.miniapp?.sdk?.user?.getCurrent?.();
+          if (u) setUser(u);
+        } else if (e === "farcaster_v1") {
+          // @ts-ignore
+          const u = await window.Farcaster?.mini?.sdk?.user?.getCurrent?.();
+          if (u) setUser(u);
+        } else if (e === "minikit") {
+          // @ts-ignore
+          const u = await window.miniKit?.getUser?.();
+          if (u) setUser(u);
+        }
+      } catch {}
+
+      // mark ready if any env is present
+      if (e !== "none") setReady(true);
+
+      if (++tries >= max || (e !== "none" && isReady)) clearInterval(iv);
+    }, 150);
+
+    return () => clearInterval(iv);
+  }, [isReady]);
+
+  const value = useMemo<MiniState>(() => {
+    return {
+      inMini: demo || env !== "none",
+      env,
+      isReady: demo || isReady,
+      user,
+      forceDemo: (on: boolean) => setDemo(on),
     };
-  } catch {
-    // outside provider / prerender path
-    addFrameInner = async () => null;
-  }
+  }, [demo, env, isReady, user]);
 
-  // Set ready on mount (client only; no-op on server)
-  useEffect(() => {
-    if (!isFrameReady) setFrameReady();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isFrameReady]);
-
-  // Auto prompt add on first ready (ignore if context null)
-  useEffect(() => {
-    if (isFrameReady && context && !context?.client?.added) {
-      addFrameInner?.();
-    }
-  }, [isFrameReady, context]);
-
-  return (
-    <MiniAppContext.Provider
-      value={{
-        isFrameReady,
-        setFrameReady,
-        addFrame: addFrameInner!,
-      }}
-    >
-      {children}
-    </MiniAppContext.Provider>
-  );
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 export function useMiniApp() {
-  const ctx = useContext(MiniAppContext);
-  if (!ctx) throw new Error("useMiniApp must be used within a MiniAppProvider");
-  return ctx;
+  return useContext(Ctx);
 }
