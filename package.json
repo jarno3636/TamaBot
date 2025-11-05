@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.600.0",
-    "@coinbase/onchainkit": "1.0.2",
+    "@coinbase/onchainkit": "0.46.4",
     "@coinbase/wallet-sdk": "3.9.3",
     "@farcaster/miniapp-sdk": "latest",
     "@farcaster/miniapp-wagmi-connector": "1.1.0",
