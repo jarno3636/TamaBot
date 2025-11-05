@@ -22,23 +22,30 @@ export const metadata: Metadata = {
     siteName: "TamaBot",
     images: [{ url: ABS("/og.png"), width: 1200, height: 630, alt: "TamaBot preview" }],
   },
-  twitter: { card: "summary_large_image", title: "TamaBot", description: "On-chain Farcaster pet on Base", images: [ABS("/og.png")] },
+  twitter: {
+    card: "summary_large_image",
+    title: "TamaBot",
+    description: "On-chain Farcaster pet on Base",
+    images: [ABS("/og.png")],
+  },
   icons: { icon: "/favicon.ico", apple: "/apple-touch-icon.png" },
   manifest: "/site.webmanifest",
   themeColor: "#0a0b10",
   viewport: "width=device-width, initial-scale=1, viewport-fit=cover",
   other: {
-    // Keeping legacy frame keys is harmless, but Mini Apps do *not* use these.
+    // Legacy frame keys are harmless (Frames≠Mini Apps)
     "fc:frame": "vNext",
     "fc:frame:image": ABS("/og.png"),
     "fc:frame:button:1": "Open TamaBot",
     "fc:frame:button:1:action": "post",
     "og:image": ABS("/og.png"),
-    // ✅ Mini App embed (new-style)
+
+    // ✅ New-style Mini App embed (used by preview + hosts)
     "x-miniapp-name": "TamaBot — On-Chain Farcaster Pet",
     "x-miniapp-image": ABS("/og.png"),
     "x-miniapp-url": SITE,
-    // ✅ Legacy miniapp embed still read by some clients
+
+    // ✅ Legacy miniapp embed (still read by some hosts)
     "fc:miniapp": JSON.stringify({
       version: "1",
       imageUrl: ABS("/og.png"),
@@ -60,23 +67,24 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <head>
-        {/* ✅ Official Mini App SDK */}
+        {/* ✅ Official Farcaster Mini App SDK v2 */}
         <script async src="https://miniapps.farcaster.xyz/sdk/v2.js"></script>
-        {/* (Optional) Base MiniKit; safe no-op on web */}
+
+        {/* Optional: Base MiniKit (safe no-op on web) */}
         <script async src="https://cdn.jsdelivr.net/npm/@farcaster/mini-kit/dist/minikit.js"></script>
 
         {/* Icons */}
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
-        {/* 🔔 Ultra-early ready pings (covers multiple host shapes) */}
+        {/* 🔔 Ultra-early ready pings (several host shapes) */}
         <script
           id="fc-miniapp-ready"
           dangerouslySetInnerHTML={{
             __html: `
 (function(){
   if (window.__fcReadyInjected) return; window.__fcReadyInjected = true;
-  var tries=0, max=50, done=false;
+  var tries=0, max=60, done=false;
   function ping(){
     if (done) return;
     try{ window.farcaster?.actions?.ready?.(); }catch(e){}
@@ -94,16 +102,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
 
       <body className="min-h-screen bg-[#0a0b10] text-white antialiased">
-        {/* Client-side ready when React mounts */}
+        {/* Client-side ready + environment probe */}
         <AppReady />
-
         <Providers>
           <Nav />
-          {/* Avoid nested <main> in pages */}
           <main className="mx-auto max-w-6xl px-4 pb-16 pt-6">{children}</main>
         </Providers>
-
-        {/* Dev helper (guarded by NEXT_PUBLIC_MINI_DEBUG) */}
         <MiniDebug />
       </body>
     </html>
