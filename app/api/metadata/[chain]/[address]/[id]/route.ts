@@ -6,14 +6,10 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const runtime = "nodejs";
 
-// looser + future-proof: use the web Request + a generic params record
-export async function GET(
-  _req: Request,
-  ctx: { params: Record<string, string> }
-) {
-  const chain   = (ctx.params?.chain || "").toLowerCase();
-  const address = (ctx.params?.address || "").toLowerCase();
-  const idStr   = ctx.params?.id || "";
+export async function GET(_req: Request, { params }: any) {
+  const chain   = String(params?.chain || "").toLowerCase();
+  const address = String(params?.address || "").toLowerCase();
+  const idStr   = String(params?.id || "");
 
   // basic validation
   const idNum = Number(idStr);
@@ -23,14 +19,14 @@ export async function GET(
       headers: { "content-type": "application/json; charset=utf-8" },
     });
   }
-  if (!address || !/^0x[a-f0-9]{40}$/.test(address)) {
+  if (!/^0x[a-f0-9]{40}$/.test(address)) {
     return new Response(JSON.stringify({ error: "Invalid address" }), {
       status: 400,
       headers: { "content-type": "application/json; charset=utf-8" },
     });
   }
 
-  // On-chain state (you can branch on `chain` if needed)
+  // On-chain state (branch on `chain` if you need)
   const s = await getOnchainState(address, idNum);
 
   // Optional DB lookups
@@ -38,7 +34,6 @@ export async function GET(
   const spriteCid = hasSupabase() ? await getSpriteCid(idNum) : "";
 
   const site = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
-
   const imageHttp = spriteCid ? ipfsToHttp(spriteCid) : "";
   const animHttp  = persona?.previewCid ? ipfsToHttp(persona.previewCid) : "";
 
