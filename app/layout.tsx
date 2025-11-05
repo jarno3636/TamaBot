@@ -6,9 +6,7 @@ import Nav from "@/components/Nav";
 import MiniDebug from "@/components/MiniDebug";
 import AppReady from "@/components/AppReady";
 
-const RAW_SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://tamabot.vercel.app";
-// Ensure absolute + no trailing slash for safety
-const SITE = RAW_SITE.replace(/\/$/, "");
+const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://tamabot.vercel.app";
 const ABS = (p: string) => new URL(p, SITE).toString();
 
 export const metadata: Metadata = {
@@ -35,17 +33,24 @@ export const metadata: Metadata = {
   themeColor: "#0a0b10",
   viewport: "width=device-width, initial-scale=1, viewport-fit=cover",
   other: {
-    // Frames — fine to keep
+    // ✅ Farcaster Mini App (static in HTML)
+    "x-miniapp-name": "TamaBot — On-Chain Farcaster Pet",
+    "x-miniapp-image": ABS("/og.png"),
+    "x-miniapp-url": SITE,
+
+    // ✅ Frame meta (keep)
     "fc:frame": "vNext",
     "fc:frame:image": ABS("/og.png"),
     "fc:frame:button:1": "Open TamaBot",
     "fc:frame:button:1:action": "post",
+
+    // Some parsers still read this:
     "og:image": ABS("/og.png"),
   },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  // Legacy miniapp embed (keep: some clients still read this)
+  // Legacy miniapp embed (harmless; some clients still read it)
   const miniAppEmbed = {
     version: "1",
     imageUrl: ABS("/og.png"),
@@ -64,22 +69,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <head>
-        {/* ✅ Official Farcaster Mini App SDK v2 */}
+        {/* ✅ Official Farcaster Mini App SDK */}
         <script async src="https://miniapps.farcaster.xyz/sdk/v2.js"></script>
-
-        {/* (Optional) Base MiniKit – harmless no-op on web */}
-        <script async src="https://cdn.jsdelivr.net/npm/@farcaster/mini-kit/dist/minikit.js"></script>
 
         {/* Icons */}
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
-        {/* ✅ New-style Mini App meta (matches your PoT pattern) */}
-        <meta name="x-miniapp-name" content="TamaBot — On-Chain Farcaster Pet" />
-        <meta name="x-miniapp-image" content={ABS("/og.png")} />
-        <meta name="x-miniapp-url" content={SITE} />
-
-        {/* Legacy embed (safe) */}
+        {/* Legacy embed meta (safe to keep) */}
         <meta name="fc:miniapp" content={JSON.stringify(miniAppEmbed)} />
 
         {/* iOS PWA niceties */}
@@ -87,7 +84,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="format-detection" content="telephone=no" />
 
-        {/* 🔔 Ultra-early ready pings to mark the app "alive" for the host */}
+        {/* Early ready pings (covers multiple host shapes) */}
         <script
           id="fc-miniapp-ready"
           dangerouslySetInnerHTML={{
@@ -100,8 +97,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     try { window.farcaster?.actions?.ready?.(); } catch(e){}
     try { window.farcaster?.miniapp?.sdk?.actions?.ready?.(); } catch(e){}
     try { window.Farcaster?.mini?.sdk?.actions?.ready?.(); } catch(e){}
-    attempts++;
-    if (attempts >= maxAttempts) { done = true; try{ clearInterval(iv); }catch(_){} }
+    attempts++; if (attempts >= maxAttempts) { try{ clearInterval(iv); }catch(_){} done = true; }
   }
   var iv = setInterval(ping, 150);
   ping();
@@ -115,16 +111,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
 
       <body className="min-h-screen bg-[#0a0b10] text-white antialiased">
-        {/* Client-side ready after React mounts */}
+        {/* Client “ready” after React mounts */}
         <AppReady />
 
         <Providers>
           <Nav />
-          {/* Avoid nested <main> inside pages */}
           <main className="mx-auto max-w-6xl px-4 pb-16 pt-6">{children}</main>
         </Providers>
 
-        {/* Debug badge (shows when NEXT_PUBLIC_MINI_DEBUG=true) */}
+        {/* Debug badge (respects NEXT_PUBLIC_MINI_DEBUG) */}
         <MiniDebug />
       </body>
     </html>
