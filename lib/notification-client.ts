@@ -51,5 +51,5 @@ export async function sendFrameNotification({
     return { state: "success" };
   }
 
-  return { state: "error", error: bodyJson });
+  return { state: "error", error: bodyJson };
 }
