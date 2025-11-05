@@ -1,32 +1,30 @@
-// lib/notifications.ts
-import type { FrameNotificationDetails } from "@farcaster/frame-sdk";
+import type { FrameNotificationDetails } from "./frame-notifications";
 import { redis } from "./redis";
 
-const KEY_PREFIX = "tamabot:miniapp";
+const notificationServiceKey = "minikit";
 
-const keyForUser = (fid: number) => `${KEY_PREFIX}:user:${fid}`;
+function getUserNotificationDetailsKey(fid: number): string {
+  return `${notificationServiceKey}:user:${fid}`;
+}
 
 export async function getUserNotificationDetails(
   fid: number
 ): Promise<FrameNotificationDetails | null> {
-  try {
-    return (await redis.get(keyForUser(fid))) as FrameNotificationDetails | null;
-  } catch {
-    return null;
-  }
+  if (!redis) return null;
+  return await redis.get<FrameNotificationDetails>(
+    getUserNotificationDetailsKey(fid)
+  );
 }
 
 export async function setUserNotificationDetails(
   fid: number,
   notificationDetails: FrameNotificationDetails
 ): Promise<void> {
-  try {
-    await redis.set(keyForUser(fid), notificationDetails);
-  } catch {}
+  if (!redis) return;
+  await redis.set(getUserNotificationDetailsKey(fid), notificationDetails);
 }
 
 export async function deleteUserNotificationDetails(fid: number): Promise<void> {
-  try {
-    await redis.del(keyForUser(fid));
-  } catch {}
+  if (!redis) return;
+  await redis.del(getUserNotificationDetailsKey(fid));
 }
