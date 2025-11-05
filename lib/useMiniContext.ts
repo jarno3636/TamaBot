@@ -48,6 +48,11 @@ const persistFid = (fid: number) => {
   } catch {}
 };
 
+// ✅ tiny type guard prevents "never"
+function hasNumericFid(x: any): x is { fid: number } {
+  return !!x && typeof x.fid === "number" && Number.isFinite(x.fid);
+}
+
 export function useMiniContext() {
   const [loading, setLoading] = useState(true);
   const [inMini, setInMini] = useState(false);
@@ -96,13 +101,15 @@ export function useMiniContext() {
 
         // 5) Short postMessage race
         if (!bestUser?.fid) {
-          let pmUser: MiniUser | null = null;
+          let pmUser: MiniUser | undefined; // ← note: undefined (not null) union keeps TS happy
           const onMsg = (ev: MessageEvent) => {
             try {
               const d: any = ev?.data ?? ev;
               const raw = d?.context?.user ?? d?.user ?? (typeof d === "string" ? JSON.parse(d) : null);
               const u = normUser(raw);
-              if (u?.fid && alive.current) pmUser = u;
+              if (hasNumericFid(u) && alive.current) {
+                pmUser = u; // assign once we’re sure it’s the right shape
+              }
             } catch {}
           };
           window.addEventListener("message", onMsg);
@@ -112,7 +119,11 @@ export function useMiniContext() {
           } catch {}
           await new Promise((r) => setTimeout(r, 900));
           window.removeEventListener("message", onMsg);
-          if (pmUser?.fid) bestUser = pmUser;
+
+          // ✅ guarded read avoids "never"
+          if (hasNumericFid(pmUser)) {
+            bestUser = pmUser;
+          }
         }
 
         // 6) Final fallback (web/dev)
