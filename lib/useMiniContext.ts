@@ -1,14 +1,9 @@
 // lib/useMiniContext.ts
 "use client";
-
 import { useEffect, useRef, useState } from "react";
 
-/** ------ Shapes ------ */
 type MiniUserRaw = { fid?: number | string; username?: string; pfpUrl?: string; pfp_url?: string };
 export type MiniUser = { fid?: number; username?: string; pfpUrl?: string };
-
-// ✅ Strict variant used only after we’ve verified fid is a number
-type MiniUserStrict = { fid: number; username?: string; pfpUrl?: string };
 
 type MiniSdk = {
   isInMiniApp?: (timeoutMs?: number) => Promise<boolean>;
@@ -17,7 +12,6 @@ type MiniSdk = {
   actions?: { ready?: () => Promise<void> | void };
 };
 
-/** ------ Utils ------ */
 const toNum = (v: unknown): number | null => {
   const n = Number((v as any) ?? NaN);
   return Number.isFinite(n) && n > 0 ? n : null;
@@ -26,13 +20,13 @@ const toNum = (v: unknown): number | null => {
 const normUser = (raw: any): MiniUser | null => {
   if (!raw) return null;
   const u = raw.user ?? raw;
-  return u
-    ? {
-        fid: toNum(u.fid) ?? undefined,
-        username: u.username ?? undefined,
-        pfpUrl: u.pfpUrl ?? u.pfp_url ?? undefined,
-      }
-    : null;
+  if (!u) return null;
+  const id = toNum(u.fid);
+  return {
+    fid: id ?? undefined,
+    username: u.username ?? undefined,
+    pfpUrl: u.pfpUrl ?? u.pfp_url ?? undefined,
+  };
 };
 
 const readStoredFid = (): number | null => {
@@ -54,7 +48,6 @@ const persistFid = (fid: number) => {
   } catch {}
 };
 
-/** ------ Hook ------ */
 export function useMiniContext() {
   const [loading, setLoading] = useState(true);
   const [inMini, setInMini] = useState(false);
@@ -63,22 +56,20 @@ export function useMiniContext() {
   const [capabilities, setCapabilities] = useState<string[] | null>(null);
 
   const alive = useRef(true);
-  useEffect(() => () => void (alive.current = false), []);
+  useEffect(() => () => { alive.current = false; }, []);
 
   useEffect(() => {
     (async () => {
       try {
-        // 1) Dynamic import (safe in builds)
+        // 1) Dynamic import; do not throw
         let sdk: MiniSdk | null = null;
         try {
           const mod: any = await import("@farcaster/miniapp-sdk");
           sdk = (mod?.sdk ?? mod?.default ?? null) as MiniSdk | null;
-        } catch {
-          sdk = null;
-        }
+        } catch { sdk = null; }
 
-        // 2) Official detection
-        const isMini = (await (sdk?.isInMiniApp?.(150).catch(() => false))) || false;
+        // 2) Official detection (fast + cached)
+        const isMini = (await (sdk?.isInMiniApp?.(200).catch(() => false))) || false;
         setInMini(isMini);
 
         // 3) Ready ping (non-blocking)
@@ -89,9 +80,8 @@ export function useMiniContext() {
           ]);
         } catch {}
 
-        // 4) Prefer official context + capabilities
+        // 4) Prefer official context
         let bestUser: MiniUser | null = null;
-
         if (isMini) {
           try {
             const c = sdk?.context;
@@ -101,27 +91,20 @@ export function useMiniContext() {
           try {
             const caps = await sdk?.getCapabilities?.();
             if (Array.isArray(caps)) setCapabilities(caps);
-          } catch {
-            setCapabilities(null);
-          }
+          } catch { setCapabilities(null); }
         }
 
-        // 5) Race a postMessage context
+        // 5) Short postMessage race
         if (!bestUser?.fid) {
-          // ✅ Make pmUser strictly typed *only after* fid is validated
-          let pmUser: MiniUserStrict | null = null;
-
+          let pmUser: MiniUser | null = null;
           const onMsg = (ev: MessageEvent) => {
             try {
               const d: any = ev?.data ?? ev;
               const raw = d?.context?.user ?? d?.user ?? (typeof d === "string" ? JSON.parse(d) : null);
               const u = normUser(raw);
-              if (u?.fid && typeof u.fid === "number" && alive.current) {
-                pmUser = { fid: u.fid, username: u.username, pfpUrl: u.pfpUrl };
-              }
+              if (u?.fid && alive.current) pmUser = u;
             } catch {}
           };
-
           window.addEventListener("message", onMsg);
           try {
             window.parent?.postMessage?.({ type: "farcaster:context:request" }, "*");
@@ -129,9 +112,7 @@ export function useMiniContext() {
           } catch {}
           await new Promise((r) => setTimeout(r, 900));
           window.removeEventListener("message", onMsg);
-
-          // ✅ No optional read; pmUser has required `fid: number` if set
-          if (pmUser) bestUser = pmUser;
+          if (pmUser?.fid) bestUser = pmUser;
         }
 
         // 6) Final fallback (web/dev)
@@ -141,7 +122,6 @@ export function useMiniContext() {
         }
 
         if (!alive.current) return;
-
         setUser(bestUser);
         setFid(bestUser?.fid ?? null);
         if (bestUser?.fid) persistFid(bestUser.fid);
