@@ -3,135 +3,150 @@
 
 import { useEffect, useRef, useState } from "react";
 
-/* ---------------- Types ---------------- */
-type MiniUserRaw = {
-  fid?: number | string;
-  username?: string;
-  pfpUrl?: string;
-  pfp_url?: string;
+/** ------ Shapes ------ */
+type MiniUserRaw = { fid?: number | string; username?: string; pfpUrl?: string; pfp_url?: string };
+export type MiniUser = { fid?: number; username?: string; pfpUrl?: string };
+
+type MiniSdk = {
+  // from @farcaster/miniapp-sdk
+  isInMiniApp?: (timeoutMs?: number) => Promise<boolean>;
+  getCapabilities?: () => Promise<string[]>;
+  context?: any | Promise<any> | (() => any | Promise<any>);
+  actions?: { ready?: () => Promise<void> | void };
 };
 
-type MiniUser = { fid?: number; username?: string; pfpUrl?: string };
+/** ------ Utils ------ */
+const toNum = (v: unknown): number | null => {
+  const n = Number((v as any) ?? NaN);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
 
-/* --------------- Utils ---------------- */
-function num(n: unknown): number | null {
-  const x = Number((n as any) ?? NaN);
-  return Number.isFinite(x) && x > 0 ? x : null;
-}
+const normUser = (raw: any): MiniUser | null => {
+  if (!raw) return null;
+  const u = raw.user ?? raw;
+  return u
+    ? {
+        fid: toNum(u.fid) ?? undefined,
+        username: u.username ?? undefined,
+        pfpUrl: u.pfpUrl ?? u.pfp_url ?? undefined,
+      }
+    : null;
+};
 
-function readStoredFid(): number | null {
+const readStoredFid = (): number | null => {
   try {
-    const v =
-      localStorage.getItem("fid") ||
-      sessionStorage.getItem("fid") ||
-      new URLSearchParams(location.search).get("fid") ||
-      "";
-    return num(v);
-  } catch {
-    return null;
-  }
-}
+    const q = new URLSearchParams(location.search).get("fid");
+    if (q) return toNum(q);
+    const l = localStorage.getItem("fid");
+    if (l) return toNum(l);
+    const s = sessionStorage.getItem("fid");
+    if (s) return toNum(s);
+  } catch {}
+  return null;
+};
 
-function persistFid(fid: number) {
+const persistFid = (fid: number) => {
   try {
     localStorage.setItem("fid", String(fid));
     document.cookie = `fid=${encodeURIComponent(String(fid))}; path=/; samesite=lax; max-age=${60 * 60 * 24 * 365}`;
   } catch {}
-}
+};
 
-const isObj = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object";
-
-/* --------------- Hook ---------------- */
+/** ------ Hook ------ */
 export function useMiniContext() {
   const [loading, setLoading] = useState(true);
   const [inMini, setInMini] = useState(false);
   const [fid, setFid] = useState<number | null>(null);
   const [user, setUser] = useState<MiniUser | null>(null);
+  const [capabilities, setCapabilities] = useState<string[] | null>(null);
 
   const alive = useRef(true);
-  useEffect(() => () => { alive.current = false; }, []);
+  useEffect(() => () => void (alive.current = false), []);
 
   useEffect(() => {
     (async () => {
       try {
-        // Detect “embedded / webview”
-        const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
-        const looksLikeWebView = /Warpcast|Farcaster|FarcasterMini|Base\\sApp|Coinbase|ReactNativeWebView/i.test(ua);
-        setInMini(looksLikeWebView || (() => { try { return window.self !== window.top; } catch { return true; } })());
-
-        /* ---------- 1) Canonical path: v2 SDK global ---------- */
-        let ctxUser: MiniUserRaw | null = null;
+        // 1) Dynamic import (won’t break builds if package is missing)
+        let sdk: MiniSdk | null = null;
         try {
-          const fc: any = (window as any).Farcaster?.mini?.sdk;
-          if (fc?.context) {
-            const ctx = await fc.context(); // { user: {...} } in v2
-            const raw = (ctx && (ctx.user || (ctx.requesterUser ?? null))) || null;
-            if (raw) ctxUser = raw as MiniUserRaw;
-          }
-        } catch {}
-
-        /* ---------- 2) Older globals (rare, but harmless) ---------- */
-        if (!ctxUser) {
-          const g: any = (window as any);
-          const maybe = g.farcaster?.user || g.farcaster?.context?.user || null;
-          if (maybe) ctxUser = maybe as MiniUserRaw;
+          const mod: any = await import("@farcaster/miniapp-sdk");
+          sdk = (mod?.sdk ?? mod?.default ?? null) as MiniSdk | null;
+        } catch {
+          sdk = null;
         }
 
-        /* ---------- 3) Message bridge fallback ---------- */
-        let pmFid: number | null = null;
-        let pmUser: MiniUserRaw | null = null;
+        // 2) Official detection (fast, cached in SDK)
+        const isMini = (await (sdk?.isInMiniApp?.(150).catch(() => false))) || false;
+        setInMini(isMini);
 
-        const onMsg = (ev: MessageEvent) => {
+        // 3) Tell host we’re ready (don’t hang if not supported)
+        try {
+          await Promise.race([
+            Promise.resolve(sdk?.actions?.ready?.()),
+            new Promise((r) => setTimeout(r, 800)),
+          ]);
+        } catch {}
+
+        // 4) If we’re in a Mini App, try official context + capabilities first
+        let bestUser: MiniUser | null = null;
+
+        if (isMini) {
+          // Context can be a function or a promise/value
+          let ctx: any = undefined;
           try {
-            const d: any = ev?.data ?? ev;
-            const maybe = d?.context?.user || d?.user || (typeof d === "string" ? JSON.parse(d) : null);
-            if (isObj(maybe)) {
-              const f = num((maybe as any).fid);
-              if (f && alive.current) {
-                pmFid = f;
-                pmUser = maybe as MiniUserRaw;
-                setFid(f);
-                persistFid(f);
-                setUser({ fid: f, username: (maybe as any).username, pfpUrl: (maybe as any).pfpUrl || (maybe as any).pfp_url });
-              }
-            }
-          } catch {}
-        };
+            const c = sdk?.context;
+            ctx = typeof c === "function" ? await c() : await c;
+          } catch {
+            ctx = undefined;
+          }
+          bestUser = normUser(ctx);
 
-        window.addEventListener("message", onMsg);
-        try {
-          window.parent?.postMessage?.({ type: "farcaster:context:request" }, "*");
-          (window as any).ReactNativeWebView?.postMessage?.(JSON.stringify({ type: "context:request" }));
-        } catch {}
-
-        await new Promise(r => setTimeout(r, 900));
-        window.removeEventListener("message", onMsg);
-
-        /* ---------- 4) Resolve best source ---------- */
-        const fromStorage = readStoredFid();
-        const resolvedUser = (pmUser ?? ctxUser) || null;
-        const resolvedFid = num(resolvedUser?.fid) ?? pmFid ?? fromStorage ?? null;
-
-        if (alive.current) {
-          setFid(resolvedFid);
-          if (resolvedFid) persistFid(resolvedFid);
-          setUser(
-            resolvedUser
-              ? {
-                  fid: num(resolvedUser.fid) ?? undefined,
-                  username: resolvedUser.username,
-                  pfpUrl: resolvedUser.pfpUrl || resolvedUser.pfp_url,
-                }
-              : null
-          );
+          // Capabilities are optional
+          try {
+            const caps = await sdk?.getCapabilities?.();
+            if (Array.isArray(caps)) setCapabilities(caps);
+          } catch {
+            setCapabilities(null);
+          }
         }
+
+        // 5) Race in a postMessage context (some hosts only reply this way)
+        if (!bestUser?.fid) {
+          let pmUser: MiniUser | null = null;
+          const onMsg = (ev: MessageEvent) => {
+            try {
+              const d: any = ev?.data ?? ev;
+              const raw = d?.context?.user ?? d?.user ?? (typeof d === "string" ? JSON.parse(d) : null);
+              const u = normUser(raw);
+              if (u?.fid && alive.current) pmUser = u;
+            } catch {}
+          };
+          window.addEventListener("message", onMsg);
+          try {
+            window.parent?.postMessage?.({ type: "farcaster:context:request" }, "*");
+            (window as any).ReactNativeWebView?.postMessage?.(JSON.stringify({ type: "context:request" }));
+          } catch {}
+          await new Promise((r) => setTimeout(r, 900));
+          window.removeEventListener("message", onMsg);
+          if (pmUser?.fid) bestUser = pmUser;
+        }
+
+        // 6) Final fallback for web/dev
+        if (!bestUser?.fid) {
+          const stored = readStoredFid();
+          if (stored) bestUser = { fid: stored };
+        }
+
+        if (!alive.current) return;
+
+        setUser(bestUser);
+        setFid(bestUser?.fid ?? null);
+        if (bestUser?.fid) persistFid(bestUser.fid);
       } finally {
         if (alive.current) setLoading(false);
       }
     })();
   }, []);
 
-  return { loading, inMini, fid, user };
+  return { loading, inMini, fid, user, capabilities };
 }
-
-export type { MiniUser };
