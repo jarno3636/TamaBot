@@ -38,7 +38,7 @@ export default function HomeClient() {
         <section className="grid gap-4">
           <div className="glass glass-pad relative flex justify-center">
             <Image
-              src="/logo.png"
+              src="/logo.PNG"
               alt="TamaBot"
               width={200}
               height={200}
