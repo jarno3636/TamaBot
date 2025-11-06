@@ -1,7 +1,7 @@
 // app/providers.tsx
 "use client";
 
-// ---- small polyfill so BigInt serializes cleanly in React Query cache ----
+// ---- BigInt -> JSON polyfill for React Query cache ----
 declare global { interface BigInt { toJSON(): string } }
 if (typeof (BigInt.prototype as any).toJSON !== "function") {
   (BigInt.prototype as any).toJSON = function () { return this.toString(); };
@@ -24,17 +24,22 @@ import { RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
 import { base } from "viem/chains";
 import { wagmiConfig } from "@/lib/wallet";
 
-// Farcaster Mini App / OnchainKit
-import { MiniKitProvider } from "@coinbase/onchainkit/minikit";
+// MiniKit + your context
+import { MiniKitProvider as _MiniKitProvider } from "@coinbase/onchainkit/minikit";
 import { MiniAppProvider } from "@/contexts/miniapp-context";
+
+// ✅ Cast MiniKitProvider to accept our props (types lag behind runtime)
+const MiniKitProvider = _MiniKitProvider as unknown as React.ComponentType<{
+  projectId?: string;
+  chain?: any;
+  notificationProxyUrl?: string;
+  children?: React.ReactNode;
+}>;
 
 // ---------- React Query setup ----------
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: {
-      staleTime: 10_000,
-      refetchOnWindowFocus: false,
-    },
+    queries: { staleTime: 10_000, refetchOnWindowFocus: false },
   },
 });
 function serializeData(data: unknown): unknown {
@@ -55,7 +60,6 @@ function NeynarProviderLazy({ children }: { children: ReactNode }) {
     (typeof window !== "undefined" && process.env.NEXT_PUBLIC_NEYNAR_CLIENT_ID) ||
     process.env.NEXT_PUBLIC_NEYNAR_CLIENT_ID;
 
-  // Mark not-ready by default (optional debug flag your other code can read)
   useEffect(() => {
     if (typeof window !== "undefined") (window as any).__NEYNAR_READY__ = false;
   }, []);
