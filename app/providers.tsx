@@ -1,6 +1,8 @@
 "use client";
 
 import "@rainbow-me/rainbowkit/styles.css";
+import "@coinbase/onchainkit/styles.css";
+
 import React, { useMemo, type ReactNode, useEffect } from "react";
 import {
   QueryClient,
@@ -12,18 +14,13 @@ import { WagmiProvider, useReconnect } from "wagmi";
 import { RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
 import { base } from "viem/chains";
 import { wagmiConfig } from "@/lib/wallet";
+import { OnchainKitProvider } from "@coinbase/onchainkit";
 import { MiniKitProvider } from "@coinbase/onchainkit/minikit";
 
 // ---- BigInt JSON polyfill ---------------------------------------------------
-declare global {
-  interface BigInt {
-    toJSON(): string;
-  }
-}
+declare global { interface BigInt { toJSON(): string } }
 if (typeof (BigInt.prototype as any).toJSON !== "function") {
-  (BigInt.prototype as any).toJSON = function () {
-    return this.toString();
-  };
+  (BigInt.prototype as any).toJSON = function () { return this.toString(); };
 }
 
 // ---- React Query setup ------------------------------------------------------
@@ -37,9 +34,7 @@ function serializeData(data: unknown) {
 // ---- Auto-reconnect wallet on mount ----------------------------------------
 function AutoReconnect() {
   const { reconnect } = useReconnect();
-  useEffect(() => {
-    reconnect();
-  }, [reconnect]);
+  useEffect(() => { reconnect(); }, [reconnect]);
   return null;
 }
 
@@ -56,29 +51,23 @@ function NeynarProviderLazy({ children }: { children: ReactNode }) {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const mod = require("@neynar/react");
     Provider = mod?.NeynarProvider ?? mod?.default ?? null;
-  } catch {
-    // no-op: render children without Neynar if the package isn't present
-  }
+  } catch {}
   if (!Provider) return <>{children}</>;
   return <Provider clientId={clientId}>{children}</Provider>;
 }
 
 // ---- Root Providers ---------------------------------------------------------
 export default function Providers({ children }: { children: ReactNode }) {
-  const theme = useMemo(
-    () =>
-      darkTheme({
-        accentColor: "#79ffe1",
-        accentColorForeground: "#0a0b12",
-        borderRadius: "large",
-        overlayBlur: "small",
-      }),
-    []
-  );
+  const theme = useMemo(() => darkTheme({
+    accentColor: "#79ffe1",
+    accentColorForeground: "#0a0b12",
+    borderRadius: "large",
+    overlayBlur: "small",
+  }), []);
 
   const dehydratedState = dehydrate(queryClient, { serializeData });
 
-  // Read API key for MiniKit. Prefer the new var, but fall back to the old one.
+  // Put your CDP Client API Key here (fallback keeps your old var working)
   const onchainkitApiKey =
     (process.env.NEXT_PUBLIC_ONCHAINKIT_API_KEY ||
       process.env.NEXT_PUBLIC_MINIKIT_PROJECT_ID ||
@@ -89,21 +78,22 @@ export default function Providers({ children }: { children: ReactNode }) {
       <HydrationBoundary state={dehydratedState}>
         <WagmiProvider config={wagmiConfig}>
           <AutoReconnect />
-          <RainbowKitProvider
-            theme={theme}
-            initialChain={base}
-            modalSize="compact"
-            appInfo={{ appName: "TamaBot" }}
-          >
-            {/* MiniKitProvider expects apiKey (NOT projectId) */}
-            <MiniKitProvider
-              apiKey={onchainkitApiKey}
-              chain={base}
-              notificationProxyUrl="/api/notification"
+          <OnchainKitProvider apiKey={onchainkitApiKey} chain={base}>
+            <RainbowKitProvider
+              theme={theme}
+              initialChain={base}
+              modalSize="compact"
+              appInfo={{ appName: "TamaBot" }}
             >
-              <NeynarProviderLazy>{children}</NeynarProviderLazy>
-            </MiniKitProvider>
-          </RainbowKitProvider>
+              {/* MiniKitProvider does NOT take apiKey. Keep chain + (optional) notificationProxyUrl */}
+              <MiniKitProvider
+                chain={base}
+                notificationProxyUrl="/api/notification"
+              >
+                <NeynarProviderLazy>{children}</NeynarProviderLazy>
+              </MiniKitProvider>
+            </RainbowKitProvider>
+          </OnchainKitProvider>
         </WagmiProvider>
       </HydrationBoundary>
     </QueryClientProvider>
