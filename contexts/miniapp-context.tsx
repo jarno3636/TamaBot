@@ -1,113 +1,144 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 
-type MiniEnv =
-  | "none"          // normal web
-  | "farcaster_v2"  // window.farcaster.miniapp.sdk
-  | "farcaster_v1"  // window.Farcaster.mini.sdk (older)
-  | "minikit";      // @coinbase/onchainkit/minikit (MiniKitProvider)
+type MiniEnv = "none" | "warpcast" | "hosted";
+type MiniUser = { fid: number } | null;
 
-type MiniState = {
-  inMini: boolean;
-  env: MiniEnv;
-  isReady: boolean;
-  user?: unknown | null;           // whatever the host yields
+export type MiniState = {
+  inMini: boolean;         // true when we’re actually inside Warpcast (or forced)
+  env: MiniEnv;            // which environment we detected
+  isReady: boolean;        // SDK says ready (or forced)
+  user: MiniUser;          // best-effort user (if available)
   forceDemo: (on: boolean) => void;
+  // compatibility alias
+  isFrameReady?: boolean;
 };
 
-const Ctx = createContext<MiniState>({
-  inMini: false,
-  env: "none",
-  isReady: false,
-  user: null,
-  forceDemo: () => {},
-});
+const Ctx = createContext<MiniState | null>(null);
 
-function detectEnv(): MiniEnv {
-  // v2 (current)
-  // @ts-ignore
-  if (typeof window !== "undefined" && window.farcaster?.miniapp?.sdk) return "farcaster_v2";
-  // legacy
-  // @ts-ignore
-  if (typeof window !== "undefined" && window.Farcaster?.mini?.sdk)   return "farcaster_v1";
-  // MiniKit (OnchainKit)
-  // @ts-ignore
-  if (typeof window !== "undefined" && window.miniKit?.getUser)       return "minikit";
-  return "none";
+function uaSaysWarpcast() {
+  if (typeof navigator === "undefined") return false;
+  return /Warpcast|Farcaster|FarcasterMini/i.test(navigator.userAgent || "");
+}
+
+function getQueryFlag(name: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const u = new URL(window.location.href);
+    return ["1","true","yes","on"].includes((u.searchParams.get(name) || "").toLowerCase());
+  } catch { return false; }
 }
 
 export function MiniAppProvider({ children }: { children: React.ReactNode }) {
+  const [demo, setDemo] = useState(false);
   const [env, setEnv] = useState<MiniEnv>("none");
+  const [inMini, setInMini] = useState(false);
   const [isReady, setReady] = useState(false);
-  const [user, setUser] = useState<any>(null);
-  const [demo, setDemo] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    const sp = new URLSearchParams(window.location.search);
-    return sp.has("demo") || sp.has("miniapp");
-  });
+  const [user, setUser] = useState<MiniUser>(null);
 
-  // Poll for injected SDKs (Warpcast/Base app injects after load)
+  const readyOnce = useRef(false);
+
+  // Allow local override: ?demo=1 makes everything behave as if inside mini app
   useEffect(() => {
-    let tries = 0;
-    const max = 80; // ~12s
-    const iv = setInterval(async () => {
-      const e = detectEnv();
-      setEnv(e);
+    if (getQueryFlag("demo")) setDemo(true);
+  }, []);
 
-      // ping "ready" if available
-      try {
-        // @ts-ignore
-        window.farcaster?.actions?.ready?.();
-      } catch {}
-      try {
-        // @ts-ignore
-        window.farcaster?.miniapp?.sdk?.actions?.ready?.();
-      } catch {}
-      try {
-        // @ts-ignore
-        window.Farcaster?.mini?.sdk?.actions?.ready?.();
-      } catch {}
+  // Detect presence of the Mini SDKs and Warpcast host
+  useEffect(() => {
+    const isWarpcastUA = uaSaysWarpcast();
+    const hasV2 = typeof (window as any)?.farcaster?.miniapp?.sdk !== "undefined";
+    const hasLegacy = typeof (window as any)?.Farcaster?.mini?.sdk !== "undefined";
+    const hasAny = hasV2 || hasLegacy;
 
-      // try to grab a user if the host exposes it
+    setEnv(isWarpcastUA ? "warpcast" : hasAny ? "hosted" : "none");
+    setInMini(isWarpcastUA || hasAny || demo);
+
+    // If nothing is present and not demo, don’t loop
+    if (!isWarpcastUA && !hasAny && !demo) return;
+
+    // Wire up “ready” from whichever SDK exists
+    function markReady() {
+      if (!readyOnce.current) {
+        readyOnce.current = true;
+        setReady(true);
+      }
+    }
+
+    // v2 SDK (preferred)
+    try {
+      const v2 = (window as any)?.farcaster?.miniapp?.sdk;
+      if (v2?.actions?.ready) {
+        // proactively ping ready repeatedly (hosts vary)
+        const iv = setInterval(() => {
+          try { v2.actions.ready(); } catch {}
+        }, 150);
+        // and also listen to an event if exposed
+        try { v2.on?.("ready", markReady); } catch {}
+        // safety timeout: assume ready after 2.5s even if no event
+        const t = setTimeout(markReady, 2500);
+        return () => { clearInterval(iv); clearTimeout(t); try { v2.off?.("ready", markReady); } catch {} };
+      }
+    } catch {}
+
+    // Legacy SDK shim
+    try {
+      const legacy = (window as any)?.Farcaster?.mini?.sdk;
+      if (legacy?.actions?.ready) {
+        const iv = setInterval(() => {
+          try { legacy.actions.ready(); } catch {}
+        }, 150);
+        const t = setTimeout(markReady, 2500);
+        return () => { clearInterval(iv); clearTimeout(t); };
+      }
+    } catch {}
+
+    // Demo fallback: if demo is on, mark ready after a tick
+    if (demo) {
+      const t = setTimeout(markReady, 200);
+      return () => clearTimeout(t);
+    }
+  }, [demo]);
+
+  // Best-effort user detection (safe no-op elsewhere)
+  useEffect(() => {
+    async function tryGetUser() {
       try {
-        if (e === "farcaster_v2") {
-          // @ts-ignore
-          const u = await window.farcaster?.miniapp?.sdk?.user?.getCurrent?.();
-          if (u) setUser(u);
-        } else if (e === "farcaster_v1") {
-          // @ts-ignore
-          const u = await window.Farcaster?.mini?.sdk?.user?.getCurrent?.();
-          if (u) setUser(u);
-        } else if (e === "minikit") {
-          // @ts-ignore
-          const u = await window.miniKit?.getUser?.();
-          if (u) setUser(u);
+        // v2 example: some hosts expose a user/get method; if not, skip silently
+        const v2 = (window as any)?.farcaster?.miniapp?.sdk;
+        if (v2?.user?.getUser) {
+          const u = await v2.user.getUser().catch(() => null);
+          if (u?.fid) setUser({ fid: Number(u.fid) });
+          return;
         }
       } catch {}
+      try {
+        // legacy example
+        const legacy = (window as any)?.Farcaster?.mini?.sdk;
+        const u = await legacy?.user?.getUser?.().catch(() => null);
+        if (u?.fid) setUser({ fid: Number(u.fid) });
+      } catch {}
+    }
+    if (inMini) tryGetUser();
+  }, [inMini]);
 
-      // mark ready if any env is present
-      if (e !== "none") setReady(true);
-
-      if (++tries >= max || (e !== "none" && isReady)) clearInterval(iv);
-    }, 150);
-
-    return () => clearInterval(iv);
-  }, [isReady]);
-
-  const value = useMemo<MiniState>(() => {
-    return {
-      inMini: demo || env !== "none",
-      env,
-      isReady: demo || isReady,
-      user,
-      forceDemo: (on: boolean) => setDemo(on),
-    };
-  }, [demo, env, isReady, user]);
+  const value: MiniState = useMemo(() => ({
+    inMini: inMini || demo,
+    env,
+    isReady: isReady || demo,
+    user,
+    forceDemo: (on: boolean) => setDemo(on),
+    isFrameReady: isReady || demo, // alias for older code
+  }), [demo, env, inMini, isReady, user]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 export function useMiniApp() {
-  return useContext(Ctx);
+  const ctx = useContext(Ctx);
+  if (!ctx) {
+    // Safe default so app won’t crash before provider mounts
+    return { inMini: false, env: "none" as MiniEnv, isReady: false, user: null, forceDemo: () => {}, isFrameReady: false };
+  }
+  return ctx;
 }
