@@ -4,26 +4,33 @@ import { createPublicClient, http } from "viem";
 import { base } from "viem/chains";
 
 /** ---------- RPC (on-chain) ---------- */
-const rpc = createPublicClient({
+// Try server-first key names, then public, then hard fallback to mainnet Base
+const RPC_URL =
+  process.env.CHAIN_RPC_BASE ||
+  process.env.NEXT_PUBLIC_CHAIN_RPC_BASE ||
+  process.env.NEXT_PUBLIC_RPC_URL ||
+  process.env.RPC_URL ||
+  "https://mainnet.base.org";
+
+export const rpc = createPublicClient({
   chain: base,
-  transport: http(process.env.NEXT_PUBLIC_RPC_URL || process.env.RPC_URL)
+  transport: http(RPC_URL),
 });
 
 /** ---------- Supabase (lazy, server-only) ---------- */
 let _supa: SupabaseClient | null = null;
 
 export function hasSupabase() {
-  // Using new key naming (Publishable + Secret); we need the Secret on server
   return Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SECRET_KEY);
 }
 
 function supa(): SupabaseClient {
   if (!_supa) {
     const url = process.env.SUPABASE_URL;
-    const secret = process.env.SUPABASE_SECRET_KEY; // server-only
+    const secret = process.env.SUPABASE_SECRET_KEY;
     if (!url || !secret) throw new Error("Supabase env missing");
     _supa = createClient(url, secret, {
-      auth: { persistSession: false, autoRefreshToken: false }
+      auth: { persistSession: false, autoRefreshToken: false },
     });
   }
   return _supa!;
@@ -46,31 +53,36 @@ const ABI = [
           { name: "energy", type: "uint64" },
           { name: "cleanliness", type: "uint64" },
           { name: "lastTick", type: "uint64" },
-          { name: "fid", type: "uint64" }
+          { name: "fid", type: "uint64" },
         ],
-        type: "tuple"
-      }
-    ]
-  }
+        type: "tuple",
+      },
+    ],
+  },
 ] as const;
 
-/** ---------- On-chain read ---------- */
+/** ---------- On-chain read (tolerant to viem tuple shape) ---------- */
 export async function getOnchainState(address: `0x${string}` | string, id: number) {
-  const [s]: any = await rpc.readContract({
+  // viem may return an array tuple OR an object with named keys
+  const raw: any = await rpc.readContract({
     address: address as `0x${string}`,
     abi: ABI,
     functionName: "getState",
-    args: [BigInt(id)]
+    args: [BigInt(id)],
   });
+
+  // If viem returns `[tuple]`, unwrap; otherwise assume named object
+  const s = Array.isArray(raw) ? raw[0] : raw;
+
   return {
-    level: Number(s.level),
-    xp: Number(s.xp),
-    mood: Number(s.mood),
-    hunger: Number(s.hunger),
-    energy: Number(s.energy),
-    cleanliness: Number(s.cleanliness),
-    lastTick: Number(s.lastTick),
-    fid: Number(s.fid)
+    level: Number(s.level ?? 0),
+    xp: Number(s.xp ?? 0),
+    mood: Number(s.mood ?? 0),
+    hunger: Number(s.hunger ?? 0),
+    energy: Number(s.energy ?? 0),
+    cleanliness: Number(s.cleanliness ?? 0),
+    lastTick: Number(s.lastTick ?? 0),
+    fid: Number(s.fid ?? 0),
   };
 }
 
@@ -85,7 +97,7 @@ export async function getPersona(id: number) {
   return {
     label: data.persona?.label,
     bio: data.persona?.bio,
-    previewCid: data.preview_cid
+    previewCid: data.preview_cid,
   };
 }
 
