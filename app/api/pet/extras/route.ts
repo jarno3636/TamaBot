@@ -3,8 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createPublicClient, encodeAbiParameters, http } from "viem";
 import { base } from "viem/chains";
 import { TAMABOT_CORE } from "@/lib/abi";
+import { hasSupabase, upsertPersona } from "@/lib/data";
 
-export const runtime = "edge";
+export const runtime = "nodejs"; // <-- switch to nodejs so Supabase works
+export const dynamic = "force-dynamic";
 
 const RPC =
   process.env.CHAIN_RPC_BASE ||
@@ -77,6 +79,7 @@ export async function GET(req: NextRequest) {
     const action = url.searchParams.get("action"); // "score" | "persona"
     const idStr = url.searchParams.get("id") || "";
     const fidStr = url.searchParams.get("fid") || "";
+    const doSave = (url.searchParams.get("save") ?? "1") !== "0"; // default save ON
 
     const client = createPublicClient({ chain: base, transport: http(RPC) });
 
@@ -116,14 +119,13 @@ export async function GET(req: NextRequest) {
       if (!/^\d+$/.test(String(idStr))) return bad("invalid id");
       const id = BigInt(idStr);
 
-      // NOTE: viem returns tuples as **objects** with named props in many cases.
-      // Handle both array and object to be future-proof.
+      // viem may return tuple as array or object with named props
       const raw = (await client.readContract({
         address: TAMABOT_CORE.address,
         abi: TAMABOT_CORE.abi,
         functionName: "getState",
         args: [id],
-      })) as unknown;
+      })) as any;
 
       let level: bigint | number = 0n,
         xp: bigint | number = 0n,
@@ -135,19 +137,16 @@ export async function GET(req: NextRequest) {
         fid: bigint | number = 0n;
 
       if (Array.isArray(raw)) {
-        // tuple array shape
-        [level, xp, mood, hunger, energy, cleanliness, lastTick, fid] = raw as any[];
+        [level, xp, mood, hunger, energy, cleanliness, lastTick, fid] = raw;
       } else if (raw && typeof raw === "object") {
-        // named fields shape
-        const o = raw as any;
-        level = o.level;
-        xp = o.xp;
-        mood = Number(o.mood);
-        hunger = o.hunger;
-        energy = o.energy;
-        cleanliness = o.cleanliness;
-        lastTick = o.lastTick;
-        fid = o.fid;
+        level = raw.level;
+        xp = raw.xp;
+        mood = Number(raw.mood);
+        hunger = raw.hunger;
+        energy = raw.energy;
+        cleanliness = raw.cleanliness;
+        lastTick = raw.lastTick;
+        fid = raw.fid;
       } else {
         return bad("unexpected state shape", 500);
       }
@@ -166,7 +165,18 @@ export async function GET(req: NextRequest) {
 
       const text = await aiPersonaFromState(data);
 
-      return new NextResponse(JSON.stringify({ text }), {
+      // Optional save (default ON) if Supabase is configured
+      let saved = false;
+      if (doSave && hasSupabase() && text) {
+        try {
+          await upsertPersona({ tokenId: data.id, text, label: "Auto", source: "openai" });
+          saved = true;
+        } catch {
+          saved = false;
+        }
+      }
+
+      return new NextResponse(JSON.stringify({ text, saved }), {
         status: 200,
         headers: {
           "Content-Type": "application/json",
