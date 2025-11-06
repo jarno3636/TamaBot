@@ -63,7 +63,6 @@ const ABI = [
 
 /** ---------- On-chain read (tolerant to viem tuple shape) ---------- */
 export async function getOnchainState(address: `0x${string}` | string, id: number) {
-  // viem may return an array tuple OR an object with named keys
   const raw: any = await rpc.readContract({
     address: address as `0x${string}`,
     abi: ABI,
@@ -71,18 +70,18 @@ export async function getOnchainState(address: `0x${string}` | string, id: numbe
     args: [BigInt(id)],
   });
 
-  // If viem returns `[tuple]`, unwrap; otherwise assume named object
-  const s = Array.isArray(raw) ? raw[0] : raw;
+  // viem can return either an array tuple, or an object with named props.
+  const s = Array.isArray(raw) ? raw : raw;
 
   return {
-    level: Number(s.level ?? 0),
-    xp: Number(s.xp ?? 0),
-    mood: Number(s.mood ?? 0),
-    hunger: Number(s.hunger ?? 0),
-    energy: Number(s.energy ?? 0),
-    cleanliness: Number(s.cleanliness ?? 0),
-    lastTick: Number(s.lastTick ?? 0),
-    fid: Number(s.fid ?? 0),
+    level: Number((s.level ?? s[0]) ?? 0),
+    xp: Number((s.xp ?? s[1]) ?? 0),
+    mood: Number((s.mood ?? s[2]) ?? 0),
+    hunger: Number((s.hunger ?? s[3]) ?? 0),
+    energy: Number((s.energy ?? s[4]) ?? 0),
+    cleanliness: Number((s.cleanliness ?? s[5]) ?? 0),
+    lastTick: Number((s.lastTick ?? s[6]) ?? 0),
+    fid: Number((s.fid ?? s[7]) ?? 0),
   };
 }
 
@@ -108,4 +107,38 @@ export async function getSpriteCid(id: number) {
     .eq("token_id", id)
     .maybeSingle();
   return data?.current_image_cid || "";
+}
+
+/** ---------- NEW: upsert persona text into pets ---------- */
+export async function upsertPersona(opts: {
+  tokenId: number;
+  text: string;
+  label?: string;
+  source?: string;
+  previewCid?: string | null;
+}) {
+  const { tokenId, text, label = "Auto", source = "openai", previewCid = null } = opts;
+  const db = supa();
+  const now = new Date().toISOString();
+
+  const persona = {
+    label,
+    bio: text,
+    source,
+    created_at: now,
+  };
+
+  const payload: Record<string, any> = {
+    token_id: tokenId,
+    persona,
+    updated_at: now,
+  };
+  if (previewCid) payload.preview_cid = previewCid;
+
+  const { error } = await db
+    .from("pets")
+    .upsert(payload, { onConflict: "token_id" });
+
+  if (error) throw new Error(error.message);
+  return true;
 }
