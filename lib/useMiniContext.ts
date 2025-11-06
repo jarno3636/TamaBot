@@ -1,6 +1,8 @@
 "use client";
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
+} from "react";
 import { useMiniKit } from "@coinbase/onchainkit/minikit";
 
 type MiniUser = {
@@ -21,7 +23,7 @@ type MiniState = {
 const Ctx = createContext<MiniState | null>(null);
 
 export function MiniContextProvider({ children }: { children: React.ReactNode }) {
-  const { context } = useMiniKit(); // may be undefined until MiniKit hydrates
+  const { context } = useMiniKit(); // present when inside Mini
   const [fid, setFid] = useState<number | null>(null);
   const [user, setUser] = useState<MiniUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -38,7 +40,7 @@ export function MiniContextProvider({ children }: { children: React.ReactNode })
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      // 1) Prefer MiniKit context if present
+      // 1) Prefer MiniKit context when inside Mini
       const miniUser = (context as any)?.user;
       if (miniUser?.fid) {
         const f = Number(miniUser.fid);
@@ -49,39 +51,44 @@ export function MiniContextProvider({ children }: { children: React.ReactNode })
           displayName: miniUser.displayName ?? miniUser.display_name ?? null,
           pfpUrl: miniUser.pfpUrl ?? miniUser.pfp_url ?? null,
         });
-        // cache a minimal record for non-mini pages/hooks
         if (typeof localStorage !== "undefined") {
-          localStorage.setItem("fc:minUser", JSON.stringify({
-            fid: f,
-            username: miniUser.username ?? null,
-            pfpUrl: miniUser.pfpUrl ?? miniUser.pfp_url ?? null,
-          }));
+          localStorage.setItem(
+            "fc:minUser",
+            JSON.stringify({
+              fid: f,
+              username: miniUser.username ?? null,
+              pfpUrl: miniUser.pfpUrl ?? miniUser.pfp_url ?? null,
+            }),
+          );
         }
         return;
       }
 
-      // 2) Fallback: query param (?fid=1234)
+      // 2) Fallback via query param (?fid=1234)
       const qfid = readQueryFid();
       if (qfid) {
         setFid(qfid);
-        // try to hydrate the user from your existing API proxy (optional)
         try {
           const r = await fetch(`/api/neynar/user/${qfid}`);
           const j = await r.json();
           const p = j?.result?.user;
-          setUser(p ? {
-            fid: qfid,
-            username: p?.username ?? null,
-            displayName: p?.display_name ?? null,
-            pfpUrl: p?.pfp_url ?? null,
-          } : { fid: qfid });
+          setUser(
+            p
+              ? {
+                  fid: qfid,
+                  username: p?.username ?? null,
+                  displayName: p?.display_name ?? null,
+                  pfpUrl: p?.pfp_url ?? null,
+                }
+              : { fid: qfid },
+          );
         } catch {
           setUser({ fid: qfid });
         }
         return;
       }
 
-      // 3) Fallback: persisted last user (from prior Mini session)
+      // 3) Persisted from a previous Mini session
       if (typeof localStorage !== "undefined") {
         const raw = localStorage.getItem("fc:minUser");
         if (raw) {
@@ -100,20 +107,20 @@ export function MiniContextProvider({ children }: { children: React.ReactNode })
         }
       }
 
-      // Nothing available
       setFid(null);
       setUser(null);
     } finally {
       setLoading(false);
+      first.current = false;
     }
   }, [context, readQueryFid]);
 
   useEffect(() => {
-    // initial load + react to MiniKit context changes
     refresh();
-    // re-check when page is shown again (mini resumes)
     const onShow = () => refresh();
-    const onVis = () => { if (!document.hidden) refresh(); };
+    const onVis = () => {
+      if (!document.hidden) refresh();
+    };
     window.addEventListener("pageshow", onShow);
     document.addEventListener("visibilitychange", onVis);
     return () => {
@@ -123,13 +130,16 @@ export function MiniContextProvider({ children }: { children: React.ReactNode })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [context]);
 
-  const value = useMemo<MiniState>(() => ({
-    fid,
-    user,
-    inMini: !!context,
-    loading,
-    refresh,
-  }), [fid, user, loading, context, refresh]);
+  const value = useMemo<MiniState>(
+    () => ({
+      fid,
+      user,
+      inMini: !!context,
+      loading,
+      refresh,
+    }),
+    [fid, user, loading, context, refresh],
+  );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -137,7 +147,6 @@ export function MiniContextProvider({ children }: { children: React.ReactNode })
 export function useMiniContext(): MiniState {
   const v = useContext(Ctx);
   if (!v) {
-    // Developer hint if the provider is missing
     if (process.env.NODE_ENV !== "production") {
       // eslint-disable-next-line no-console
       console.warn("useMiniContext called outside of MiniContextProvider");
