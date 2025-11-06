@@ -23,7 +23,7 @@ function guessMimeFromPath(p: string, fallback = "application/octet-stream") {
 }
 
 function parseArgs() {
-  // Usage: pnpm pin <tokenId> <level> <spritePath> [previewPath] [--bucket=...] [--gateway=...] [--dry]
+  // Usage: pnpm pin:sprite <tokenId> <level> <spritePath> [previewPath] [--bucket=...] [--gateway=...] [--dry]
   const argv = process.argv.slice(2);
   const flags: Record<string, string | boolean> = {};
   const pos: string[] = [];
@@ -55,7 +55,6 @@ async function putAndCid(opts: {
   const { Bucket, Key, Body, ContentType, gateway, dry } = opts;
 
   if (!dry) {
-    // retry up to 3 times
     let lastErr: any;
     for (let i = 0; i < 3; i++) {
       try {
@@ -86,15 +85,11 @@ async function main() {
   const [tId, lvl, spritePath, previewPath] = pos;
 
   if (!tId || !lvl || !spritePath) {
-    console.error("Usage: pnpm pin <tokenId> <level> <spritePath> [previewPath] [--bucket=...] [--gateway=...] [--dry]");
+    console.error("Usage: pnpm pin:sprite <tokenId> <level> <spritePath> [previewPath] [--bucket=...] [--gateway=...] [--dry]");
     process.exit(1);
   }
-  if (!fs.existsSync(spritePath)) {
-    throw new Error(`Sprite not found: ${spritePath}`);
-  }
-  if (previewPath && !fs.existsSync(previewPath)) {
-    throw new Error(`Preview not found: ${previewPath}`);
-  }
+  if (!fs.existsSync(spritePath)) throw new Error(`Sprite not found: ${spritePath}`);
+  if (previewPath && !fs.existsSync(previewPath)) throw new Error(`Preview not found: ${previewPath}`);
 
   const Bucket = String(flags.bucket || process.env.FILEBASE_BUCKET || must("FILEBASE_BUCKET"));
   const gateway = String(flags.gateway || process.env.FILEBASE_GATEWAY_URL || "https://ipfs.filebase.io");
@@ -141,7 +136,6 @@ async function main() {
     dryRun: dry,
   };
 
-  // single clean JSON line for piping
   console.log(JSON.stringify(out, null, 2));
 }
 
