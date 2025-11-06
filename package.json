@@ -11,10 +11,10 @@
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
     "deploy:foundry": "forge script script/Deploy.s.sol:Deploy --rpc-url $RPC_URL --broadcast --verify --etherscan-api-key $ETHERSCAN_KEY",
-
     "filebase:pin": "tsx scripts/filebasePin.ts",
     "pin:sprite": "tsx scripts/pinSprite.ts",
-    "oracle:sign": "tsx scripts/oracleSign.ts"
+    "oracle:sign": "tsx scripts/oracleSign.ts",
+    "backfill": "tsx scripts/backfill.ts --from=1 --to=500 --delayMs=150"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.600.0",
