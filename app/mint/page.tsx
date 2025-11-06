@@ -1,10 +1,8 @@
-// app/mint/page.tsx
-"use client";
+/"use client";
 
 import { Suspense } from "react";
 import MintCard from "@/components/MintCard";
 import { Card, Pill } from "@/components/UI";
-import HostInspect from "@/components/HostInspect";
 
 export const dynamic = "force-dynamic";
 
@@ -33,9 +31,7 @@ export default function MintPage() {
           </Card>
         </section>
       </div>
-
-      {/* 🔍 Temporary debug overlay — remove when done */}
-      <HostInspect />
+      {/* ✅ Removed HostInspect / debug overlay */}
     </main>
   );
 }
