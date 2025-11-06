@@ -6,10 +6,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const runtime = "nodejs";
 
-export async function GET(
-  _req: Request,
-  { params }: { params: { chain: string; address: string; id: string } }
-) {
+export async function GET(_req: Request, { params }: any) {
   // --- normalize params ------------------------------------------------------
   const chain = String(params?.chain || "").toLowerCase();
   const address = String(params?.address || "").toLowerCase();
@@ -56,8 +53,10 @@ export async function GET(
       { trait_type: "Chain",       value: chain },
       { trait_type: "Contract",    value: address },
     ],
-    external_url: site ? `${site}/tamabot/${idNum}` : undefined,
   };
+
+  // external_url optional (good for marketplaces)
+  if (site) (payload as any).external_url = `${site}/tamabot/${idNum}`;
 
   return json(payload, 200, {
     "cache-control": "public, max-age=0, s-maxage=300, stale-while-revalidate=600",
