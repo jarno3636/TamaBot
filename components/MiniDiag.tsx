@@ -3,7 +3,7 @@
 import { useMiniApp } from "@/contexts/miniapp-context";
 
 export default function MiniDiag() {
-  const { inMini, isReady, error, ctx } = useMiniApp(); // ← no sdkOk
+  const { inMini, isReady, ctx } = useMiniApp();
 
   return (
     <div className="rounded-xl border border-white/20 bg-black/70 text-white p-3 text-xs shadow-xl">
@@ -14,12 +14,12 @@ export default function MiniDiag() {
         <Row k="fid" v={ctx?.user?.fid != null ? String(ctx.user.fid) : "—"} />
         <Row k="username" v={ctx?.user?.username ?? "—"} />
         <Row k="client" v={ctx?.client?.platform ?? "—"} />
-        {error ? (
-          <div className="mt-2 text-red-300 break-words">
-            error: {typeof error === "string" ? error : JSON.stringify(error)}
-          </div>
-        ) : null}
       </div>
+      {process.env.NEXT_PUBLIC_MINI_DEBUG === "true" && (
+        <pre className="mt-2 max-h-52 overflow-auto whitespace-pre-wrap text-white/80">
+          {safeStringify(ctx)}
+        </pre>
+      )}
     </div>
   );
 }
@@ -31,4 +31,12 @@ function Row({ k, v }: { k: string; v: string }) {
       <span className="font-mono">{v}</span>
     </div>
   );
+}
+
+function safeStringify(x: unknown) {
+  try {
+    return JSON.stringify(x, null, 2);
+  } catch {
+    return String(x);
+  }
 }
