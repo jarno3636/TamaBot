@@ -1,8 +1,7 @@
-// components/Nav.tsx
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useMiniContext } from "@/lib/useMiniContext";
 import ConnectPill from "@/components/ConnectPill";
@@ -13,7 +12,12 @@ export default function Nav() {
   const [avatar, setAvatar] = useState<string | null>(user?.pfpUrl ?? null);
   const [open, setOpen] = useState(false);
 
-  // fallback avatar via your Neynar proxy if mini didn’t provide a pfp
+  // Ensure avatar follows context updates
+  useEffect(() => {
+    if (user?.pfpUrl) setAvatar(user.pfpUrl);
+  }, [user?.pfpUrl]);
+
+  // Fallback avatar via your Neynar proxy if Mini didn’t provide pfp
   useEffect(() => {
     let ok = true;
     (async () => {
@@ -26,7 +30,9 @@ export default function Nav() {
         if (typeof p === "string") setAvatar(p);
       } catch {}
     })();
-    return () => { ok = false; };
+    return () => {
+      ok = false;
+    };
   }, [fid, avatar]);
 
   const is = (p: string) => (p === "/" ? pathname === "/" : pathname.startsWith(p));
@@ -43,24 +49,29 @@ export default function Nav() {
         className="container mx-auto flex flex-row flex-nowrap items-center justify-between gap-4 px-5 py-6 min-h-[72px]"
         role="navigation"
       >
-        {/* left: avatar */}
-        <a
-          href={fid ? `https://warpcast.com/~/profiles/${fid}` : undefined}
-          className="relative shrink-0 h-14 w-14 rounded-full overflow-hidden border border-white/25 hover:border-white/50 transition"
-          title={fid ? `FID ${fid}` : "Not signed in"}
-          target={fid ? "_blank" : undefined}
-          rel={fid ? "noreferrer" : undefined}
-        >
-          {avatar ? (
-            <Image src={avatar} alt="Farcaster avatar" fill sizes="56px" className="object-cover" />
-          ) : (
-            <span className="absolute inset-0 flex items-center justify-center text-2xl">🥚</span>
+        {/* left: avatar + optional username */}
+        <div className="flex items-center gap-3 min-w-0">
+          <a
+            href={fid ? `https://warpcast.com/~/profiles/${fid}` : undefined}
+            className="relative shrink-0 h-14 w-14 rounded-full overflow-hidden border border-white/25 hover:border-white/50 transition"
+            title={fid ? `FID ${fid}` : "Not signed in"}
+            target={fid ? "_blank" : undefined}
+            rel={fid ? "noreferrer" : undefined}
+          >
+            {avatar ? (
+              <Image src={avatar} alt="Farcaster avatar" fill sizes="56px" className="object-cover" />
+            ) : (
+              <span className="absolute inset-0 flex items-center justify-center text-2xl">🥚</span>
+            )}
+          </a>
+          {user?.username && (
+            <span className="truncate max-w-[40vw] sm:max-w-[240px] text-white/85">@{user.username}</span>
           )}
-        </a>
+        </div>
 
         {/* right: burger */}
         <button
-          onClick={() => setOpen(v => !v)}
+          onClick={() => setOpen((v) => !v)}
           aria-label="Open menu"
           aria-expanded={open}
           className="shrink-0 inline-flex items-center justify-center h-12 w-12 rounded-xl border border-white/15 hover:bg-white/10 transition"
