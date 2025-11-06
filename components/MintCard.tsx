@@ -13,6 +13,26 @@ import { formatEther } from "viem";
 import { useMiniContext } from "@/lib/useMiniContext";
 import ConnectPill from "@/components/ConnectPill";
 
+async function generatePersonaAndSave(id: number) {
+  try {
+    // 1) Ask the server to generate persona text (uses OPENAI_API_KEY on server)
+    const r1 = await fetch(`/api/pet/extras?action=persona&id=${id}`, { cache: "no-store" });
+    const j1 = await r1.json().catch(() => ({} as any));
+    const text: string = j1?.text || "";
+
+    if (!text) return;
+
+    // 2) Persist to Supabase via our save endpoint
+    await fetch("/api/pet/persona", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id, text }),
+    });
+  } catch {
+    // non-fatal; user still gets redirected
+  }
+}
+
 export default function MintCard() {
   const router = useRouter();
   const { address, isConnected } = useAccount();
@@ -53,19 +73,23 @@ export default function MintCard() {
     });
   }
 
-  // After success, resolve token id and redirect
+  // After success, resolve token id
   const { data: tokenId } = useReadContract({
     address: TAMABOT_CORE.address,
     abi: TAMABOT_CORE.abi,
     functionName: "tokenIdByFID",
     args: [BigInt(fidNum || 0)],
-    // only query after tx success & we have a fid
     query: { enabled: Boolean(fidNum && isSuccess) } as any,
   });
 
   useEffect(() => {
     const id = tokenId ? Number(tokenId) : 0;
-    if (isSuccess && id > 0) router.replace(`/tamabot/${id}`);
+    if (isSuccess && id > 0) {
+      // Fire-and-forget persona generation + save;
+      // don't block the redirect.
+      generatePersonaAndSave(id);
+      router.replace(`/tamabot/${id}`);
+    }
   }, [isSuccess, tokenId, router]);
 
   // --- UI -------------------------------------------------------------------
@@ -103,9 +127,7 @@ export default function MintCard() {
       {!isConnected ? (
         <div className="mt-1">
           <ConnectPill />
-          <p className="mt-2 text-sm text-white/70">
-            Connect on Base to mint.
-          </p>
+          <p className="mt-2 text-sm text-white/70">Connect on Base to mint.</p>
         </div>
       ) : (
         <div className="cta-row" style={{ marginTop: 4 }}>
