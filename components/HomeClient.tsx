@@ -2,12 +2,11 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useMiniKit } from "@coinbase/onchainkit/minikit";
+import { useMiniContext } from "@/lib/useMiniContext";
 
 export default function HomeClient() {
-  // Newer onchainkit: no `isMiniApp` prop on the hook result.
-  const { context } = useMiniKit();
-  const isMini = !!context; // true when running inside a Mini App / embedded
+  const { user, fid, inMini } = useMiniContext();
+  const isMini = inMini;
 
   return (
     <main className="min-h-[100svh] bg-[#0a0b10] text-white pb-16">
@@ -19,7 +18,9 @@ export default function HomeClient() {
 
           <div className="glass glass-pad">
             <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Adopt your TamaBot</h1>
-            <p className="mt-2 text-white/90">Your Farcaster-aware pet that grows with your vibe.</p>
+            <p className="mt-2 text-white/90">
+              Your Farcaster-aware pet that grows with your vibe.
+            </p>
 
             <div className="cta-row mt-4">
               <Link href="/mint" className="btn-pill btn-pill--orange">Mint your pet</Link>
@@ -28,7 +29,7 @@ export default function HomeClient() {
 
             {isMini && (
               <p className="mt-3 text-sm text-white/75">
-                Connected as {context?.user?.username ? `@${context.user.username}` : `FID ${context?.user?.fid ?? "—"}`}
+                Connected as {user?.username ? `@${user.username}` : `FID ${fid ?? "—"}`}
               </p>
             )}
           </div>
