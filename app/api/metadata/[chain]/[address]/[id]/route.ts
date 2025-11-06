@@ -6,19 +6,16 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const runtime = "nodejs";
 
-type Params = {
-  chain: string;
-  address: `0x${string}`;
-  id: string;            // may be "1", "1.json", "1/"
-};
-
-export async function GET(_req: Request, ctx: { params: Params }) {
+export async function GET(
+  _req: Request,
+  { params }: { params: { chain: string; address: string; id: string } }
+) {
   // --- normalize params ------------------------------------------------------
-  const chain = String(ctx?.params?.chain || "").toLowerCase();
-  const address = String(ctx?.params?.address || "").toLowerCase();
+  const chain = String(params?.chain || "").toLowerCase();
+  const address = String(params?.address || "").toLowerCase();
 
   // Accept `/1`, `/1.json`, `/1/` — grab the first integer you see
-  const rawId = String(ctx?.params?.id ?? "");
+  const rawId = String(params?.id ?? "");
   const idMatch = rawId.match(/\d+/);
   const idNum = idMatch ? Number(idMatch[0]) : NaN;
 
@@ -31,7 +28,6 @@ export async function GET(_req: Request, ctx: { params: Params }) {
   }
 
   // --- data fetches ----------------------------------------------------------
-  // On-chain core state (branch by `chain` if you later support more)
   const s = await getOnchainState(address, idNum);
 
   // Optional DB lookups
@@ -64,7 +60,6 @@ export async function GET(_req: Request, ctx: { params: Params }) {
   };
 
   return json(payload, 200, {
-    // light cache OK; marketplaces will revalidate frequently anyway
     "cache-control": "public, max-age=0, s-maxage=300, stale-while-revalidate=600",
   });
 }
