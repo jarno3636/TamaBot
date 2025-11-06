@@ -1,146 +1,154 @@
-// lib/useMiniContext.ts
 "use client";
-import { useEffect, useRef, useState } from "react";
 
-type MiniUserRaw = { fid?: number | string; username?: string; pfpUrl?: string; pfp_url?: string };
-export type MiniUser = { fid?: number; username?: string; pfpUrl?: string };
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useMiniKit } from "@coinbase/onchainkit/minikit";
 
-type MiniSdk = {
-  isInMiniApp?: (timeoutMs?: number) => Promise<boolean>;
-  getCapabilities?: () => Promise<string[]>;
-  context?: any | Promise<any> | (() => any | Promise<any>);
-  actions?: { ready?: () => Promise<void> | void };
+type MiniUser = {
+  fid: number;
+  username?: string | null;
+  displayName?: string | null;
+  pfpUrl?: string | null;
 };
 
-const toNum = (v: unknown): number | null => {
-  const n = Number((v as any) ?? NaN);
-  return Number.isFinite(n) && n > 0 ? n : null;
+type MiniState = {
+  fid: number | null;
+  user: MiniUser | null;
+  inMini: boolean;
+  loading: boolean;
+  refresh: () => Promise<void>;
 };
 
-const normUser = (raw: any): MiniUser | null => {
-  if (!raw) return null;
-  const u = raw.user ?? raw;
-  if (!u) return null;
-  const id = toNum(u.fid);
-  return {
-    fid: id ?? undefined,
-    username: u.username ?? undefined,
-    pfpUrl: u.pfpUrl ?? u.pfp_url ?? undefined,
-  };
-};
+const Ctx = createContext<MiniState | null>(null);
 
-const readStoredFid = (): number | null => {
-  try {
-    const q = new URLSearchParams(location.search).get("fid");
-    if (q) return toNum(q);
-    const l = localStorage.getItem("fid");
-    if (l) return toNum(l);
-    const s = sessionStorage.getItem("fid");
-    if (s) return toNum(s);
-  } catch {}
-  return null;
-};
-
-const persistFid = (fid: number) => {
-  try {
-    localStorage.setItem("fid", String(fid));
-    document.cookie = `fid=${encodeURIComponent(String(fid))}; path=/; samesite=lax; max-age=${60 * 60 * 24 * 365}`;
-  } catch {}
-};
-
-// ✅ tiny type guard prevents "never"
-function hasNumericFid(x: any): x is { fid: number } {
-  return !!x && typeof x.fid === "number" && Number.isFinite(x.fid);
-}
-
-export function useMiniContext() {
-  const [loading, setLoading] = useState(true);
-  const [inMini, setInMini] = useState(false);
+export function MiniContextProvider({ children }: { children: React.ReactNode }) {
+  const { context } = useMiniKit(); // may be undefined until MiniKit hydrates
   const [fid, setFid] = useState<number | null>(null);
   const [user, setUser] = useState<MiniUser | null>(null);
-  const [capabilities, setCapabilities] = useState<string[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const first = useRef(true);
 
-  const alive = useRef(true);
-  useEffect(() => () => { alive.current = false; }, []);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        // 1) Dynamic import; do not throw
-        let sdk: MiniSdk | null = null;
-        try {
-          const mod: any = await import("@farcaster/miniapp-sdk");
-          sdk = (mod?.sdk ?? mod?.default ?? null) as MiniSdk | null;
-        } catch { sdk = null; }
-
-        // 2) Official detection (fast + cached)
-        const isMini = (await (sdk?.isInMiniApp?.(200).catch(() => false))) || false;
-        setInMini(isMini);
-
-        // 3) Ready ping (non-blocking)
-        try {
-          await Promise.race([
-            Promise.resolve(sdk?.actions?.ready?.()),
-            new Promise((r) => setTimeout(r, 800)),
-          ]);
-        } catch {}
-
-        // 4) Prefer official context
-        let bestUser: MiniUser | null = null;
-        if (isMini) {
-          try {
-            const c = sdk?.context;
-            const ctx = typeof c === "function" ? await c() : await c;
-            bestUser = normUser(ctx);
-          } catch {}
-          try {
-            const caps = await sdk?.getCapabilities?.();
-            if (Array.isArray(caps)) setCapabilities(caps);
-          } catch { setCapabilities(null); }
-        }
-
-        // 5) Short postMessage race
-        if (!bestUser?.fid) {
-          let pmUser: MiniUser | undefined; // ← note: undefined (not null) union keeps TS happy
-          const onMsg = (ev: MessageEvent) => {
-            try {
-              const d: any = ev?.data ?? ev;
-              const raw = d?.context?.user ?? d?.user ?? (typeof d === "string" ? JSON.parse(d) : null);
-              const u = normUser(raw);
-              if (hasNumericFid(u) && alive.current) {
-                pmUser = u; // assign once we’re sure it’s the right shape
-              }
-            } catch {}
-          };
-          window.addEventListener("message", onMsg);
-          try {
-            window.parent?.postMessage?.({ type: "farcaster:context:request" }, "*");
-            (window as any).ReactNativeWebView?.postMessage?.(JSON.stringify({ type: "context:request" }));
-          } catch {}
-          await new Promise((r) => setTimeout(r, 900));
-          window.removeEventListener("message", onMsg);
-
-          // ✅ guarded read avoids "never"
-          if (hasNumericFid(pmUser)) {
-            bestUser = pmUser;
-          }
-        }
-
-        // 6) Final fallback (web/dev)
-        if (!bestUser?.fid) {
-          const stored = readStoredFid();
-          if (stored) bestUser = { fid: stored };
-        }
-
-        if (!alive.current) return;
-        setUser(bestUser);
-        setFid(bestUser?.fid ?? null);
-        if (bestUser?.fid) persistFid(bestUser.fid);
-      } finally {
-        if (alive.current) setLoading(false);
-      }
-    })();
+  const readQueryFid = useCallback(() => {
+    if (typeof window === "undefined") return null;
+    const u = new URL(window.location.href);
+    const qfid = u.searchParams.get("fid");
+    const n = qfid ? Number(qfid) : NaN;
+    return Number.isFinite(n) && n > 0 ? n : null;
   }, []);
 
-  return { loading, inMini, fid, user, capabilities };
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      // 1) Prefer MiniKit context if present
+      const miniUser = (context as any)?.user;
+      if (miniUser?.fid) {
+        const f = Number(miniUser.fid);
+        setFid(f);
+        setUser({
+          fid: f,
+          username: miniUser.username ?? null,
+          displayName: miniUser.displayName ?? miniUser.display_name ?? null,
+          pfpUrl: miniUser.pfpUrl ?? miniUser.pfp_url ?? null,
+        });
+        // cache a minimal record for non-mini pages/hooks
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem("fc:minUser", JSON.stringify({
+            fid: f,
+            username: miniUser.username ?? null,
+            pfpUrl: miniUser.pfpUrl ?? miniUser.pfp_url ?? null,
+          }));
+        }
+        return;
+      }
+
+      // 2) Fallback: query param (?fid=1234)
+      const qfid = readQueryFid();
+      if (qfid) {
+        setFid(qfid);
+        // try to hydrate the user from your existing API proxy (optional)
+        try {
+          const r = await fetch(`/api/neynar/user/${qfid}`);
+          const j = await r.json();
+          const p = j?.result?.user;
+          setUser(p ? {
+            fid: qfid,
+            username: p?.username ?? null,
+            displayName: p?.display_name ?? null,
+            pfpUrl: p?.pfp_url ?? null,
+          } : { fid: qfid });
+        } catch {
+          setUser({ fid: qfid });
+        }
+        return;
+      }
+
+      // 3) Fallback: persisted last user (from prior Mini session)
+      if (typeof localStorage !== "undefined") {
+        const raw = localStorage.getItem("fc:minUser");
+        if (raw) {
+          try {
+            const v = JSON.parse(raw);
+            if (v?.fid) {
+              setFid(Number(v.fid));
+              setUser({
+                fid: Number(v.fid),
+                username: v.username ?? null,
+                pfpUrl: v.pfpUrl ?? null,
+              });
+              return;
+            }
+          } catch {}
+        }
+      }
+
+      // Nothing available
+      setFid(null);
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [context, readQueryFid]);
+
+  useEffect(() => {
+    // initial load + react to MiniKit context changes
+    refresh();
+    // re-check when page is shown again (mini resumes)
+    const onShow = () => refresh();
+    const onVis = () => { if (!document.hidden) refresh(); };
+    window.addEventListener("pageshow", onShow);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("pageshow", onShow);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [context]);
+
+  const value = useMemo<MiniState>(() => ({
+    fid,
+    user,
+    inMini: !!context,
+    loading,
+    refresh,
+  }), [fid, user, loading, context, refresh]);
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+export function useMiniContext(): MiniState {
+  const v = useContext(Ctx);
+  if (!v) {
+    // Developer hint if the provider is missing
+    if (process.env.NODE_ENV !== "production") {
+      // eslint-disable-next-line no-console
+      console.warn("useMiniContext called outside of MiniContextProvider");
+    }
+    return {
+      fid: null,
+      user: null,
+      inMini: false,
+      loading: true,
+      refresh: async () => {},
+    };
+  }
+  return v;
 }
