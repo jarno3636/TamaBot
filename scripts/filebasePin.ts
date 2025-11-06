@@ -62,7 +62,6 @@ async function uploadOne(opts: {
   const ContentType = guessMime(Key);
 
   if (!dry) {
-    // simple retry
     let lastErr: any;
     for (let i = 0; i < 3; i++) {
       try {
