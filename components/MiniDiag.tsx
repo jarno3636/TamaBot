@@ -1,9 +1,23 @@
 // components/MiniDiag.tsx
 "use client";
+
 import { useMiniApp } from "@/contexts/miniapp-context";
 
+type MiniLoose = {
+  inMini?: boolean;
+  isReady?: boolean;
+  // allow unknown extra fields without tripping TS
+  [k: string]: unknown;
+};
+
 export default function MiniDiag() {
-  const { inMini, isReady, ctx } = useMiniApp();
+  // read the known keys, but keep a loose handle for optional extras
+  const state = useMiniApp() as unknown as MiniLoose;
+  const inMini = Boolean(state.inMini);
+  const isReady = Boolean(state.isReady);
+
+  // ctx is optional and not part of the strict type; access loosely
+  const ctx = (state as any)?.ctx;
 
   return (
     <div className="rounded-xl border border-white/20 bg-black/70 text-white p-3 text-xs shadow-xl">
@@ -11,15 +25,21 @@ export default function MiniDiag() {
       <div className="space-y-1">
         <Row k="inMini" v={String(inMini)} />
         <Row k="isReady" v={String(isReady)} />
-        <Row k="fid" v={ctx?.user?.fid != null ? String(ctx.user.fid) : "—"} />
-        <Row k="username" v={ctx?.user?.username ?? "—"} />
-        <Row k="client" v={ctx?.client?.platform ?? "—"} />
+        {/* Show ctx-derived rows only if it exists at runtime */}
+        {ctx ? (
+          <>
+            <Row k="fid" v={ctx?.user?.fid != null ? String(ctx.user.fid) : "—"} />
+            <Row k="username" v={ctx?.user?.username ?? "—"} />
+            <Row k="client" v={ctx?.client?.platform ?? "—"} />
+          </>
+        ) : null}
       </div>
-      {process.env.NEXT_PUBLIC_MINI_DEBUG === "true" && (
+
+      {process.env.NEXT_PUBLIC_MINI_DEBUG === "true" && ctx ? (
         <pre className="mt-2 max-h-52 overflow-auto whitespace-pre-wrap text-white/80">
           {safeStringify(ctx)}
         </pre>
-      )}
+      ) : null}
     </div>
   );
 }
