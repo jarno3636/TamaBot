@@ -16,6 +16,7 @@ import { base } from "viem/chains";
 import { wagmiConfig } from "@/lib/wallet";
 import { OnchainKitProvider } from "@coinbase/onchainkit";
 import { MiniKitProvider } from "@coinbase/onchainkit/minikit";
+import { MiniContextProvider } from "@/lib/useMiniContext";
 
 // ---- BigInt JSON polyfill ---------------------------------------------------
 declare global { interface BigInt { toJSON(): string } }
@@ -49,7 +50,7 @@ function NeynarProviderLazy({ children }: { children: ReactNode }) {
   let Provider: any = null;
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const mod = require("@neynar/react");
+    const mod: any = require("@neynar/react");
     Provider = mod?.NeynarProvider ?? mod?.default ?? null;
   } catch {}
   if (!Provider) return <>{children}</>;
@@ -67,7 +68,7 @@ export default function Providers({ children }: { children: ReactNode }) {
 
   const dehydratedState = dehydrate(queryClient, { serializeData });
 
-  // Put your CDP Client API Key here (fallback keeps your old var working)
+  // CDP/OnchainKit API key (fallback keeps old var working)
   const onchainkitApiKey =
     (process.env.NEXT_PUBLIC_ONCHAINKIT_API_KEY ||
       process.env.NEXT_PUBLIC_MINIKIT_PROJECT_ID ||
@@ -85,12 +86,12 @@ export default function Providers({ children }: { children: ReactNode }) {
               modalSize="compact"
               appInfo={{ appName: "TamaBot" }}
             >
-              {/* MiniKitProvider does NOT take apiKey. Keep chain + (optional) notificationProxyUrl */}
-              <MiniKitProvider
-                chain={base}
-                notificationProxyUrl="/api/notification"
-              >
-                <NeynarProviderLazy>{children}</NeynarProviderLazy>
+              {/* MiniKitProvider: no apiKey prop */}
+              <MiniKitProvider chain={base} notificationProxyUrl="/api/notification">
+                {/* Global Farcaster identity (fid/user) available everywhere */}
+                <MiniContextProvider>
+                  <NeynarProviderLazy>{children}</NeynarProviderLazy>
+                </MiniContextProvider>
               </MiniKitProvider>
             </RainbowKitProvider>
           </OnchainKitProvider>
