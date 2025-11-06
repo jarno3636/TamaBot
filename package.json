@@ -32,7 +32,7 @@
     "react-dom": "19.2.0",
     "swr": "2.3.3",
     "viem": "2.21.55",
-    "wagmi": "2.20.0",
+    "wagmi": "2.19.2",
     "pino-pretty": "10.3.1"
   },
   "devDependencies": {
@@ -50,8 +50,8 @@
     "react-dom": "19.2.0",
     "@types/react": "19.0.2",
     "@types/react-dom": "19.0.2",
-    "wagmi": "2.20.0",
-    "@wagmi/core": "2.20.0",
+    "wagmi": "2.19.2",
+    "@wagmi/core": "2.19.2",
     "viem": "2.21.55"
   }
 }
