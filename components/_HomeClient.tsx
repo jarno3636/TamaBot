@@ -1,4 +1,3 @@
-// components/_HomeClient.tsx
 "use client";
 
 import Image from "next/image";
@@ -10,9 +9,8 @@ import SubscribeCallout from "@/components/SubscribeCallout";
 import { useMiniApp } from "@/contexts/miniapp-context";
 
 export default function HomeClient() {
-  const { isFrameReady } = useMiniApp();
+  const { inMini, isReady } = useMiniApp(); // ⬅️ changed
 
-  // Only read window on the client
   const base =
     typeof window !== "undefined"
       ? window.location.origin
@@ -38,7 +36,6 @@ export default function HomeClient() {
       <div className="container pt-6">
         {/* ===== HERO ===== */}
         <section className="grid gap-4">
-          {/* Logo card */}
           <div className="glass glass-pad relative flex justify-center">
             <Image
               src="/logo.png"
@@ -50,7 +47,6 @@ export default function HomeClient() {
             />
           </div>
 
-          {/* Adopt card */}
           <div className="glass glass-pad">
             <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Adopt your TamaBot</h1>
             <p className="mt-2 text-white/90 leading-relaxed">
@@ -67,7 +63,7 @@ export default function HomeClient() {
               <Link href="/my"   className="btn-pill btn-pill--blue">See my pet</Link>
             </div>
 
-            {isFrameReady && (
+            {inMini && isReady && ( // ⬅️ changed
               <div className="mt-5 space-y-3">
                 <FarcasterLogin />
                 <SubscribeCallout />
