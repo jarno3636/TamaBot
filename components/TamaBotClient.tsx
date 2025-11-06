@@ -1,4 +1,4 @@
-// components/TamaBotClient.tsx  (CLIENT COMPONENT)
+// components/TamaBotClient.tsx
 "use client";
 
 import Link from "next/link";
@@ -31,17 +31,13 @@ function toNum(x: unknown): number {
 export default function TamaBotClient({ id }: { id: number }) {
   const validId = Number.isFinite(id) && id > 0;
 
-  // tokenURI (string; no bigint risk)
-  const { data: tokenUri, isLoading: loadingUri } = useReadContract({
-    address: TAMABOT_CORE.address,
-    abi: TAMABOT_CORE.abi,
-    chainId: base.id,
-    functionName: "tokenURI",
-    args: [BigInt(validId ? id : 0)],
-    query: { enabled: validId } as any,
-  });
+  // 🔗 Always prefer our app-served metadata (works even if tokenURI isn't set)
+  const metadataUrl = useMemo(
+    () => (validId ? `/api/metadata/base/${TAMABOT_CORE.address}/${id}.json` : ""),
+    [id, validId]
+  );
 
-  // on-chain state -> safe number mapping
+  // ✅ On-chain state (numbers normalized)
   const { data: sRaw, isLoading: loadingState } = useReadContract({
     address: TAMABOT_CORE.address,
     abi: TAMABOT_CORE.abi,
@@ -66,7 +62,7 @@ export default function TamaBotClient({ id }: { id: number }) {
     };
   }, [sRaw]);
 
-  // Share helpers
+  // ---- Share helpers --------------------------------------------------------
   const shareUrl = typeof window !== "undefined" ? window.location.href : "";
   const shareText = `Meet my TamaBot #${validId ? id : ""} — evolving with my Farcaster vibe.`;
 
@@ -118,18 +114,12 @@ export default function TamaBotClient({ id }: { id: number }) {
               </div>
             </div>
 
-            {/* Pet media & metadata */}
+            {/* Pet media & metadata (served by our API) */}
             <Card className="glass glass-pad">
-              {loadingUri ? (
-                <div className="animate-pulse grid gap-3">
-                  <div className="W-full aspect-square rounded-xl bg-white/10" />
-                  <div className="h-4 w-1/2 rounded bg-white/10" />
-                  <div className="h-4 w-1/3 rounded bg-white/10" />
-                </div>
-              ) : typeof tokenUri === "string" ? (
-                <PetCard tokenURI={tokenUri} />
+              {metadataUrl ? (
+                <PetCard tokenURI={metadataUrl} />
               ) : (
-                <div className="text-sm text-white/80">No metadata found.</div>
+                <div className="text-sm text-white/80">No metadata URL.</div>
               )}
             </Card>
 
