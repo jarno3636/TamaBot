@@ -5,7 +5,9 @@ import Image from "next/image";
 import { useMiniKit } from "@coinbase/onchainkit/minikit";
 
 export default function HomeClient() {
-  const { isMiniApp, context } = useMiniKit();
+  // Newer onchainkit: no `isMiniApp` prop on the hook result.
+  const { context } = useMiniKit();
+  const isMini = !!context; // true when running inside a Mini App / embedded
 
   return (
     <main className="min-h-[100svh] bg-[#0a0b10] text-white pb-16">
@@ -24,7 +26,7 @@ export default function HomeClient() {
               <Link href="/my"   className="btn-pill btn-pill--blue">See my pet</Link>
             </div>
 
-            {isMiniApp && (
+            {isMini && (
               <p className="mt-3 text-sm text-white/75">
                 Connected as {context?.user?.username ? `@${context.user.username}` : `FID ${context?.user?.fid ?? "—"}`}
               </p>
