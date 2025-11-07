@@ -20,7 +20,7 @@ function auth(req: NextRequest) {
   const need = process.env.ADMIN_TOKEN || "";
   if (!need) return true;
   const got = req.headers.get("x-admin-token") || "";
-  return got && got === need;
+  return !!got && got === need;
 }
 function parseBool(v: string | null | undefined): boolean {
   if (!v) return false;
@@ -41,28 +41,24 @@ async function backfillSingle(id: number, full = false) {
   if (!Number.isFinite(id) || id <= 0) throw new Error("invalid-id");
 
   if (full) {
-    // Delegate to finalize (image gen + pin + sprite URI)
-    const res = await fetch(`${baseUrl}/api/tamabot/finalize`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ id }),
+    // Use GET finalize (so you can hit it in a browser, too)
+    const res = await fetch(`${baseUrl}/api/tamabot/finalize?id=${id}`, {
+      method: "GET",
       cache: "no-store",
+      headers: { accept: "application/json" },
     });
     const j = await res.json();
     if (!res.ok || !j?.ok) throw new Error(j?.error || `finalize-failed`);
     return { ok: true, mode: "full", id, ...j };
   }
 
-  // Persona + look only
-  const s = await getOnchainState(
-    TAMABOT_CORE.address as `0x${string}`,
-    Number(id) // <-- use number to match lib/data typing
-  );
+  // 🔧 IMPORTANT: pass NUMBER, not bigint
+  const s = await getOnchainState(TAMABOT_CORE.address as `0x${string}`, Number(id));
   if (!s?.fid) throw new Error("no-fid-on-token");
 
   const look = pickLook(Number(s.fid));
   const personaRaw = await generatePersonaText(s, look.archetype.name);
-  const persona = normalizePersona(personaRaw); // { label, bio }
+  const persona = normalizePersona(personaRaw);
 
   await upsertPersona({
     tokenId: id,
@@ -106,7 +102,7 @@ export async function POST(req: NextRequest) {
   for (let n = start; n <= end; n++) {
     try {
       const r = await backfillSingle(Number(n), Boolean(full));
-      if (r.ok) done.push(n);
+      if ((r as any).ok) done.push(n);
       else throw new Error((r as any).error || "unknown");
     } catch (e: any) {
       failed.push({ id: n, err: String(e?.message || e) });
