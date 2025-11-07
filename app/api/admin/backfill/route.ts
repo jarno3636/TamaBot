@@ -7,6 +7,7 @@ import { generatePersonaText } from "@/lib/persona";
 
 export const runtime = "nodejs";
 
+/* ---------- helpers ---------- */
 const baseUrl =
   process.env.NEXT_PUBLIC_SITE_URL ||
   process.env.SITE_URL ||
@@ -21,8 +22,11 @@ function auth(req: NextRequest) {
   const got = req.headers.get("x-admin-token") || "";
   return got && got === need;
 }
-
-// Normalize generatePersonaText output to { label: string; bio: string }
+function parseBool(v: string | null | undefined): boolean {
+  if (!v) return false;
+  const s = v.toLowerCase();
+  return s === "1" || s === "true" || s === "yes";
+}
 function normalizePersona(raw: any): { label: string; bio: string } {
   if (raw && typeof raw === "object") {
     const label = String(raw.label ?? "Auto");
@@ -32,9 +36,12 @@ function normalizePersona(raw: any): { label: string; bio: string } {
   return { label: "Auto", bio: String(raw ?? "") };
 }
 
+/* ---------- single backfill ---------- */
 async function backfillSingle(id: number, full = false) {
+  if (!Number.isFinite(id) || id <= 0) throw new Error("invalid-id");
+
   if (full) {
-    // Delegate to finalize → does persona + look + image pin + sprite uri
+    // Delegate to the finalize route (does image generation + pin + sprite URI)
     const res = await fetch(`${baseUrl}/api/tamabot/finalize`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -42,19 +49,22 @@ async function backfillSingle(id: number, full = false) {
       cache: "no-store",
     });
     const j = await res.json();
-    if (!res.ok || !j.ok) throw new Error(j.error || `Finalize error for id ${id}`);
+    if (!res.ok || !j?.ok) throw new Error(j?.error || `finalize-failed`);
     return { ok: true, mode: "full", id, ...j };
   }
 
   // Persona + look only
-  const s = await getOnchainState(TAMABOT_CORE.address, id);
+  const s = await getOnchainState(
+    TAMABOT_CORE.address as `0x${string}`,
+    BigInt(id) // <-- viem/bigint token id
+  );
   if (!s?.fid) throw new Error("no-fid-on-token");
 
   const look = pickLook(Number(s.fid));
-  const rawPersona = await generatePersonaText(s, look.archetype.name);
-  const persona = normalizePersona(rawPersona); // { label, bio }
+  const personaRaw = await generatePersonaText(s, look.archetype.name);
+  const persona = normalizePersona(personaRaw); // { label, bio }
 
-  // upsertPersona expects { tokenId, text, ... } where text is the bio string
+  // Your upsertPersona expects { tokenId, text, ... } (text = bio string)
   await upsertPersona({
     tokenId: id,
     text: persona.bio,
@@ -74,6 +84,7 @@ async function backfillSingle(id: number, full = false) {
   return { ok: true, mode: "light", id, fid: Number(s.fid) };
 }
 
+/* ---------- POST: { id } or { from, to, delayMs, full } ---------- */
 export async function POST(req: NextRequest) {
   if (!auth(req)) return ok({ ok: false, error: "unauthorized" }, 401);
 
@@ -87,7 +98,7 @@ export async function POST(req: NextRequest) {
     };
 
   const start = id ?? from ?? 1;
-  const end = id ? id : to ?? from ?? 1;
+  const end = id ?? to ?? from ?? 1;
   const delay = Math.max(0, Number(delayMs || 0));
 
   const done: number[] = [];
@@ -95,7 +106,7 @@ export async function POST(req: NextRequest) {
 
   for (let n = start; n <= end; n++) {
     try {
-      const r = await backfillSingle(n, full);
+      const r = await backfillSingle(Number(n), Boolean(full));
       if (r.ok) done.push(n);
       else throw new Error((r as any).error || "unknown");
     } catch (e: any) {
@@ -105,4 +116,24 @@ export async function POST(req: NextRequest) {
   }
 
   return ok({ ok: true, range: { from: start, to: end }, full, done, failed });
+}
+
+/* ---------- GET: /api/admin/backfill?id=1&full=1 ---------- */
+export async function GET(req: NextRequest) {
+  if (!auth(req)) return ok({ ok: false, error: "unauthorized" }, 401);
+
+  const url = new URL(req.url);
+  const id = Number(url.searchParams.get("id") || "0");
+  const full = parseBool(url.searchParams.get("full"));
+
+  if (!Number.isFinite(id) || id <= 0) {
+    return ok({ ok: false, error: "invalid-id" }, 400);
+  }
+
+  try {
+    const r = await backfillSingle(id, full);
+    return ok({ ok: true, ...r });
+  } catch (e: any) {
+    return ok({ ok: false, error: String(e?.message || e) }, 500);
+  }
 }
