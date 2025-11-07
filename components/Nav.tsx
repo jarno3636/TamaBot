@@ -1,20 +1,23 @@
 // components/Nav.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useMiniContext } from "@/lib/useMiniContext";
+import { useAccount } from "wagmi";
 import ConnectPill from "@/components/ConnectPill";
+
+const ADMIN_WALLET =
+  (process.env.NEXT_PUBLIC_ADMIN_WALLET ||
+    "0xB37c91305F50e3CdB0D7a048a18d7536c9524f58").toLowerCase();
 
 function normalizeAvatar(u?: string | null): string | null {
   if (!u) return null;
   const s = String(u).trim();
   if (!s) return null;
-  // ipfs://CID or ipfs://ipfs/CID
-  if (s.startsWith("ipfs://")) return `https://ipfs.io/ipfs/${s.replace(/^ipfs:\/\/(ipfs\/)?/, "")}`;
-  // protocol-relative
+  if (s.startsWith("ipfs://"))
+    return `https://ipfs.io/ipfs/${s.replace(/^ipfs:\/\/(ipfs\/)?/, "")}`;
   if (/^\/\//.test(s)) return `https:${s}`;
-  // bare host/path
   if (!/^https?:\/\//i.test(s)) return `https://${s}`;
   return s;
 }
@@ -28,22 +31,16 @@ function probeImage(url: string, timeoutMs = 3000): Promise<boolean> {
       if (!done) {
         done = true;
         resolve(ok);
-        // release
         img.onload = null;
         img.onerror = null;
       }
     };
     const t = setTimeout(() => finish(false), timeoutMs);
-    img.onload = () => {
-      clearTimeout(t);
-      finish(true);
-    };
-    img.onerror = () => {
-      clearTimeout(t);
-      finish(false);
-    };
-    // cache-bust lightly to avoid stale 403 placeholders
-    const bust = url.includes("?") ? `${url}&cb=${Date.now() % 10000}` : `${url}?cb=${Date.now() % 10000}`;
+    img.onload = () => { clearTimeout(t); finish(true); };
+    img.onerror = () => { clearTimeout(t); finish(false); };
+    const bust = url.includes("?")
+      ? `${url}&cb=${Date.now() % 10000}`
+      : `${url}?cb=${Date.now() % 10000}`;
     img.decoding = "async";
     img.referrerPolicy = "no-referrer";
     img.src = bust;
@@ -53,6 +50,10 @@ function probeImage(url: string, timeoutMs = 3000): Promise<boolean> {
 export default function Nav() {
   const pathname = usePathname();
   const { fid, user } = useMiniContext();
+
+  // wallet (for admin gating)
+  const { address } = useAccount();
+  const isAdmin = (address || "").toLowerCase() === ADMIN_WALLET;
 
   const [avatar, setAvatar] = useState<string | null>(normalizeAvatar(user?.pfpUrl));
   const [loadingAvatar, setLoadingAvatar] = useState<boolean>(!!avatar);
@@ -85,9 +86,7 @@ export default function Nav() {
         /* no-op */
       }
     })();
-    return () => {
-      ok = false;
-    };
+    return () => { ok = false; };
   }, [fid, avatar]);
 
   // Validate the avatar actually loads; otherwise fall back to egg
@@ -102,7 +101,7 @@ export default function Nav() {
       const ok = await probeImage(avatar, 3000);
       if (!cancelled) {
         if (!ok) {
-          setAvatar(null);   // 👉 triggers 🥚 fallback
+          setAvatar(null);   // 🥚 fallback
           setLoadingAvatar(false);
         } else {
           setLoadingAvatar(false);
@@ -145,11 +144,8 @@ export default function Nav() {
                 decoding="async"
               />
             ) : (
-              // 🥚 fallback
               <span className="absolute inset-0 flex items-center justify-center text-2xl">🥚</span>
             )}
-
-            {/* subtle loading shimmer while we probe */}
             {loadingAvatar && (
               <span className="absolute inset-0 animate-pulse bg-white/5" aria-hidden />
             )}
@@ -182,6 +178,19 @@ export default function Nav() {
             <a href="/mint"  onClick={() => setOpen(false)} className={`nav-pill ${is("/mint") ? "nav-pill--active" : ""}`}>Mint</a>
             <a href="/my"    onClick={() => setOpen(false)} className={`nav-pill ${is("/my") ? "nav-pill--active" : ""}`}>My&nbsp;Pet</a>
             <a href="/about" onClick={() => setOpen(false)} className={`nav-pill ${is("/about") ? "nav-pill--active" : ""}`}>About</a>
+
+            {/* Admin (wallet-gated) */}
+            {isAdmin && (
+              <a
+                href="/admin"
+                onClick={() => setOpen(false)}
+                className={`nav-pill ${is("/admin") ? "nav-pill--active" : ""}`}
+                title="Admin Tools"
+              >
+                Admin
+              </a>
+            )}
+
             <div className="pt-4 mt-2 border-t border-white/10">
               <ConnectPill />
             </div>
