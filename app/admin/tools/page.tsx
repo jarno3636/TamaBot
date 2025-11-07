@@ -1,10 +1,11 @@
+// app/admin/tools/page.tsx
 "use client";
 
 import React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type RunResult =
-  | { ok: true; already?: boolean; id: number; fid?: number; pinned?: boolean }
+  | { ok: true; already?: boolean; id: number; fid?: number; pinned?: boolean; mode?: "full" | "light" }
   | { ok: false; error: string };
 
 export default function AdminToolsPage() {
@@ -13,6 +14,7 @@ export default function AdminToolsPage() {
   const [fromId, setFromId] = useState<string>("1");
   const [toId, setToId] = useState<string>("10");
   const [delayMs, setDelayMs] = useState<string>("150");
+  const [fullMode, setFullMode] = useState<boolean>(false);
 
   const [busy, setBusy] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
@@ -43,16 +45,22 @@ export default function AdminToolsPage() {
     setBusy(true);
     setLogs([]);
     try {
-      const url = new URL("/api/admin/run-backfill", window.location.origin);
+      const url = new URL("/api/admin/backfill", window.location.origin);
       url.searchParams.set("id", singleId);
+      if (fullMode) url.searchParams.set("full", "1");
 
       const res = await fetch(url.toString(), {
+        method: "GET",
         headers: { "x-admin-token": adminToken || "" },
         cache: "no-store",
       });
       const j = (await res.json()) as RunResult & Record<string, any>;
       if (j.ok) {
-        addLog(`✅ id=${j.id} ok${j.already ? " (already)" : ""}${j.fid ? ` fid=${j.fid}` : ""}`);
+        addLog(
+          `✅ id=${j.id} ok${j.already ? " (already)" : ""}${j.fid ? ` fid=${j.fid}` : ""}${
+            j.mode ? ` mode=${j.mode}` : ""
+          }${j.pinned ? " (pinned image)" : ""}`
+        );
       } else {
         addLog(`❌ id=${singleId} error: ${j.error || "unknown"}`);
       }
@@ -73,6 +81,7 @@ export default function AdminToolsPage() {
         from: Number(fromId),
         to: Number(toId),
         delayMs: Number(delayMs || "150"),
+        full: Boolean(fullMode),
       };
       const res = await fetch("/api/admin/backfill", {
         method: "POST",
@@ -85,11 +94,12 @@ export default function AdminToolsPage() {
       const j = (await res.json()) as {
         ok: boolean;
         range?: { from: number; to: number };
+        full?: boolean;
         done: number[];
         failed: { id: number; err: string }[];
       } & Record<string, any>;
       if (j.ok) {
-        addLog(`✅ range ok from=${j.range?.from} to=${j.range?.to}`);
+        addLog(`✅ range ok from=${j.range?.from} to=${j.range?.to} full=${j.full ? "yes" : "no"}`);
         addLog(`done: ${j.done?.join(", ") || "(none)"}`);
         if (j.failed?.length) {
           for (const f of j.failed) addLog(`❌ id=${f.id} err=${f.err}`);
@@ -124,7 +134,7 @@ export default function AdminToolsPage() {
 
       <section className="glass glass-pad space-y-4">
         <h2 className="text-lg font-semibold">Backfill a single token</h2>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <input
             className="px-3 py-2 rounded-lg bg-black/30 border border-white/15"
             placeholder="token id (e.g. 42)"
@@ -132,6 +142,14 @@ export default function AdminToolsPage() {
             onChange={(e) => setSingleId(e.target.value.trim())}
             inputMode="numeric"
           />
+          <label className="inline-flex items-center gap-2 text-white/80">
+            <input
+              type="checkbox"
+              checked={fullMode}
+              onChange={(e) => setFullMode(e.target.checked)}
+            />
+            <span>Full mode (generate & pin image)</span>
+          </label>
           <button
             onClick={runSingle}
             disabled={!canRunSingle || busy}
@@ -142,7 +160,8 @@ export default function AdminToolsPage() {
           </button>
         </div>
         <p className="text-sm text-white/70">
-          Calls <code>/api/admin/run-backfill?id=…</code> which generates persona + look and saves to Supabase.
+          Calls <code>/api/admin/backfill?id=…{fullMode ? "&full=1" : ""}</code>. Full mode also
+          generates & pins the image and sets the sprite URI.
         </p>
       </section>
 
@@ -171,6 +190,16 @@ export default function AdminToolsPage() {
             inputMode="numeric"
           />
         </div>
+
+        <label className="inline-flex items-center gap-2 text-white/80">
+          <input
+            type="checkbox"
+            checked={fullMode}
+            onChange={(e) => setFullMode(e.target.checked)}
+          />
+          <span>Full mode for range</span>
+        </label>
+
         <button
           onClick={runRange}
           disabled={!canRunRange || busy}
@@ -181,7 +210,7 @@ export default function AdminToolsPage() {
         </button>
         <p className="text-sm text-white/70">
           Calls <code>POST /api/admin/backfill</code> with{" "}
-          <code>{'{ from, to, delayMs }'}</code>.
+          <code>{'{ from, to, delayMs, full }'}</code>.
         </p>
       </section>
 
