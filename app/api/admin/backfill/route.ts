@@ -1,3 +1,4 @@
+// app/api/admin/backfill/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getOnchainState, upsertPersona, upsertLook } from "@/lib/data";
 import { pickLook } from "@/lib/archetypes";
@@ -11,7 +12,7 @@ function json(data: any, code = 200) {
 }
 function auth(req: NextRequest) {
   const need = process.env.ADMIN_TOKEN || "";
-  if (!need) return true; // no token set => open (dev)
+  if (!need) return true;
   const got = req.headers.get("x-admin-token") || "";
   return got && got === need;
 }
@@ -30,11 +31,17 @@ export async function POST(req: NextRequest) {
     try {
       const s = await getOnchainState(TAMABOT_CORE.address, id);
       if (!s?.fid) throw new Error("no fid");
+
       const look = pickLook(s.fid);
       const persona = await generatePersonaText(s, look.archetype.name);
 
       try {
-        await upsertPersona(id, persona);
+        await upsertPersona({
+          tokenId: id,
+          text: persona.bio,       // store the bio text
+          label: persona.label,    // and the label
+          source: "openai",
+        });
         await upsertLook(id, {
           archetypeId: look.archetype.id,
           baseColor: look.base,
@@ -47,7 +54,6 @@ export async function POST(req: NextRequest) {
     } catch (e: any) {
       failed.push({ id, err: String(e?.message || e) });
     }
-    // small delay to be polite to OpenAI
     await new Promise(r => setTimeout(r, 120));
   }
 
