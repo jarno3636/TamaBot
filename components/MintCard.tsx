@@ -1,28 +1,37 @@
+// components/MintCard.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import {
   useAccount,
+  useChainId,
   useReadContract,
   useWriteContract,
   useWaitForTransactionReceipt,
 } from "wagmi";
 import { useRouter } from "next/navigation";
-import { TAMABOT_CORE } from "@/lib/abi";
+import { base } from "viem/chains";
 import { formatEther } from "viem";
+import { TAMABOT_CORE } from "@/lib/abi";
 import { useMiniContext } from "@/lib/useMiniContext";
 import ConnectPill from "@/components/ConnectPill";
 
-async function tryFinalize(id: number, fid?: number | null) {
-  // If you wire /api/tamabot/finalize, this will run; otherwise it silently no-ops.
+/** Call the finalize endpoint the way your API expects: GET with ?id= */
+async function tryFinalize(id: number) {
   try {
-    const url = `/api/tamabot/finalize?id=${id}${fid ? `&fid=${fid}` : ""}`;
-    const r = await fetch(url, { method: "POST" });
-    if (r.ok) return true;
-  } catch {}
-  return false;
+    const r = await fetch(`/api/tamabot/finalize?id=${id}`, {
+      method: "GET",
+      headers: { accept: "application/json" },
+      cache: "no-store",
+    });
+    const j = await r.json().catch(() => ({}));
+    return Boolean(r.ok && j?.ok);
+  } catch {
+    return false;
+  }
 }
 
+/** Fallback: persona-only pipeline if finalize isn’t wired */
 async function generatePersonaAndSave(id: number) {
   try {
     const r1 = await fetch(`/api/pet/extras?action=persona&id=${id}`, { cache: "no-store" });
@@ -39,73 +48,94 @@ async function generatePersonaAndSave(id: number) {
 
 export default function MintCard() {
   const router = useRouter();
-  const { isConnected } = useAccount();
+  const { address } = useAccount();
+  const chainId = useChainId();
   const { fid: detectedFid } = useMiniContext();
 
-  // --- FID handling ---------------------------------------------------------
+  // FID field (prefill from Mini)
   const [fid, setFid] = useState<string>("");
   useEffect(() => {
     if (detectedFid && !fid) setFid(String(detectedFid));
   }, [detectedFid, fid]);
-
   const fidNum = /^\d+$/.test(fid) ? Number(fid) : null;
-  const canMint = useMemo(() => Boolean(isConnected && fidNum !== null), [isConnected, fidNum]);
 
-  // --- Read contract data ---------------------------------------------------
+  // Read mint fee
   const { data: fee } = useReadContract({
-    address: TAMABOT_CORE.address,
+    address: TAMABOT_CORE.address as `0x${string}`,
     abi: TAMABOT_CORE.abi,
     functionName: "mintFee",
+    query: { refetchOnWindowFocus: false },
   });
-  const feeEth = fee ? formatEther(fee as bigint) : "0";
+  const feeEth = fee ? formatEther(fee as bigint) : "…";
 
-  // --- Mint write + receipt -------------------------------------------------
+  // Check if FID already minted
+  const { data: existingTokenId, refetch: refetchExisting } = useReadContract({
+    address: TAMABOT_CORE.address as `0x${string}`,
+    abi: TAMABOT_CORE.abi,
+    functionName: "tokenIdByFID",
+    args: fidNum ? [BigInt(fidNum)] : undefined,
+    enabled: !!fidNum,
+    query: { refetchOnWindowFocus: false },
+  });
+
+  // Write: mint
   const { writeContract, data: hash, error: werr, isPending } = useWriteContract();
   const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({ hash });
 
+  const alreadyMinted =
+    typeof existingTokenId === "bigint" && existingTokenId > 0n ? Number(existingTokenId) : null;
+
+  const canMint = useMemo(() => {
+    if (!address) return false;
+    if (chainId !== base.id) return false;
+    if (fidNum === null) return false;
+    if (!fee) return false;
+    if (alreadyMinted) return false;
+    return true;
+  }, [address, chainId, fidNum, fee, alreadyMinted]);
+
   function onMint() {
-    if (!canMint) return;
+    if (!canMint || !fee || fidNum === null) return;
     writeContract({
-      address: TAMABOT_CORE.address,
+      address: TAMABOT_CORE.address as `0x${string}`,
       abi: TAMABOT_CORE.abi,
-      functionName: "mint",
-      args: [BigInt(fidNum!)],
-      value: (fee as bigint) ?? 0n,
+      functionName: "mint",                  // payable mint(uint64 fid)
+      args: [BigInt(fidNum)],
+      value: fee as bigint,                  // ✅ send exact mintFee
+      chainId: base.id,
     });
   }
 
-  // After success, resolve token id
-  const { data: tokenId } = useReadContract({
-    address: TAMABOT_CORE.address,
-    abi: TAMABOT_CORE.abi,
-    functionName: "tokenIdByFID",
-    args: [BigInt(fidNum || 0)],
-    query: { enabled: Boolean(fidNum && isSuccess) } as any,
-  });
-
+  // After success, resolve token id, finalize art/persona, then route
   const [finalizing, setFinalizing] = useState(false);
-
   useEffect(() => {
-    const id = tokenId ? Number(tokenId) : 0;
-    if (isSuccess && id > 0) {
-      (async () => {
-        setFinalizing(true);
-        // Prefer a one-shot finalize if you’ve implemented it; otherwise fallback to persona-only.
-        const didFinalize = await tryFinalize(id, fidNum);
-        if (!didFinalize) {
-          await generatePersonaAndSave(id);
-        }
-        setFinalizing(false);
-        router.replace(`/tamabot/${id}`);
-      })();
-    }
-  }, [isSuccess, tokenId, router, fidNum]);
+    (async () => {
+      if (!isSuccess || fidNum === null) return;
+      // Resolve the freshly minted token id
+      const res = await refetchExisting();
+      const idBn = res?.data as bigint | undefined;
+      const id = idBn && idBn > 0n ? Number(idBn) : 0;
+      if (!id) return;
 
-  // --- UI -------------------------------------------------------------------
-  const disabledReason = !isConnected
+      setFinalizing(true);
+      const didFinalize = await tryFinalize(id);
+      if (!didFinalize) {
+        await generatePersonaAndSave(id);
+      }
+      setFinalizing(false);
+      router.replace(`/tamabot/${id}`);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSuccess]);
+
+  const disabledReason = !address
     ? "Connect a wallet"
+    : chainId !== base.id
+    ? "Switch to Base"
     : fidNum === null
     ? "Enter a valid FID"
+    : alreadyMinted
+    ? `FID already minted (token #${alreadyMinted})`
     : undefined;
 
   return (
@@ -117,9 +147,8 @@ export default function MintCard() {
         </span>
       </div>
 
-      {/* FID */}
       <label className="text-sm opacity-80">
-        Detected FID{fid ? ":" : ""} {fid ? <b>{fid}</b> : "…"}
+        Detected FID{fid ? ":" : ""} {fid ? <b>{fid}</b> : "—"}
       </label>
       <input
         className="px-3 py-2 rounded-xl bg-black/30 border border-white/15 focus:outline-none focus:ring-2 focus:ring-white/30"
@@ -131,9 +160,13 @@ export default function MintCard() {
       {fid && fidNum === null && (
         <span className="pill-note pill-note--red text-sm">Invalid FID</span>
       )}
+      {alreadyMinted && (
+        <div className="text-emerald-400 text-sm">
+          This FID is already minted (token #{alreadyMinted}).
+        </div>
+      )}
 
-      {/* Wallet CTA / Mint CTA */}
-      {!isConnected ? (
+      {!address ? (
         <div className="mt-1">
           <ConnectPill />
           <p className="mt-2 text-sm text-white/70">Connect on Base to mint.</p>
@@ -151,7 +184,9 @@ export default function MintCard() {
               ? "Finalizing…"
               : isPending || confirming
               ? "Minting…"
-              : `Mint (${feeEth} ETH)`}
+              : fee
+              ? `Mint (${feeEth} ETH)`
+              : "Mint"}
           </button>
           {hash && (
             <a
@@ -166,10 +201,6 @@ export default function MintCard() {
         </div>
       )}
 
-      {/* Status + errors */}
-      {isSuccess && !tokenId && (
-        <div className="text-emerald-400 text-sm">Mint confirmed. Resolving your token ID…</div>
-      )}
       {werr && <div className="text-red-400 text-sm break-words">{String(werr.message)}</div>}
     </div>
   );
