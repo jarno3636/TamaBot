@@ -13,29 +13,33 @@ import { formatEther } from "viem";
 import { useMiniContext } from "@/lib/useMiniContext";
 import ConnectPill from "@/components/ConnectPill";
 
+async function tryFinalize(id: number, fid?: number | null) {
+  // If you wire /api/tamabot/finalize, this will run; otherwise it silently no-ops.
+  try {
+    const url = `/api/tamabot/finalize?id=${id}${fid ? `&fid=${fid}` : ""}`;
+    const r = await fetch(url, { method: "POST" });
+    if (r.ok) return true;
+  } catch {}
+  return false;
+}
+
 async function generatePersonaAndSave(id: number) {
   try {
-    // 1) Ask the server to generate persona text (uses OPENAI_API_KEY on server)
     const r1 = await fetch(`/api/pet/extras?action=persona&id=${id}`, { cache: "no-store" });
     const j1 = await r1.json().catch(() => ({} as any));
     const text: string = j1?.text || "";
-
     if (!text) return;
-
-    // 2) Persist to Supabase via our save endpoint
     await fetch("/api/pet/persona", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ id, text }),
     });
-  } catch {
-    // non-fatal; user still gets redirected
-  }
+  } catch {}
 }
 
 export default function MintCard() {
   const router = useRouter();
-  const { address, isConnected } = useAccount();
+  const { isConnected } = useAccount();
   const { fid: detectedFid } = useMiniContext();
 
   // --- FID handling ---------------------------------------------------------
@@ -45,10 +49,7 @@ export default function MintCard() {
   }, [detectedFid, fid]);
 
   const fidNum = /^\d+$/.test(fid) ? Number(fid) : null;
-  const canMint = useMemo(
-    () => Boolean(isConnected && fidNum !== null),
-    [isConnected, fidNum],
-  );
+  const canMint = useMemo(() => Boolean(isConnected && fidNum !== null), [isConnected, fidNum]);
 
   // --- Read contract data ---------------------------------------------------
   const { data: fee } = useReadContract({
@@ -82,15 +83,23 @@ export default function MintCard() {
     query: { enabled: Boolean(fidNum && isSuccess) } as any,
   });
 
+  const [finalizing, setFinalizing] = useState(false);
+
   useEffect(() => {
     const id = tokenId ? Number(tokenId) : 0;
     if (isSuccess && id > 0) {
-      // Fire-and-forget persona generation + save;
-      // don't block the redirect.
-      generatePersonaAndSave(id);
-      router.replace(`/tamabot/${id}`);
+      (async () => {
+        setFinalizing(true);
+        // Prefer a one-shot finalize if you’ve implemented it; otherwise fallback to persona-only.
+        const didFinalize = await tryFinalize(id, fidNum);
+        if (!didFinalize) {
+          await generatePersonaAndSave(id);
+        }
+        setFinalizing(false);
+        router.replace(`/tamabot/${id}`);
+      })();
     }
-  }, [isSuccess, tokenId, router]);
+  }, [isSuccess, tokenId, router, fidNum]);
 
   // --- UI -------------------------------------------------------------------
   const disabledReason = !isConnected
@@ -133,12 +142,16 @@ export default function MintCard() {
         <div className="cta-row" style={{ marginTop: 4 }}>
           <button
             onClick={onMint}
-            disabled={!canMint || isPending || confirming}
+            disabled={!canMint || isPending || confirming || finalizing}
             className="btn-pill btn-pill--orange"
             title={disabledReason}
-            aria-disabled={!canMint || isPending || confirming}
+            aria-disabled={!canMint || isPending || confirming || finalizing}
           >
-            {isPending || confirming ? "Minting…" : `Mint (${feeEth} ETH)`}
+            {finalizing
+              ? "Finalizing…"
+              : isPending || confirming
+              ? "Minting…"
+              : `Mint (${feeEth} ETH)`}
           </button>
           {hash && (
             <a
@@ -155,15 +168,9 @@ export default function MintCard() {
 
       {/* Status + errors */}
       {isSuccess && !tokenId && (
-        <div className="text-emerald-400 text-sm">
-          Mint confirmed. Resolving your token ID…
-        </div>
+        <div className="text-emerald-400 text-sm">Mint confirmed. Resolving your token ID…</div>
       )}
-      {werr && (
-        <div className="text-red-400 text-sm break-words">
-          {String(werr.message)}
-        </div>
-      )}
+      {werr && <div className="text-red-400 text-sm break-words">{String(werr.message)}</div>}
     </div>
   );
 }
