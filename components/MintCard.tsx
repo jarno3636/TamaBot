@@ -16,7 +16,7 @@ import { TAMABOT_CORE } from "@/lib/abi";
 import { useMiniContext } from "@/lib/useMiniContext";
 import ConnectPill from "@/components/ConnectPill";
 
-/** Call the finalize endpoint the way your API expects: GET with ?id= */
+/** GET /api/tamabot/finalize?id=... (matches your route) */
 async function tryFinalize(id: number) {
   try {
     const r = await fetch(`/api/tamabot/finalize?id=${id}`, {
@@ -31,7 +31,7 @@ async function tryFinalize(id: number) {
   }
 }
 
-/** Fallback: persona-only pipeline if finalize isn’t wired */
+/** Fallback persona-only pipeline */
 async function generatePersonaAndSave(id: number) {
   try {
     const r1 = await fetch(`/api/pet/extras?action=persona&id=${id}`, { cache: "no-store" });
@@ -53,13 +53,13 @@ export default function MintCard() {
   const { fid: detectedFid } = useMiniContext();
 
   // FID field (prefill from Mini)
-  const [fid, setFid] = useState<string>("");
+  const [fid, setFid] = useState("");
   useEffect(() => {
     if (detectedFid && !fid) setFid(String(detectedFid));
   }, [detectedFid, fid]);
   const fidNum = /^\d+$/.test(fid) ? Number(fid) : null;
 
-  // Read mint fee
+  // Mint fee
   const { data: fee } = useReadContract({
     address: TAMABOT_CORE.address as `0x${string}`,
     abi: TAMABOT_CORE.abi,
@@ -68,14 +68,16 @@ export default function MintCard() {
   });
   const feeEth = fee ? formatEther(fee as bigint) : "…";
 
-  // Check if FID already minted
-  const { data: existingTokenId, refetch: refetchExisting } = useReadContract({
+  // Has this FID already minted?
+  const {
+    data: existingTokenId,
+    refetch: refetchExisting,
+  } = useReadContract({
     address: TAMABOT_CORE.address as `0x${string}`,
     abi: TAMABOT_CORE.abi,
     functionName: "tokenIdByFID",
-    args: fidNum ? [BigInt(fidNum)] : undefined,
-    enabled: !!fidNum,
-    query: { refetchOnWindowFocus: false },
+    args: fidNum ? [BigInt(fidNum)] : undefined,          // skip when no fid
+    query: { enabled: Boolean(fidNum), refetchOnWindowFocus: false }, // ✅ move enabled into query
   });
 
   // Write: mint
@@ -99,19 +101,18 @@ export default function MintCard() {
     writeContract({
       address: TAMABOT_CORE.address as `0x${string}`,
       abi: TAMABOT_CORE.abi,
-      functionName: "mint",                  // payable mint(uint64 fid)
+      functionName: "mint",          // payable mint(uint64 fid)
       args: [BigInt(fidNum)],
-      value: fee as bigint,                  // ✅ send exact mintFee
+      value: fee as bigint,           // send exact mintFee
       chainId: base.id,
     });
   }
 
-  // After success, resolve token id, finalize art/persona, then route
+  // After success → resolve tokenId → finalize → route
   const [finalizing, setFinalizing] = useState(false);
   useEffect(() => {
     (async () => {
       if (!isSuccess || fidNum === null) return;
-      // Resolve the freshly minted token id
       const res = await refetchExisting();
       const idBn = res?.data as bigint | undefined;
       const id = idBn && idBn > 0n ? Number(idBn) : 0;
@@ -119,9 +120,7 @@ export default function MintCard() {
 
       setFinalizing(true);
       const didFinalize = await tryFinalize(id);
-      if (!didFinalize) {
-        await generatePersonaAndSave(id);
-      }
+      if (!didFinalize) await generatePersonaAndSave(id);
       setFinalizing(false);
       router.replace(`/tamabot/${id}`);
     })();
