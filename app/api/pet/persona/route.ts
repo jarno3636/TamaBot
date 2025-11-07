@@ -13,23 +13,48 @@ function supa() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
+type InBody =
+  | { id?: number; text?: string } // legacy
+  | { id?: number; name?: string; label?: string; bio?: string }; // new
+
 export async function POST(req: NextRequest) {
   try {
-    const { id, text } = (await req.json()) as { id?: number; text?: string };
-    if (!id || !text) {
-      return NextResponse.json({ error: "id and text required" }, { status: 400 });
+    const body = (await req.json()) as InBody;
+    const id = Number((body as any).id || 0);
+    if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+
+    // Normalize into { name, label, bio }
+    let name = (body as any).name?.toString().trim();
+    let label = (body as any).label?.toString().trim();
+    let bio = (body as any).bio?.toString().trim();
+
+    if (!name && !label && !bio && (body as any).text) {
+      // Back-compat: try to parse legacy 'text' as JSON first, else treat as bio
+      const raw = String((body as any).text);
+      try {
+        const j = JSON.parse(raw);
+        name = j.name ? String(j.name) : undefined;
+        label = j.label ? String(j.label) : undefined;
+        bio = j.bio ? String(j.bio) : undefined;
+      } catch {
+        bio = raw;
+      }
     }
 
+    // Sensible defaults
+    name = name || "Tama";
+    label = label || "Auto";
+    bio = bio || "A cheerful bot tuned to your vibe.";
+
     const persona = {
-      label: "Auto",
-      bio: text,
+      name,
+      label,
+      bio,
       source: "openai",
       created_at: new Date().toISOString(),
     };
 
     const db = supa();
-
-    // Upsert into pets table (by token_id). Adjust if your PK differs.
     const { error } = await db
       .from("pets")
       .upsert(
@@ -41,10 +66,7 @@ export async function POST(req: NextRequest) {
         { onConflict: "token_id" }
       );
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     return NextResponse.json({ error: String(e?.message || e) }, { status: 500 });
