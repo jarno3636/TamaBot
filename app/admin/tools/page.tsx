@@ -5,7 +5,7 @@ import React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type RunResult =
-  | { ok: true; already?: boolean; id: number; fid?: number; pinned?: boolean; mode?: "full" | "light" }
+  | { ok: true; already?: boolean; id: number; fid?: number; pinned?: boolean }
   | { ok: false; error: string };
 
 export default function AdminToolsPage() {
@@ -14,13 +14,12 @@ export default function AdminToolsPage() {
   const [fromId, setFromId] = useState<string>("1");
   const [toId, setToId] = useState<string>("10");
   const [delayMs, setDelayMs] = useState<string>("150");
-  const [fullMode, setFullMode] = useState<boolean>(false);
+  const [fullRange, setFullRange] = useState<boolean>(false);
 
   const [busy, setBusy] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const logRef = useRef<HTMLDivElement>(null);
 
-  // persist token locally (only in your browser)
   useEffect(() => {
     const cached = localStorage.getItem("tamabot_admin_token") || "";
     if (cached) setAdminToken(cached);
@@ -32,7 +31,6 @@ export default function AdminToolsPage() {
   const addLog = useCallback((line: string) => {
     setLogs((l) => [...l, line]);
   }, []);
-
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: "smooth" });
   }, [logs]);
@@ -45,25 +43,17 @@ export default function AdminToolsPage() {
     setBusy(true);
     setLogs([]);
     try {
+      // ✅ call the unified backfill endpoint via GET
       const url = new URL("/api/admin/backfill", window.location.origin);
       url.searchParams.set("id", singleId);
-      if (fullMode) url.searchParams.set("full", "1");
-
       const res = await fetch(url.toString(), {
         method: "GET",
         headers: { "x-admin-token": adminToken || "" },
         cache: "no-store",
       });
       const j = (await res.json()) as RunResult & Record<string, any>;
-      if (j.ok) {
-        addLog(
-          `✅ id=${j.id} ok${j.already ? " (already)" : ""}${j.fid ? ` fid=${j.fid}` : ""}${
-            j.mode ? ` mode=${j.mode}` : ""
-          }${j.pinned ? " (pinned image)" : ""}`
-        );
-      } else {
-        addLog(`❌ id=${singleId} error: ${j.error || "unknown"}`);
-      }
+      if (j.ok) addLog(`✅ id=${j.id} ok${j.already ? " (already)" : ""}${j.fid ? ` fid=${j.fid}` : ""}`);
+      else addLog(`❌ id=${singleId} error: ${j.error || "unknown"}`);
       addLog(JSON.stringify(j, null, 2));
     } catch (e: any) {
       addLog(`❌ id=${singleId} exception: ${String(e?.message || e)}`);
@@ -81,7 +71,7 @@ export default function AdminToolsPage() {
         from: Number(fromId),
         to: Number(toId),
         delayMs: Number(delayMs || "150"),
-        full: Boolean(fullMode),
+        full: fullRange,
       };
       const res = await fetch("/api/admin/backfill", {
         method: "POST",
@@ -101,9 +91,7 @@ export default function AdminToolsPage() {
       if (j.ok) {
         addLog(`✅ range ok from=${j.range?.from} to=${j.range?.to} full=${j.full ? "yes" : "no"}`);
         addLog(`done: ${j.done?.join(", ") || "(none)"}`);
-        if (j.failed?.length) {
-          for (const f of j.failed) addLog(`❌ id=${f.id} err=${f.err}`);
-        }
+        if (j.failed?.length) for (const f of j.failed) addLog(`❌ id=${f.id} err=${f.err}`);
       } else {
         addLog(`❌ range error: ${j.error || "unknown"}`);
       }
@@ -134,7 +122,7 @@ export default function AdminToolsPage() {
 
       <section className="glass glass-pad space-y-4">
         <h2 className="text-lg font-semibold">Backfill a single token</h2>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex gap-3">
           <input
             className="px-3 py-2 rounded-lg bg-black/30 border border-white/15"
             placeholder="token id (e.g. 42)"
@@ -142,14 +130,6 @@ export default function AdminToolsPage() {
             onChange={(e) => setSingleId(e.target.value.trim())}
             inputMode="numeric"
           />
-          <label className="inline-flex items-center gap-2 text-white/80">
-            <input
-              type="checkbox"
-              checked={fullMode}
-              onChange={(e) => setFullMode(e.target.checked)}
-            />
-            <span>Full mode (generate & pin image)</span>
-          </label>
           <button
             onClick={runSingle}
             disabled={!canRunSingle || busy}
@@ -160,44 +140,21 @@ export default function AdminToolsPage() {
           </button>
         </div>
         <p className="text-sm text-white/70">
-          Calls <code>/api/admin/backfill?id=…{fullMode ? "&full=1" : ""}</code>. Full mode also
-          generates & pins the image and sets the sprite URI.
+          Calls <code>GET /api/admin/backfill?id=…</code> (light mode).
         </p>
       </section>
 
       <section className="glass glass-pad space-y-4">
         <h2 className="text-lg font-semibold">Backfill a range</h2>
         <div className="grid grid-cols-3 gap-3">
-          <input
-            className="px-3 py-2 rounded-lg bg-black/30 border border-white/15"
-            placeholder="from"
-            value={fromId}
-            onChange={(e) => setFromId(e.target.value.trim())}
-            inputMode="numeric"
-          />
-          <input
-            className="px-3 py-2 rounded-lg bg-black/30 border border-white/15"
-            placeholder="to"
-            value={toId}
-            onChange={(e) => setToId(e.target.value.trim())}
-            inputMode="numeric"
-          />
-          <input
-            className="px-3 py-2 rounded-lg bg-black/30 border border-white/15"
-            placeholder="delay ms (polite to OpenAI)"
-            value={delayMs}
-            onChange={(e) => setDelayMs(e.target.value.trim())}
-            inputMode="numeric"
-          />
+          <input className="px-3 py-2 rounded-lg bg-black/30 border border-white/15" placeholder="from" value={fromId} onChange={(e) => setFromId(e.target.value.trim())} inputMode="numeric" />
+          <input className="px-3 py-2 rounded-lg bg-black/30 border border-white/15" placeholder="to" value={toId} onChange={(e) => setToId(e.target.value.trim())} inputMode="numeric" />
+          <input className="px-3 py-2 rounded-lg bg-black/30 border border-white/15" placeholder="delay ms (polite to OpenAI)" value={delayMs} onChange={(e) => setDelayMs(e.target.value.trim())} inputMode="numeric" />
         </div>
 
-        <label className="inline-flex items-center gap-2 text-white/80">
-          <input
-            type="checkbox"
-            checked={fullMode}
-            onChange={(e) => setFullMode(e.target.checked)}
-          />
-          <span>Full mode for range</span>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={fullRange} onChange={(e) => setFullRange(e.target.checked)} />
+          <span>Full mode for range (persona + look + image pin + sprite URI)</span>
         </label>
 
         <button
@@ -208,18 +165,15 @@ export default function AdminToolsPage() {
         >
           {busy ? "Running…" : "Run range"}
         </button>
+
         <p className="text-sm text-white/70">
-          Calls <code>POST /api/admin/backfill</code> with{" "}
-          <code>{'{ from, to, delayMs, full }'}</code>.
+          Calls <code>POST /api/admin/backfill</code> with <code>{'{ from, to, delayMs, full }'}</code>.
         </p>
       </section>
 
       <section className="glass glass-pad">
         <h2 className="text-lg font-semibold mb-2">Logs</h2>
-        <div
-          ref={logRef}
-          className="h-64 overflow-auto whitespace-pre-wrap text-sm bg-black/30 rounded-lg border border-white/15 p-3"
-        >
+        <div ref={logRef} className="h-64 overflow-auto whitespace-pre-wrap text-sm bg-black/30 rounded-lg border border-white/15 p-3">
           {logs.length ? logs.join("\n") : "— no logs yet —"}
         </div>
       </section>
