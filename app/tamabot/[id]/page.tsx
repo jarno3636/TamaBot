@@ -1,7 +1,6 @@
 // app/tamabot/[id]/page.tsx
-import MetaPreview from "@/components/MetaPreview";
-import TamaBotClient from "@/components/TamaBotClient";
 import { TAMABOT_CORE } from "@/lib/abi";
+import PetCard from "@/components/PetCard";
 
 export const dynamic = "force-dynamic";
 
@@ -10,26 +9,17 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   const idNum = Number(p?.id);
   const id = Number.isFinite(idNum) && idNum > 0 ? idNum : 0;
 
-  // Build the metadata URL that corresponds to the NFT
+  // Directly use your metadata API (no extra hero image / debug links)
   const metadataUrl = `/api/metadata/base/${TAMABOT_CORE.address}/${id}.json`;
 
   return (
-    <div className="flex flex-col gap-6 items-center justify-center min-h-screen px-4">
-      {/* NFT Metadata Preview */}
-      <MetaPreview id={id} />
-
-      {/* Pass the same ID into your client-controlled component */}
-      <TamaBotClient id={id} />
-
-      {/* Optional: link to raw metadata for debugging */}
-      <a
-        href={metadataUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-sm text-zinc-400 hover:text-zinc-200 mt-4"
-      >
-        View metadata JSON
-      </a>
-    </div>
+    <main className="min-h-[100svh] bg-deep-orange">
+      <div className="mx-auto max-w-md w-full px-4 py-6 flex items-start justify-center">
+        <div className="w-full">
+          {/* A single, centered card with the pet’s info */}
+          <PetCard metadataUrl={metadataUrl} />
+        </div>
+      </div>
+    </main>
   );
 }
