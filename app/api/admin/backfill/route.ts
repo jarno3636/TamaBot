@@ -24,7 +24,7 @@ function auth(req: NextRequest) {
 
 async function backfillSingle(id: number, full = false) {
   if (full) {
-    // full mode: triggers your finalize route (handles image + pin + sprite_uri)
+    // Full mode → delegate to finalize (image + pin + set sprite URI)
     const res = await fetch(`${baseUrl}/api/tamabot/finalize`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -36,14 +36,21 @@ async function backfillSingle(id: number, full = false) {
     return { ok: true, mode: "full", id, ...j };
   }
 
-  // persona + look only
+  // Persona + look only
   const s = await getOnchainState(TAMABOT_CORE.address, id);
   if (!s?.fid) throw new Error("no-fid-on-token");
 
   const look = pickLook(Number(s.fid));
   const persona = await generatePersonaText(s, look.archetype.name);
 
-  await upsertPersona(id, persona);
+  // ✅ upsertPersona expects ONE object argument in your project
+  await upsertPersona({
+    tokenId: id,
+    persona,
+    label: "Auto",
+    source: "openai",
+  });
+
   await upsertLook(id, {
     archetypeId: look.archetype.id,
     baseColor: look.base,
@@ -79,18 +86,12 @@ export async function POST(req: NextRequest) {
     try {
       const r = await backfillSingle(n, full);
       if (r.ok) done.push(n);
-      else throw new Error(r.error || "unknown");
+      else throw new Error((r as any).error || "unknown");
     } catch (e: any) {
-      failed.push({ id: n, err: String(e.message || e) });
+      failed.push({ id: n, err: String(e?.message || e) });
     }
     if (delay) await new Promise((r) => setTimeout(r, delay));
   }
 
-  return ok({
-    ok: true,
-    range: { from: start, to: end },
-    full,
-    done,
-    failed,
-  });
+  return ok({ ok: true, range: { from: start, to: end }, full, done, failed });
 }
