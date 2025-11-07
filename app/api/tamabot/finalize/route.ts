@@ -24,7 +24,7 @@ const RPC =
   process.env.NEXT_PUBLIC_RPC_URL ||
   process.env.RPC_URL ||
   "https://mainnet.base.org";
-createPublicClient({ chain: base, transport: http(RPC) }); // initialized if needed later
+createPublicClient({ chain: base, transport: http(RPC) }); // intentionally not exported
 
 /* ------------------- Filebase (optional) ------------------- */
 const HAS_FILEBASE =
@@ -112,6 +112,17 @@ async function uploadPngToFilebase(tokenId: number, b64: string) {
   };
 }
 
+/* ------------------- Helper: normalize persona ------------------- */
+function normalizePersona(raw: any): { label: string; bio: string } {
+  if (raw && typeof raw === "object") {
+    const label = String(raw.label ?? "Auto");
+    const bio = typeof raw.bio === "string" ? raw.bio : JSON.stringify(raw);
+    return { label, bio };
+  }
+  // string or unexpected → treat as bio
+  return { label: "Auto", bio: String(raw ?? "") };
+}
+
 /* ------------------- Handler ------------------- */
 export async function POST(req: Request) {
   try {
@@ -134,11 +145,12 @@ export async function POST(req: Request) {
     }
     const fid = Number(s.fid);
 
-    // Deterministic visual look + persona object (label + bio)
+    // Deterministic visual look + persona (string or object → normalize)
     const look = pickLook(fid);
-    const persona = await generatePersonaText(s, look.archetype.name);
+    const rawPersona = await generatePersonaText(s, look.archetype.name);
+    const persona = normalizePersona(rawPersona);
 
-    // Persist persona & look if Supabase exists (object-form upserts)
+    // Persist persona & look if Supabase exists
     if (hasSupabase()) {
       try {
         await upsertPersona({
@@ -156,11 +168,11 @@ export async function POST(req: Request) {
           accessory: look.accessory,
         });
       } catch {
-        // non-fatal
+        /* non-fatal */
       }
     }
 
-    // Build art prompt regardless (used for image or just for debugging)
+    // Build art prompt (used for image or debugging)
     const prompt = buildArtPrompt(look);
 
     // Try to auto-generate & pin image (only if both OpenAI + Filebase available)
@@ -172,7 +184,6 @@ export async function POST(req: Request) {
       const b64 = await genImageB64(prompt);
       if (b64) {
         uploaded = await uploadPngToFilebase(tokenId, b64);
-        // Save sprite URI for metadata if Supabase present
         if (uploaded && hasSupabase()) {
           await setSpriteUri(tokenId, uploaded.ipfsUri, fid);
         }
@@ -189,7 +200,7 @@ export async function POST(req: Request) {
       id: tokenId,
       fid,
       look,
-      persona,          // return the { label, bio } object
+      persona,   // { label, bio }
       prompt,
       image: imageUrl,
       pinned: Boolean(uploaded),
