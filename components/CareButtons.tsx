@@ -1,3 +1,4 @@
+// components/CareButtons.tsx
 "use client";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { TAMABOT_CORE } from "@/lib/abi";
@@ -15,7 +16,19 @@ export function CareButtons({ id }: { id: number }) {
   const busy = isPending || confirming;
 
   function call(fn: "feed"|"play"|"clean"|"rest") {
-    writeContract({ address: TAMABOT_CORE.address, abi: TAMABOT_CORE.abi, functionName: fn, args: [BigInt(id)] });
+    writeContract({
+      address: TAMABOT_CORE.address,
+      abi: TAMABOT_CORE.abi,
+      functionName: fn,
+      args: [BigInt(id)],
+    });
+  }
+
+  // ✅ when confirmed, tell the page to refresh state
+  if (isSuccess) {
+    setTimeout(() => {
+      window.dispatchEvent(new Event("tamabot:action_confirmed"));
+    }, 0);
   }
 
   return (
