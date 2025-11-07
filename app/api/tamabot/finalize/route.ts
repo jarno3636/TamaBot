@@ -24,7 +24,7 @@ const RPC =
   process.env.NEXT_PUBLIC_RPC_URL ||
   process.env.RPC_URL ||
   "https://mainnet.base.org";
-const client = createPublicClient({ chain: base, transport: http(RPC) });
+createPublicClient({ chain: base, transport: http(RPC) }); // initialized if needed later
 
 /* ------------------- Filebase (optional) ------------------- */
 const HAS_FILEBASE =
@@ -134,14 +134,19 @@ export async function POST(req: Request) {
     }
     const fid = Number(s.fid);
 
-    // Deterministic visual look + short persona
+    // Deterministic visual look + persona object (label + bio)
     const look = pickLook(fid);
-    const personaText = await generatePersonaText(s, look.archetype.name);
+    const persona = await generatePersonaText(s, look.archetype.name);
 
-    // Persist persona & look if Supabase exists
+    // Persist persona & look if Supabase exists (object-form upserts)
     if (hasSupabase()) {
       try {
-        await upsertPersona(tokenId, personaText, "Auto", "openai");
+        await upsertPersona({
+          tokenId,
+          text: persona.bio,
+          label: persona.label,
+          source: "openai",
+        });
         await upsertLook(tokenId, {
           archetypeId: look.archetype.id,
           baseColor: look.base,
@@ -184,7 +189,7 @@ export async function POST(req: Request) {
       id: tokenId,
       fid,
       look,
-      persona: personaText,
+      persona,          // return the { label, bio } object
       prompt,
       image: imageUrl,
       pinned: Boolean(uploaded),
