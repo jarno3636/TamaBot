@@ -1,5 +1,5 @@
 // app/api/tamabot/finalize/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { createPublicClient, http } from "viem";
 import { base } from "viem/chains";
 import { TAMABOT_CORE } from "@/lib/abi";
@@ -16,14 +16,13 @@ import { generatePersonaText } from "@/lib/persona";
 
 export const runtime = "nodejs";
 
-/* ------------------- RPC (optional) ------------------- */
+/* ------------------- RPC client ------------------- */
 const RPC =
   process.env.CHAIN_RPC_BASE ||
   process.env.NEXT_PUBLIC_CHAIN_RPC_BASE ||
   process.env.NEXT_PUBLIC_RPC_URL ||
   process.env.RPC_URL ||
   "https://mainnet.base.org";
-
 createPublicClient({ chain: base, transport: http(RPC) });
 
 /* ------------------- Filebase (optional) ------------------- */
@@ -31,9 +30,6 @@ const HAS_FILEBASE =
   !!process.env.FILEBASE_ACCESS_KEY_ID &&
   !!process.env.FILEBASE_SECRET_ACCESS_KEY &&
   !!process.env.FILEBASE_BUCKET;
-
-const FILEBASE_BUCKET = String(process.env.FILEBASE_BUCKET || "");
-const FILEBASE_GATEWAY = (process.env.FILEBASE_GATEWAY_URL || "https://ipfs.filebase.io").replace(/\/$/, "");
 
 let S3ClientCtor: any, PutObjectCommandCtor: any, HeadObjectCommandCtor: any;
 if (HAS_FILEBASE) {
@@ -52,14 +48,19 @@ function must(name: string) {
 const FILEBASE_S3 = HAS_FILEBASE
   ? new S3ClientCtor({
       region: "us-east-1",
-      endpoint: "https://s3.filebase.com",
-      forcePathStyle: true, // important for s3.filebase.com/{bucket}/{key}
+      endpoint: process.env.FILEBASE_S3_ENDPOINT || "https://s3.filebase.com",
       credentials: {
         accessKeyId: must("FILEBASE_ACCESS_KEY_ID"),
         secretAccessKey: must("FILEBASE_SECRET_ACCESS_KEY"),
       },
     })
   : null;
+
+const FILEBASE_BUCKET = HAS_FILEBASE ? must("FILEBASE_BUCKET") : "";
+const FILEBASE_GATEWAY = (process.env.FILEBASE_GATEWAY_URL || "https://ipfs.filebase.io").replace(
+  /\/$/,
+  ""
+);
 
 /* ------------------- OpenAI (optional image) ------------------- */
 const HAS_OPENAI = !!process.env.OPENAI_API_KEY;
@@ -82,10 +83,9 @@ async function genImageB64(prompt: string) {
   return r?.data?.[0]?.b64_json || null;
 }
 
-type UploadedInfo = { cid?: string; ipfsUri?: string; gatewayUrl: string; s3Url: string };
-
-async function uploadPngToFilebase(tokenId: number, b64: string): Promise<UploadedInfo | null> {
+async function uploadPngToFilebase(tokenId: number, b64: string) {
   if (!HAS_FILEBASE || !FILEBASE_S3) return null;
+
   const Key = `sprite_${tokenId}.png`;
   const Body = Buffer.from(b64, "base64");
 
@@ -98,8 +98,8 @@ async function uploadPngToFilebase(tokenId: number, b64: string): Promise<Upload
     })
   );
 
-  // Attempt to read CID from object metadata (may not exist depending on plan/bucket setup)
-  let cid: string | undefined;
+  // Try to discover CID; if not present, still return HTTPS URL
+  let cid: string | null = null;
   try {
     const head = await FILEBASE_S3.send(
       new HeadObjectCommandCtor({
@@ -109,63 +109,80 @@ async function uploadPngToFilebase(tokenId: number, b64: string): Promise<Upload
     );
     const meta = (head?.Metadata || {}) as Record<string, string>;
     cid =
-      meta["cid"] ||
-      meta["ipfs-hash"] ||
-      meta["x-amz-meta-cid"] ||
-      undefined;
+      (meta["cid"] ||
+        meta["ipfs-hash"] ||
+        meta["x-amz-meta-cid"] ||
+        meta["x-amz-meta-ipfs-hash"] ||
+        "") || null;
   } catch {
-    // ignore; not all setups return metadata
+    // ignore; we'll use HTTPS fallback
   }
 
-  const s3Url = `https://s3.filebase.com/${encodeURIComponent(FILEBASE_BUCKET)}/${encodeURIComponent(Key)}`;
-  const gatewayUrl = cid ? `${FILEBASE_GATEWAY}/ipfs/${cid}/${encodeURIComponent(Key)}` : s3Url;
+  const httpsUrl = `https://s3.filebase.com/${FILEBASE_BUCKET}/${Key}`;
 
-  return {
-    cid,
-    ipfsUri: cid ? `ipfs://${cid}/${Key}` : undefined,
-    gatewayUrl,
-    s3Url,
-  };
+  return cid
+    ? {
+        cid,
+        ipfsUri: `ipfs://${cid}/${Key}`,
+        gatewayUrl: `${FILEBASE_GATEWAY}/ipfs/${cid}/${Key}`,
+      }
+    : {
+        cid: "",
+        ipfsUri: httpsUrl, // use https as “sprite uri” when no CID
+        gatewayUrl: httpsUrl,
+      };
 }
 
-/* ------------------- core finalize ------------------- */
-async function runFinalize(tokenId: number) {
-  if (!Number.isFinite(tokenId) || tokenId <= 0) throw new Error("invalid-id");
+/* ------------------- Handler ------------------- */
+export async function GET(req: Request) {
+  try {
+    const url = new URL(req.url);
+    const tokenId = Number(url.searchParams.get("id") || "0");
+    if (!Number.isFinite(tokenId) || tokenId <= 0) {
+      return NextResponse.json({ ok: false, error: "invalid-id" }, { status: 400 });
+    }
+    return await finalize(tokenId);
+  } catch (e: any) {
+    return NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
+  }
+}
 
-  // Idempotency: if Supabase already has a sprite, skip work
+export async function POST(req: Request) {
+  try {
+    const { id } = (await req.json()) as { id?: number };
+    const tokenId = Number(id || 0);
+    if (!Number.isFinite(tokenId) || tokenId <= 0) {
+      return NextResponse.json({ ok: false, error: "invalid-id" }, { status: 400 });
+    }
+    return await finalize(tokenId);
+  } catch (e: any) {
+    return NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
+  }
+}
+
+async function finalize(tokenId: number) {
+  // Idempotency: if we already have a sprite URI, bail early
   if (hasSupabase()) {
     const existing = await getSpriteCid(tokenId);
-    if (existing) {
-      return {
-        ok: true,
-        id: tokenId,
-        already: true,
-        image: (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "") + `/api/og/pet?id=${tokenId}`,
-        pinned: false,
-      };
-    }
+    if (existing) return NextResponse.json({ ok: true, id: tokenId, already: true });
   }
 
-  // Resolve FID from chain
-  const s = await getOnchainState(TAMABOT_CORE.address as `0x${string}`, BigInt(tokenId));
-  if (!s?.fid) throw new Error("no-fid-on-token");
+  // 🔧 IMPORTANT: pass NUMBER, not bigint
+  const s = await getOnchainState(TAMABOT_CORE.address as `0x${string}`, Number(tokenId));
+  if (!s?.fid) {
+    return NextResponse.json({ ok: false, error: "no-fid-on-token" }, { status: 400 });
+  }
   const fid = Number(s.fid);
 
-  // Build deterministic look + persona
   const look = pickLook(fid);
-  const persona = await generatePersonaText(s, look.archetype.name); // { label, bio } or string
-  const personaObj =
-    typeof persona === "object" && persona
-      ? { label: String((persona as any).label ?? "Auto"), bio: String((persona as any).bio ?? "") }
-      : { label: "Auto", bio: String(persona || "") };
+  const persona = await generatePersonaText(s, look.archetype.name);
 
-  // Save persona/look if Supabase is wired
   if (hasSupabase()) {
     try {
       await upsertPersona({
         tokenId,
-        text: personaObj.bio,
-        label: personaObj.label,
+        text: typeof (persona as any)?.bio === "string" ? (persona as any).bio : String(persona),
+        label: (persona as any)?.label ?? "Auto",
         source: "openai",
       });
       await upsertLook(tokenId, {
@@ -183,55 +200,32 @@ async function runFinalize(tokenId: number) {
 
   const prompt = buildArtPrompt(look);
 
-  // Try image generation + upload
-  let uploaded: UploadedInfo | null = null;
+  let uploaded:
+    | { cid: string; ipfsUri: string; gatewayUrl: string }
+    | null = null;
+
   if (HAS_OPENAI && HAS_FILEBASE) {
     const b64 = await genImageB64(prompt);
     if (b64) {
       uploaded = await uploadPngToFilebase(tokenId, b64);
-      // Persist sprite URI if we have an ipfsUri; otherwise use S3 URL so it still displays
       if (uploaded && hasSupabase()) {
-        const spriteUri = uploaded.ipfsUri || uploaded.s3Url;
-        await setSpriteUri(tokenId, spriteUri, fid);
+        await setSpriteUri(tokenId, uploaded.ipfsUri, fid);
       }
     }
   }
 
   const site = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
-  const fallback = `${site}/api/og/pet?id=${tokenId}`;
+  const ogFallback = `${site}/api/og/pet?id=${tokenId}`;
+  const imageUrl = uploaded?.gatewayUrl || ogFallback;
 
-  return {
+  return NextResponse.json({
     ok: true,
     id: tokenId,
     fid,
     look,
-    persona: { name: "Tama", label: personaObj.label, bio: personaObj.bio },
+    persona,
     prompt,
-    image: uploaded?.gatewayUrl || fallback,
-    pinned: Boolean(uploaded),
-  };
-}
-
-/* ------------------- POST + GET handlers ------------------- */
-export async function POST(req: Request) {
-  try {
-    const { id } = (await req.json()) as { id?: number };
-    const tokenId = Number(id || 0);
-    const out = await runFinalize(tokenId);
-    return NextResponse.json(out, { status: out.ok ? 200 : 400 });
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
-  }
-}
-
-// So you can hit it in the browser: /api/tamabot/finalize?id=1
-export async function GET(req: NextRequest) {
-  try {
-    const url = new URL(req.url);
-    const id = Number(url.searchParams.get("id") || "0");
-    const out = await runFinalize(id);
-    return NextResponse.json(out, { status: out.ok ? 200 : 400 });
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
-  }
+    image: imageUrl,
+    pinned: Boolean(uploaded && uploaded.cid),
+  });
 }
