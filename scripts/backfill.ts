@@ -14,6 +14,15 @@ const F = Number(arg("from", "1"));
 const T = Number(arg("to", String(F)));
 const DELAY = Number(arg("delayMs", "150"));
 
+function normalizePersona(raw: any): { label: string; bio: string } {
+  if (raw && typeof raw === "object") {
+    const label = String(raw.label ?? "Auto");
+    const bio = typeof raw.bio === "string" ? raw.bio : JSON.stringify(raw);
+    return { label, bio };
+  }
+  return { label: "Auto", bio: String(raw ?? "") };
+}
+
 (async () => {
   const done: number[] = [];
   const failed: { id: number; err: string }[] = [];
@@ -24,7 +33,8 @@ const DELAY = Number(arg("delayMs", "150"));
       if (!s?.fid) throw new Error("no fid");
 
       const look = pickLook(s.fid);
-      const persona = await generatePersonaText(s, look.archetype.name); // { label, bio }
+      const rawPersona = await generatePersonaText(s, look.archetype.name);
+      const persona = normalizePersona(rawPersona); // { label, bio }
 
       try {
         await upsertPersona({
