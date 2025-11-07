@@ -24,7 +24,7 @@ function auth(req: NextRequest) {
 
 async function backfillSingle(id: number, full = false) {
   if (full) {
-    // Full mode → delegate to finalize (image + pin + set sprite URI)
+    // Delegate to finalize → does persona+look+image pin + sprite uri
     const res = await fetch(`${baseUrl}/api/tamabot/finalize`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -41,12 +41,12 @@ async function backfillSingle(id: number, full = false) {
   if (!s?.fid) throw new Error("no-fid-on-token");
 
   const look = pickLook(Number(s.fid));
-  const persona = await generatePersonaText(s, look.archetype.name);
+  const personaText = await generatePersonaText(s, look.archetype.name);
 
-  // ✅ upsertPersona expects ONE object argument in your project
+  // ✅ upsertPersona expects { tokenId, text, ... }
   await upsertPersona({
     tokenId: id,
-    persona,
+    text: personaText,
     label: "Auto",
     source: "openai",
   });
