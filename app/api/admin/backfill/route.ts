@@ -1,110 +1,96 @@
 // app/api/admin/backfill/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { getOnchainState, upsertPersona, upsertLook } from "@/lib/data";
 import { TAMABOT_CORE } from "@/lib/abi";
-import { getOnchainState, hasSupabase, upsertLook, upsertPersona } from "@/lib/data";
 import { pickLook } from "@/lib/archetypes";
 import { generatePersonaText } from "@/lib/persona";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
 
-/** -------------------- Auth -------------------- */
-const ADMIN_WALLET =
-  (process.env.ADMIN_WALLET ||
-    "0xB37c91305F50e3CdB0D7a048a18d7536c9524f58").toLowerCase();
+const baseUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  process.env.SITE_URL ||
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
 
-function authorized(req: NextRequest): boolean {
-  // Option A: shared secret token
-  const needToken = process.env.ADMIN_TOKEN || "";
-  const gotToken = req.headers.get("x-admin-token") || "";
-  const tokenOK = needToken ? gotToken === needToken : false;
-
-  // Option B: allow-listed wallet header
-  const gotWallet = (req.headers.get("x-wallet-address") || "").toLowerCase();
-  const walletOK = !!gotWallet && gotWallet === ADMIN_WALLET;
-
-  // If no ADMIN_TOKEN configured, wallet gate still works.
-  return tokenOK || walletOK;
+function ok(data: any, code = 200) {
+  return NextResponse.json(data, { status: code });
+}
+function auth(req: NextRequest) {
+  const need = process.env.ADMIN_TOKEN || "";
+  if (!need) return true;
+  const got = req.headers.get("x-admin-token") || "";
+  return got && got === need;
 }
 
-/** -------------------- Utils -------------------- */
-function json(data: any, status = 200) {
-  return NextResponse.json(data, {
-    status,
-    headers: { "cache-control": "no-store" },
+async function backfillSingle(id: number, full = false) {
+  if (full) {
+    // full mode: triggers your finalize route (handles image + pin + sprite_uri)
+    const res = await fetch(`${baseUrl}/api/tamabot/finalize`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id }),
+      cache: "no-store",
+    });
+    const j = await res.json();
+    if (!res.ok || !j.ok) throw new Error(j.error || `Finalize error for id ${id}`);
+    return { ok: true, mode: "full", id, ...j };
+  }
+
+  // persona + look only
+  const s = await getOnchainState(TAMABOT_CORE.address, id);
+  if (!s?.fid) throw new Error("no-fid-on-token");
+
+  const look = pickLook(Number(s.fid));
+  const persona = await generatePersonaText(s, look.archetype.name);
+
+  await upsertPersona(id, persona);
+  await upsertLook(id, {
+    archetypeId: look.archetype.id,
+    baseColor: look.base,
+    accentColor: look.accent,
+    auraColor: look.aura,
+    biome: look.biome,
+    accessory: look.accessory,
   });
+
+  return { ok: true, mode: "light", id, fid: Number(s.fid) };
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-/** -------------------- Handler -------------------- */
 export async function POST(req: NextRequest) {
-  if (!authorized(req)) return json({ error: "unauthorized" }, 401);
+  if (!auth(req)) return ok({ ok: false, error: "unauthorized" }, 401);
 
-  try {
-    const body = (await req.json().catch(() => ({}))) as {
+  const { from, to, id, delayMs = 150, full = false } =
+    (await req.json().catch(() => ({}))) as {
       from?: number;
       to?: number;
+      id?: number;
       delayMs?: number;
+      full?: boolean;
     };
 
-    const start = Math.max(1, Number(body.from ?? 1));
-    const end = Math.max(start, Number(body.to ?? start));
-    const delayMs = Math.max(0, Number(body.delayMs ?? 120));
+  const start = id ?? from ?? 1;
+  const end = id ? id : to ?? from ?? 1;
+  const delay = Math.max(0, Number(delayMs || 0));
 
-    const done: number[] = [];
-    const failed: { id: number; err: string }[] = [];
-    const supa = hasSupabase();
+  const done: number[] = [];
+  const failed: { id: number; err: string }[] = [];
 
-    for (let id = start; id <= end; id++) {
-      try {
-        const s = await getOnchainState(TAMABOT_CORE.address, id);
-        if (!s?.fid) throw new Error("no fid");
-
-        // Deterministic look + persona
-        const look = pickLook(s.fid);
-        const persona = await generatePersonaText(s, look.archetype.name);
-
-        // Upserts (optional if Supabase not wired)
-        if (supa) {
-          try {
-            await upsertPersona({
-              tokenId: id,
-              text: persona.bio ?? "A cheerful bot tuned to your vibe.",
-              label: persona.label ?? "Auto",
-              source: "openai",
-            });
-
-            await upsertLook(id, {
-              archetypeId: look.archetype.id,
-              baseColor: look.base,
-              accentColor: look.accent,
-              auraColor: look.aura,
-              biome: look.biome,
-              accessory: look.accessory,
-            });
-          } catch (dbErr: any) {
-            // Non-fatal: record but keep flowing
-            throw new Error(`supabase: ${dbErr?.message || dbErr}`);
-          }
-        }
-
-        done.push(id);
-      } catch (e: any) {
-        failed.push({ id, err: String(e?.message || e) });
-      }
-
-      if (delayMs > 0) await sleep(delayMs);
+  for (let n = start; n <= end; n++) {
+    try {
+      const r = await backfillSingle(n, full);
+      if (r.ok) done.push(n);
+      else throw new Error(r.error || "unknown");
+    } catch (e: any) {
+      failed.push({ id: n, err: String(e.message || e) });
     }
-
-    return json({
-      ok: true,
-      range: { from: start, to: end },
-      counts: { done: done.length, failed: failed.length },
-      done,
-      failed,
-    });
-  } catch (e: any) {
-    return json({ ok: false, error: String(e?.message || e) }, 500);
+    if (delay) await new Promise((r) => setTimeout(r, delay));
   }
+
+  return ok({
+    ok: true,
+    range: { from: start, to: end },
+    full,
+    done,
+    failed,
+  });
 }
