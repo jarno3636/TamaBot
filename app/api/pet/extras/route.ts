@@ -5,7 +5,7 @@ import { base } from "viem/chains";
 import { TAMABOT_CORE } from "@/lib/abi";
 import { hasSupabase, upsertPersona } from "@/lib/data";
 
-export const runtime = "nodejs"; // <-- switch to nodejs so Supabase works
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const RPC =
@@ -21,7 +21,7 @@ function bad(msg: string, code = 400) {
   return NextResponse.json({ error: msg }, { status: code });
 }
 
-// Replace with your **real** signer. For now, throw so you won’t forget to wire it.
+// Replace with your **real** signer later
 async function signScoreTyped(_msg: {
   fid: bigint;
   day: bigint;
@@ -37,6 +37,7 @@ async function computeDailyScore(fid: bigint): Promise<bigint> {
   return BigInt((Number(fid) * 1337) % 10000);
 }
 
+// === NEW: structured persona with name/label/bio ===
 async function aiPersonaFromState(state: {
   id: number;
   level: number;
@@ -47,16 +48,17 @@ async function aiPersonaFromState(state: {
   cleanliness: number;
   lastTick: number;
   fid: number;
-}): Promise<string> {
+}): Promise<{ name: string; label: string; bio: string }> {
   const key = process.env.OPENAI_API_KEY;
-  if (!key) return "Your TamaBot awaits. (AI disabled)";
-  const prompt = `You are TamaBot stylist. Given on-chain state:
-${JSON.stringify(state)}
-Write:
-- 1 sentence persona tagline (fun, wholesome).
-- 3 short care tips based on weak stats.
-- 1 brag line to share on Farcaster.
-Keep it under 420 chars total.`;
+  if (!key) return { name: "Tama", label: "Auto", bio: "Your TamaBot awaits. (AI disabled)" };
+
+  const prompt = `You are TamaBot stylist.
+State: ${JSON.stringify(state)}
+Return JSON with:
+- "name": short unique-ish name (2–10 chars, no emojis/numbers)
+- "label": 2–5 word vibe tag
+- "bio": 1–2 sentences, <220 chars, wholesome, no hashtags
+Tune tips by weakest of mood/hunger/energy/cleanliness.`;
 
   const r = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -64,13 +66,24 @@ Keep it under 420 chars total.`;
     body: JSON.stringify({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
-      temperature: 0.7,
-      max_tokens: 220,
+      response_format: { type: "json_object" },
+      temperature: 0.65,
+      max_tokens: 240,
     }),
   });
 
   const j = await r.json().catch(() => ({}));
-  return j?.choices?.[0]?.message?.content?.trim?.() || "Your TamaBot awaits.";
+  const raw = j?.choices?.[0]?.message?.content?.trim?.() || "{}";
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      name: String(parsed.name || "Tama"),
+      label: String(parsed.label || "Auto"),
+      bio: String(parsed.bio || "A cheerful bot tuned to your vibe."),
+    };
+  } catch {
+    return { name: "Tama", label: "Auto", bio: "A cheerful bot tuned to your vibe." };
+  }
 }
 
 export async function GET(req: NextRequest) {
@@ -163,20 +176,27 @@ export async function GET(req: NextRequest) {
         fid: Number(fid),
       };
 
-      const text = await aiPersonaFromState(data);
+      const persona = await aiPersonaFromState(data);
 
       // Optional save (default ON) if Supabase is configured
       let saved = false;
-      if (doSave && hasSupabase() && text) {
+      if (doSave && hasSupabase()) {
         try {
-          await upsertPersona({ tokenId: data.id, text, label: "Auto", source: "openai" });
+          // If your lib/data.upsertPersona accepts name now:
+          await upsertPersona({
+            tokenId: data.id,
+            name: persona.name,
+            label: persona.label,
+            text: persona.bio,   // back-compat arg name
+            source: "openai",
+          } as any);
           saved = true;
         } catch {
           saved = false;
         }
       }
 
-      return new NextResponse(JSON.stringify({ text, saved }), {
+      return new NextResponse(JSON.stringify({ persona, saved }), {
         status: 200,
         headers: {
           "Content-Type": "application/json",
