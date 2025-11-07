@@ -90,7 +90,7 @@ export function pickArchetypeForFid(fid: number): Archetype {
 
 // Subtle per-FID color jitter to avoid identical-looking runs
 export function jitterColor(hex: string, seed: number, amt = 6): string {
-  const h = hash32(seed + hex);
+  const h = hash32(`${seed}:${hex}`); // string salt to avoid numeric literal pitfalls
   const [r, g, b] = [
     parseInt(hex.slice(1, 3), 16),
     parseInt(hex.slice(3, 5), 16),
@@ -116,8 +116,9 @@ export const ACCESSORIES = [
 // Deterministic full look (no RNG) from FID
 export function pickLook(fid: number): PickedLook {
   const arch = pickArchetypeForFid(fid);
-  const biome = BIOMES[hash32(fid ^ 0xB10ME) % BIOMES.length];
-  const accessory = ACCESSORIES[hash32(fid ^ 0xACC5) % ACCESSORIES.length];
+  // Use string-salted hashing — no invalid hex literals:
+  const biome = BIOMES[hash32(`${fid}-biome`) % BIOMES.length];
+  const accessory = ACCESSORIES[hash32(`${fid}-acc`) % ACCESSORIES.length];
   const base = jitterColor(arch.baseColor, fid, 8);
   const accent = jitterColor(arch.accentColor, fid, 8);
   const aura = arch.aura ?? "#FFFFFF";
