@@ -41,7 +41,7 @@ async function backfillSingle(id: number, full = false) {
   if (!Number.isFinite(id) || id <= 0) throw new Error("invalid-id");
 
   if (full) {
-    // Delegate to the finalize route (does image generation + pin + sprite URI)
+    // Delegate to finalize (image gen + pin + sprite URI)
     const res = await fetch(`${baseUrl}/api/tamabot/finalize`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -56,7 +56,7 @@ async function backfillSingle(id: number, full = false) {
   // Persona + look only
   const s = await getOnchainState(
     TAMABOT_CORE.address as `0x${string}`,
-    BigInt(id) // <-- viem/bigint token id
+    Number(id) // <-- use number to match lib/data typing
   );
   if (!s?.fid) throw new Error("no-fid-on-token");
 
@@ -64,7 +64,6 @@ async function backfillSingle(id: number, full = false) {
   const personaRaw = await generatePersonaText(s, look.archetype.name);
   const persona = normalizePersona(personaRaw); // { label, bio }
 
-  // Your upsertPersona expects { tokenId, text, ... } (text = bio string)
   await upsertPersona({
     tokenId: id,
     text: persona.bio,
