@@ -22,9 +22,19 @@ function auth(req: NextRequest) {
   return got && got === need;
 }
 
+// Normalize generatePersonaText output to { label: string; bio: string }
+function normalizePersona(raw: any): { label: string; bio: string } {
+  if (raw && typeof raw === "object") {
+    const label = String(raw.label ?? "Auto");
+    const bio = typeof raw.bio === "string" ? raw.bio : JSON.stringify(raw);
+    return { label, bio };
+  }
+  return { label: "Auto", bio: String(raw ?? "") };
+}
+
 async function backfillSingle(id: number, full = false) {
   if (full) {
-    // Delegate to finalize → does persona+look+image pin + sprite uri
+    // Delegate to finalize → does persona + look + image pin + sprite uri
     const res = await fetch(`${baseUrl}/api/tamabot/finalize`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -41,13 +51,14 @@ async function backfillSingle(id: number, full = false) {
   if (!s?.fid) throw new Error("no-fid-on-token");
 
   const look = pickLook(Number(s.fid));
-  const personaText = await generatePersonaText(s, look.archetype.name);
+  const rawPersona = await generatePersonaText(s, look.archetype.name);
+  const persona = normalizePersona(rawPersona); // { label, bio }
 
-  // ✅ upsertPersona expects { tokenId, text, ... }
+  // upsertPersona expects { tokenId, text, ... } where text is the bio string
   await upsertPersona({
     tokenId: id,
-    text: personaText,
-    label: "Auto",
+    text: persona.bio,
+    label: persona.label,
     source: "openai",
   });
 
