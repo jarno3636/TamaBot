@@ -1,5 +1,4 @@
-// app/api/tamabot/finalize/route.ts
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { createPublicClient, http } from "viem";
 import { base } from "viem/chains";
 import { TAMABOT_CORE } from "@/lib/abi";
@@ -14,7 +13,6 @@ import {
 import { pickLook, buildArtPrompt } from "@/lib/archetypes";
 import { generatePersonaText } from "@/lib/persona";
 
-// Node runtime (we may use AWS SDK)
 export const runtime = "nodejs";
 
 /* ------------------- RPC client ------------------- */
@@ -24,7 +22,7 @@ const RPC =
   process.env.NEXT_PUBLIC_RPC_URL ||
   process.env.RPC_URL ||
   "https://mainnet.base.org";
-createPublicClient({ chain: base, transport: http(RPC) }); // intentionally not exported
+createPublicClient({ chain: base, transport: http(RPC) });
 
 /* ------------------- Filebase (optional) ------------------- */
 const HAS_FILEBASE =
@@ -88,6 +86,7 @@ async function uploadPngToFilebase(tokenId: number, b64: string) {
   if (!HAS_FILEBASE || !FILEBASE_S3) return null;
   const Key = `sprite_${tokenId}.png`;
   const Body = Buffer.from(b64, "base64");
+
   await FILEBASE_S3.send(
     new PutObjectCommandCtor({
       Bucket: FILEBASE_BUCKET,
@@ -96,15 +95,20 @@ async function uploadPngToFilebase(tokenId: number, b64: string) {
       ContentType: "image/png",
     })
   );
+
   const head = await FILEBASE_S3.send(
     new HeadObjectCommandCtor({
       Bucket: FILEBASE_BUCKET,
       Key,
     })
   );
+
   const meta = (head?.Metadata || {}) as Record<string, string>;
-  const cid = (meta["cid"] || meta["ipfs-hash"] || meta["x-amz-meta-cid"] || "").toString();
+  const cid =
+    (meta["cid"] || meta["ipfs-hash"] || meta["x-amz-meta-cid"] || "").toString();
+
   if (!cid) throw new Error("No CID returned by Filebase HeadObject; check bucket policies.");
+
   return {
     cid,
     ipfsUri: `ipfs://${cid}/${Key}`,
@@ -112,99 +116,103 @@ async function uploadPngToFilebase(tokenId: number, b64: string) {
   };
 }
 
-/* ------------------- Helper: normalize persona ------------------- */
-function normalizePersona(raw: any): { label: string; bio: string } {
-  if (raw && typeof raw === "object") {
-    const label = String(raw.label ?? "Auto");
-    const bio = typeof raw.bio === "string" ? raw.bio : JSON.stringify(raw);
-    return { label, bio };
+/* ------------------- Core finalize logic ------------------- */
+async function finalizeOne(id: number) {
+  if (!Number.isFinite(id) || id <= 0) {
+    return NextResponse.json({ ok: false, error: "invalid-id" }, { status: 400 });
   }
-  // string or unexpected → treat as bio
-  return { label: "Auto", bio: String(raw ?? "") };
+
+  // Idempotency: if we already have a sprite URI, bail out early (still return data)
+  if (hasSupabase()) {
+    const existing = await getSpriteCid(id);
+    if (existing) {
+      const site = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
+      const ogFallback = `${site}/api/og/pet?id=${id}`;
+      return NextResponse.json({
+        ok: true,
+        id,
+        already: true,
+        image: ogFallback,
+        pinned: true, // we consider an existing sprite as pinned/persisted
+      });
+    }
+  }
+
+  const s = await getOnchainState(TAMABOT_CORE.address, id);
+  if (!s?.fid) {
+    return NextResponse.json({ ok: false, error: "no-fid-on-token" }, { status: 400 });
+  }
+  const fid = Number(s.fid);
+
+  const look = pickLook(fid);
+  const persona = await generatePersonaText(s, look.archetype.name);
+
+  // Save persona/look (best-effort) if Supabase available
+  if (hasSupabase()) {
+    try {
+      await upsertPersona({
+        tokenId: id,
+        text: typeof (persona as any)?.bio === "string" ? (persona as any).bio : String(persona),
+        label: (persona as any)?.label || "Auto",
+        source: "openai",
+      });
+      await upsertLook(id, {
+        archetypeId: look.archetype.id,
+        baseColor: look.base,
+        accentColor: look.accent,
+        auraColor: look.aura,
+        biome: look.biome,
+        accessory: look.accessory,
+      });
+    } catch {
+      // ignore persistence errors
+    }
+  }
+
+  const prompt = buildArtPrompt(look);
+
+  // Try auto-generate & pin image
+  let uploaded:
+    | { cid: string; ipfsUri: string; gatewayUrl: string }
+    | null = null;
+
+  if (HAS_OPENAI && HAS_FILEBASE) {
+    const b64 = await genImageB64(prompt);
+    if (b64) {
+      uploaded = await uploadPngToFilebase(id, b64);
+      if (uploaded && hasSupabase()) {
+        await setSpriteUri(id, uploaded.ipfsUri, fid);
+      }
+    }
+  }
+
+  const site = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
+  const ogFallback = `${site}/api/og/pet?id=${id}`;
+  const imageUrl = uploaded?.gatewayUrl || ogFallback;
+
+  return NextResponse.json({
+    ok: true,
+    id,
+    fid,
+    look,
+    persona,
+    prompt,
+    image: imageUrl,
+    pinned: Boolean(uploaded),
+  });
 }
 
-/* ------------------- Handler ------------------- */
+/* ------------------- GET & POST handlers ------------------- */
+export async function GET(req: NextRequest) {
+  const url = new URL(req.url);
+  const id = Number(url.searchParams.get("id") || "0");
+  return finalizeOne(id);
+}
+
 export async function POST(req: Request) {
   try {
     const { id } = (await req.json()) as { id?: number };
-    const tokenId = Number(id || 0);
-    if (!Number.isFinite(tokenId) || tokenId <= 0) {
-      return NextResponse.json({ ok: false, error: "invalid-id" }, { status: 400 });
-    }
-
-    // Idempotency: if we already have a sprite URI, bail out early
-    if (hasSupabase()) {
-      const existing = await getSpriteCid(tokenId);
-      if (existing) return NextResponse.json({ ok: true, id: tokenId, already: true });
-    }
-
-    // On-chain -> FID
-    const s = await getOnchainState(TAMABOT_CORE.address, tokenId);
-    if (!s?.fid) {
-      return NextResponse.json({ ok: false, error: "no-fid-on-token" }, { status: 400 });
-    }
-    const fid = Number(s.fid);
-
-    // Deterministic visual look + persona (string or object → normalize)
-    const look = pickLook(fid);
-    const rawPersona = await generatePersonaText(s, look.archetype.name);
-    const persona = normalizePersona(rawPersona);
-
-    // Persist persona & look if Supabase exists
-    if (hasSupabase()) {
-      try {
-        await upsertPersona({
-          tokenId,
-          text: persona.bio,
-          label: persona.label,
-          source: "openai",
-        });
-        await upsertLook(tokenId, {
-          archetypeId: look.archetype.id,
-          baseColor: look.base,
-          accentColor: look.accent,
-          auraColor: look.aura,
-          biome: look.biome,
-          accessory: look.accessory,
-        });
-      } catch {
-        /* non-fatal */
-      }
-    }
-
-    // Build art prompt (used for image or debugging)
-    const prompt = buildArtPrompt(look);
-
-    // Try to auto-generate & pin image (only if both OpenAI + Filebase available)
-    let uploaded:
-      | { cid: string; ipfsUri: string; gatewayUrl: string }
-      | null = null;
-
-    if (HAS_OPENAI && HAS_FILEBASE) {
-      const b64 = await genImageB64(prompt);
-      if (b64) {
-        uploaded = await uploadPngToFilebase(tokenId, b64);
-        if (uploaded && hasSupabase()) {
-          await setSpriteUri(tokenId, uploaded.ipfsUri, fid);
-        }
-      }
-    }
-
-    // Always return a displayable image: pinned PNG if we have it; otherwise OG fallback
-    const site = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
-    const ogFallback = `${site}/api/og/pet?id=${tokenId}`;
-    const imageUrl = uploaded?.gatewayUrl || ogFallback;
-
-    return NextResponse.json({
-      ok: true,
-      id: tokenId,
-      fid,
-      look,
-      persona,   // { label, bio }
-      prompt,
-      image: imageUrl,
-      pinned: Boolean(uploaded),
-    });
+    return finalizeOne(Number(id || 0));
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
   }
