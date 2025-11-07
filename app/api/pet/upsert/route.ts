@@ -1,3 +1,4 @@
+// app/api/pet/upsert/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest) {
       tokenId: number;
       imageCid?: string;
       previewCid?: string;
-      persona?: { label?: string; bio?: string } | null;
+      persona?: { name?: string; label?: string; bio?: string } | null; // <-- name added
     };
 
     if (!tokenId || !Number.isFinite(tokenId)) {
@@ -24,7 +25,16 @@ export async function POST(req: NextRequest) {
     const fields: any = {};
     if (imageCid != null) fields.current_image_cid = imageCid;
     if (previewCid != null) fields.preview_cid = previewCid;
-    if (persona != null) fields.persona = persona;
+    if (persona != null) {
+      const p = {
+        name: persona.name || "Tama",
+        label: persona.label || "Auto",
+        bio: persona.bio || "A cheerful bot tuned to your vibe.",
+        source: "openai",
+        created_at: new Date().toISOString(),
+      };
+      fields.persona = p;
+    }
 
     const db = supa();
     const { error } = await db
@@ -32,7 +42,6 @@ export async function POST(req: NextRequest) {
       .upsert({ token_id: tokenId, ...fields }, { onConflict: "token_id" });
 
     if (error) throw error;
-
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     return NextResponse.json({ error: String(e?.message || e) }, { status: 500 });
