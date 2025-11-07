@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type RunResult =
@@ -179,7 +180,8 @@ export default function AdminToolsPage() {
           {busy ? "Running…" : "Run range"}
         </button>
         <p className="text-sm text-white/70">
-          Calls <code>POST /api/admin/backfill</code> with <code>{{`{ from, to, delayMs }`}}</code>.
+          Calls <code>POST /api/admin/backfill</code> with{" "}
+          <code>{'{ from, to, delayMs }'}</code>.
         </p>
       </section>
 
