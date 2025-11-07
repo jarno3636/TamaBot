@@ -46,14 +46,14 @@ const ABI = [
     outputs: [
       {
         components: [
-          { name: "level", type: "uint64" },
-          { name: "xp", type: "uint64" },
-          { name: "mood", type: "int32" },
-          { name: "hunger", type: "uint64" },
-          { name: "energy", type: "uint64" },
+          { name: "level",       type: "uint64" },
+          { name: "xp",          type: "uint64" },
+          { name: "mood",        type: "int32"  },
+          { name: "hunger",      type: "uint64" },
+          { name: "energy",      type: "uint64" },
           { name: "cleanliness", type: "uint64" },
-          { name: "lastTick", type: "uint64" },
-          { name: "fid", type: "uint64" },
+          { name: "lastTick",    type: "uint64" },
+          { name: "fid",         type: "uint64" }
         ],
         type: "tuple",
       },
@@ -70,22 +70,22 @@ export async function getOnchainState(address: `0x${string}` | string, id: numbe
     args: [BigInt(id)],
   });
 
-  // viem can return either an array tuple, or an object with named props.
-  const s = Array.isArray(raw) ? raw : raw;
+  // viem can return either an array tuple OR an object with named props.
+  const s = raw;
 
   return {
-    level: Number((s.level ?? s[0]) ?? 0),
-    xp: Number((s.xp ?? s[1]) ?? 0),
-    mood: Number((s.mood ?? s[2]) ?? 0),
-    hunger: Number((s.hunger ?? s[3]) ?? 0),
-    energy: Number((s.energy ?? s[4]) ?? 0),
+    level:       Number((s.level       ?? s[0]) ?? 0),
+    xp:          Number((s.xp          ?? s[1]) ?? 0),
+    mood:        Number((s.mood        ?? s[2]) ?? 0),
+    hunger:      Number((s.hunger      ?? s[3]) ?? 0),
+    energy:      Number((s.energy      ?? s[4]) ?? 0),
     cleanliness: Number((s.cleanliness ?? s[5]) ?? 0),
-    lastTick: Number((s.lastTick ?? s[6]) ?? 0),
-    fid: Number((s.fid ?? s[7]) ?? 0),
+    lastTick:    Number((s.lastTick    ?? s[6]) ?? 0),
+    fid:         Number((s.fid         ?? s[7]) ?? 0),
   };
 }
 
-/** ---------- DB helpers (server-only) ---------- */
+/** ---------- DB getters (server-only) ---------- */
 export async function getPersona(id: number) {
   const { data } = await supa()
     .from("pets")
@@ -94,8 +94,9 @@ export async function getPersona(id: number) {
     .maybeSingle();
   if (!data) return null as any;
   return {
-    label: data.persona?.label,
-    bio: data.persona?.bio,
+    name: (data.persona as any)?.name,     // tolerant: may or may not exist
+    label: (data.persona as any)?.label,
+    bio: (data.persona as any)?.bio,
     previewCid: data.preview_cid,
   };
 }
@@ -109,19 +110,60 @@ export async function getSpriteCid(id: number) {
   return data?.current_image_cid || "";
 }
 
-/** ---------- NEW: upsert persona text into pets ---------- */
+/** ============================================================================
+ * UPSERT HELPERS
+ * - upsertPersona: object-style API (preferred) + legacy positional overload
+ * - upsertLook: store deterministic look pack (archetype/colors/biome/etc.)
+ * - setSpriteUri: persist ipfs://CID/Key for the current sprite
+ * ========================================================================== */
+
+/** ---------- NEW: upsert look ---------- */
+export async function upsertLook(
+  tokenId: number,
+  look: {
+    archetypeId: string;
+    baseColor: string;
+    accentColor: string;
+    auraColor?: string;
+    biome?: string;
+    accessory?: string;
+  }
+) {
+  const db = supa();
+  const now = new Date().toISOString();
+  const payload = {
+    token_id: tokenId,
+    look,
+    updated_at: now,
+  };
+  const { error } = await db.from("pets").upsert(payload, { onConflict: "token_id" });
+  if (error) throw new Error(error.message);
+  return true;
+}
+
+/** ---------- PREFERRED: object-style persona upsert ---------- */
 export async function upsertPersona(opts: {
   tokenId: number;
-  text: string;
-  label?: string;
-  source?: string;
-  previewCid?: string | null;
+  text: string;               // bio
+  name?: string;              // optional name (short unique-ish)
+  label?: string;             // e.g., "Auto"
+  source?: string;            // e.g., "openai"
+  previewCid?: string | null; // optional media preview
 }) {
-  const { tokenId, text, label = "Auto", source = "openai", previewCid = null } = opts;
+  const {
+    tokenId,
+    text,
+    name = "Tama",
+    label = "Auto",
+    source = "openai",
+    previewCid = null,
+  } = opts;
+
   const db = supa();
   const now = new Date().toISOString();
 
   const persona = {
+    name,
     label,
     bio: text,
     source,
@@ -135,10 +177,31 @@ export async function upsertPersona(opts: {
   };
   if (previewCid) payload.preview_cid = previewCid;
 
+  const { error } = await db.from("pets").upsert(payload, { onConflict: "token_id" });
+  if (error) throw new Error(error.message);
+  return true;
+}
+
+/** ---------- LEGACY: positional persona upsert (back-compat) ----------
+ * Usage kept for older callers:
+ *   await upsertPersonaLegacy(tokenId, text, label?, source?)
+ */
+export async function upsertPersonaLegacy(
+  tokenId: number,
+  text: string,
+  label = "Auto",
+  source = "openai"
+) {
+  return upsertPersona({ tokenId, text, label, source });
+}
+
+/** ---------- set current sprite ipfs://CID/Key ---------- */
+export async function setSpriteUri(tokenId: number, ipfsUri: string, _fid?: number) {
+  const db = supa();
+  const now = new Date().toISOString();
   const { error } = await db
     .from("pets")
-    .upsert(payload, { onConflict: "token_id" });
-
+    .upsert({ token_id: tokenId, current_image_cid: ipfsUri, updated_at: now }, { onConflict: "token_id" });
   if (error) throw new Error(error.message);
   return true;
 }
