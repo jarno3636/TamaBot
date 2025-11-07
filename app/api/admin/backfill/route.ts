@@ -1,69 +1,110 @@
+// app/api/admin/backfill/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { getOnchainState, upsertPersona, upsertLook } from "@/lib/data";
+import { TAMABOT_CORE } from "@/lib/abi";
+import { getOnchainState, hasSupabase, upsertLook, upsertPersona } from "@/lib/data";
 import { pickLook } from "@/lib/archetypes";
 import { generatePersonaText } from "@/lib/persona";
-import { TAMABOT_CORE } from "@/lib/abi";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function auth(req: NextRequest) {
-  const need = process.env.ADMIN_TOKEN || "";
-  if (!need) return true;
-  const got = req.headers.get("x-admin-token") || "";
-  return !!got && got === need;
+/** -------------------- Auth -------------------- */
+const ADMIN_WALLET =
+  (process.env.ADMIN_WALLET ||
+    "0xB37c91305F50e3CdB0D7a048a18d7536c9524f58").toLowerCase();
+
+function authorized(req: NextRequest): boolean {
+  // Option A: shared secret token
+  const needToken = process.env.ADMIN_TOKEN || "";
+  const gotToken = req.headers.get("x-admin-token") || "";
+  const tokenOK = needToken ? gotToken === needToken : false;
+
+  // Option B: allow-listed wallet header
+  const gotWallet = (req.headers.get("x-wallet-address") || "").toLowerCase();
+  const walletOK = !!gotWallet && gotWallet === ADMIN_WALLET;
+
+  // If no ADMIN_TOKEN configured, wallet gate still works.
+  return tokenOK || walletOK;
 }
 
-function json(data: any, code = 200) {
-  return NextResponse.json(data, { status: code });
+/** -------------------- Utils -------------------- */
+function json(data: any, status = 200) {
+  return NextResponse.json(data, {
+    status,
+    headers: { "cache-control": "no-store" },
+  });
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** -------------------- Handler -------------------- */
 export async function POST(req: NextRequest) {
-  if (!auth(req)) return json({ ok: false, error: "unauthorized" }, 401);
+  if (!authorized(req)) return json({ error: "unauthorized" }, 401);
 
-  const { from = 1, to = from, delayMs = 120 } = (await req.json().catch(() => ({}))) as {
-    from?: number;
-    to?: number;
-    delayMs?: number;
-  };
+  try {
+    const body = (await req.json().catch(() => ({}))) as {
+      from?: number;
+      to?: number;
+      delayMs?: number;
+    };
 
-  const start = Math.max(1, Number(from || 1));
-  const end = Math.max(start, Number(to || start));
-  const delay = Math.max(0, Number(delayMs || 0));
+    const start = Math.max(1, Number(body.from ?? 1));
+    const end = Math.max(start, Number(body.to ?? start));
+    const delayMs = Math.max(0, Number(body.delayMs ?? 120));
 
-  const done: number[] = [];
-  const failed: { id: number; err: string }[] = [];
+    const done: number[] = [];
+    const failed: { id: number; err: string }[] = [];
+    const supa = hasSupabase();
 
-  for (let id = start; id <= end; id++) {
-    try {
-      const s = await getOnchainState(TAMABOT_CORE.address, id);
-      if (!s?.fid) throw new Error("no fid");
-      const look = pickLook(s.fid);
-      const persona = await generatePersonaText(s, look.archetype.name);
-
+    for (let id = start; id <= end; id++) {
       try {
-        // current signature: upsertPersona(tokenId, text, label?, source?)
-        await upsertPersona(id, `${persona.label}\n\n${persona.bio}`, "Auto", "openai");
-        await upsertLook(id, {
-          archetypeId: look.archetype.id,
-          baseColor: look.base,
-          accentColor: look.accent,
-          auraColor: look.aura,
-          biome: look.biome,
-          accessory: look.accessory,
-        });
-      } catch (dbErr: any) {
-        // keep going; record error
-        failed.push({ id, err: `db: ${String(dbErr?.message || dbErr)}` });
-        continue;
+        const s = await getOnchainState(TAMABOT_CORE.address, id);
+        if (!s?.fid) throw new Error("no fid");
+
+        // Deterministic look + persona
+        const look = pickLook(s.fid);
+        const persona = await generatePersonaText(s, look.archetype.name);
+
+        // Upserts (optional if Supabase not wired)
+        if (supa) {
+          try {
+            await upsertPersona({
+              tokenId: id,
+              text: persona.bio ?? "A cheerful bot tuned to your vibe.",
+              label: persona.label ?? "Auto",
+              source: "openai",
+            });
+
+            await upsertLook(id, {
+              archetypeId: look.archetype.id,
+              baseColor: look.base,
+              accentColor: look.accent,
+              auraColor: look.aura,
+              biome: look.biome,
+              accessory: look.accessory,
+            });
+          } catch (dbErr: any) {
+            // Non-fatal: record but keep flowing
+            throw new Error(`supabase: ${dbErr?.message || dbErr}`);
+          }
+        }
+
+        done.push(id);
+      } catch (e: any) {
+        failed.push({ id, err: String(e?.message || e) });
       }
 
-      done.push(id);
-    } catch (e: any) {
-      failed.push({ id, err: String(e?.message || e) });
+      if (delayMs > 0) await sleep(delayMs);
     }
-    if (delay) await new Promise((r) => setTimeout(r, delay));
-  }
 
-  return json({ ok: true, range: { from: start, to: end }, done, failed });
+    return json({
+      ok: true,
+      range: { from: start, to: end },
+      counts: { done: done.length, failed: failed.length },
+      done,
+      failed,
+    });
+  } catch (e: any) {
+    return json({ ok: false, error: String(e?.message || e) }, 500);
+  }
 }
