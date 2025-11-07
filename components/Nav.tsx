@@ -36,8 +36,14 @@ function probeImage(url: string, timeoutMs = 3000): Promise<boolean> {
       }
     };
     const t = setTimeout(() => finish(false), timeoutMs);
-    img.onload = () => { clearTimeout(t); finish(true); };
-    img.onerror = () => { clearTimeout(t); finish(false); };
+    img.onload = () => {
+      clearTimeout(t);
+      finish(true);
+    };
+    img.onerror = () => {
+      clearTimeout(t);
+      finish(false);
+    };
     const bust = url.includes("?")
       ? `${url}&cb=${Date.now() % 10000}`
       : `${url}?cb=${Date.now() % 10000}`;
@@ -55,7 +61,9 @@ export default function Nav() {
   const { address } = useAccount();
   const isAdmin = (address || "").toLowerCase() === ADMIN_WALLET;
 
-  const [avatar, setAvatar] = useState<string | null>(normalizeAvatar(user?.pfpUrl));
+  const [avatar, setAvatar] = useState<string | null>(
+    normalizeAvatar(user?.pfpUrl)
+  );
   const [loadingAvatar, setLoadingAvatar] = useState<boolean>(!!avatar);
   const [open, setOpen] = useState(false);
 
@@ -86,7 +94,9 @@ export default function Nav() {
         /* no-op */
       }
     })();
-    return () => { ok = false; };
+    return () => {
+      ok = false;
+    };
   }, [fid, avatar]);
 
   // Validate the avatar actually loads; otherwise fall back to egg
@@ -101,17 +111,20 @@ export default function Nav() {
       const ok = await probeImage(avatar, 3000);
       if (!cancelled) {
         if (!ok) {
-          setAvatar(null);   // 🥚 fallback
+          setAvatar(null); // 🥚 fallback
           setLoadingAvatar(false);
         } else {
           setLoadingAvatar(false);
         }
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [avatar]);
 
-  const is = (p: string) => (p === "/" ? pathname === "/" : pathname.startsWith(p));
+  const is = (p: string) =>
+    p === "/" ? pathname === "/" : pathname.startsWith(p);
 
   return (
     <header
@@ -144,10 +157,15 @@ export default function Nav() {
                 decoding="async"
               />
             ) : (
-              <span className="absolute inset-0 flex items-center justify-center text-2xl">🥚</span>
+              <span className="absolute inset-0 flex items-center justify-center text-2xl">
+                🥚
+              </span>
             )}
             {loadingAvatar && (
-              <span className="absolute inset-0 animate-pulse bg-white/5" aria-hidden />
+              <span
+                className="absolute inset-0 animate-pulse bg-white/5"
+                aria-hidden
+              />
             )}
           </a>
 
@@ -160,12 +178,19 @@ export default function Nav() {
 
         {/* right: burger */}
         <button
-          onClick={() => setOpen(v => !v)}
+          onClick={() => setOpen((v) => !v)}
           aria-label="Open menu"
           aria-expanded={open}
           className="shrink-0 inline-flex items-center justify-center h-12 w-12 rounded-xl border border-white/15 hover:bg-white/10 transition"
         >
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+          <svg
+            width="26"
+            height="26"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+          >
             <path d="M3 6h18M3 12h18M3 18h18" />
           </svg>
         </button>
@@ -174,15 +199,39 @@ export default function Nav() {
       {open && (
         <div className="border-t border-white/10 bg-black/70 backdrop-blur-xl animate-fadeInDown">
           <div className="container mx-auto px-5 py-6 grid gap-4 text-white text-[16px]">
-            <a href="/"      onClick={() => setOpen(false)} className={`nav-pill ${is("/") ? "nav-pill--active" : ""}`}>Home</a>
-            <a href="/mint"  onClick={() => setOpen(false)} className={`nav-pill ${is("/mint") ? "nav-pill--active" : ""}`}>Mint</a>
-            <a href="/my"    onClick={() => setOpen(false)} className={`nav-pill ${is("/my") ? "nav-pill--active" : ""}`}>My&nbsp;Pet</a>
-            <a href="/about" onClick={() => setOpen(false)} className={`nav-pill ${is("/about") ? "nav-pill--active" : ""}`}>About</a>
+            <a
+              href="/"
+              onClick={() => setOpen(false)}
+              className={`nav-pill ${is("/") ? "nav-pill--active" : ""}`}
+            >
+              Home
+            </a>
+            <a
+              href="/mint"
+              onClick={() => setOpen(false)}
+              className={`nav-pill ${is("/mint") ? "nav-pill--active" : ""}`}
+            >
+              Mint
+            </a>
+            <a
+              href="/my"
+              onClick={() => setOpen(false)}
+              className={`nav-pill ${is("/my") ? "nav-pill--active" : ""}`}
+            >
+              My&nbsp;Pet
+            </a>
+            <a
+              href="/about"
+              onClick={() => setOpen(false)}
+              className={`nav-pill ${is("/about") ? "nav-pill--active" : ""}`}
+            >
+              About
+            </a>
 
             {/* Admin (wallet-gated) */}
             {isAdmin && (
               <a
-                href="/admin"
+                href="/admin/tools"
                 onClick={() => setOpen(false)}
                 className={`nav-pill ${is("/admin") ? "nav-pill--active" : ""}`}
                 title="Admin Tools"
