@@ -7,9 +7,7 @@ export const revalidate = 0;
 export const runtime = "nodejs";
 
 /**
- * NOTE: We avoid strict typing on the 2nd arg to satisfy Next 15 route handler checks.
- * If you prefer types, you can bring back `{ params }: { params: { chain: string; address: string; id: string } }`
- * — but the current Next compiler is picky, so `any` keeps builds green.
+ * We intentionally keep `context: any` to satisfy Next 15's handler checks.
  */
 export async function GET(req: Request, context: any) {
   try {
@@ -30,11 +28,11 @@ export async function GET(req: Request, context: any) {
       return json({ error: "Invalid address" }, 400);
     }
 
-    // ---------- derive site & fallbacks ----------
+    // ---------- site + fallbacks ----------
     const envSite = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
     const url = new URL(req.url);
     const site = envSite || `${url.protocol}//${url.host}`;
-    const fallbackImage = `${site}/og.png`; // ensure you have /public/og.png
+    const fallbackImage = `${site}/og.png`; // put /public/og.png in your repo
 
     // ---------- on-chain ----------
     let s: Awaited<ReturnType<typeof getOnchainState>>;
@@ -44,11 +42,7 @@ export async function GET(req: Request, context: any) {
       return json(
         {
           error: "getOnchainState failed",
-          details: {
-            message: e?.message || String(e),
-            address,
-            id: idNum,
-          },
+          details: { message: e?.message || String(e), address, id: idNum },
         },
         502
       );
@@ -61,17 +55,20 @@ export async function GET(req: Request, context: any) {
       useDb ? getSpriteCid(idNum) : Promise.resolve(""),
     ]);
 
-    // Prefer sprite/persona media; fall back to og.png so marketplaces render a card
-    const imageHttp = spriteCid ? ipfsToHttp(spriteCid) : fallbackImage;
-    const animHttp = persona?.previewCid ? ipfsToHttp(persona.previewCid) : undefined;
+    // If PNG sprite exists, use it. Otherwise, keep a static placeholder image,
+    // but expose the animated preview via `animation_url` (so marketplaces show motion).
+    const hasPng = Boolean(spriteCid);
+    const hasPreview = Boolean(persona?.previewCid);
+
+    const imageHttp = hasPng ? ipfsToHttp(spriteCid) : fallbackImage;
+    const animHttp  = hasPreview ? ipfsToHttp(persona!.previewCid!) : undefined;
 
     // ---------- payload ----------
     const payload = {
       name: `TamaBot #${idNum}`,
-      description:
-        persona?.bio ?? "An AI-shaped Farcaster pet that evolves with your vibe.",
-      image: imageHttp,              // always present (fallback)
-      animation_url: animHttp,       // optional
+      description: persona?.bio ?? "An AI-shaped Farcaster pet that evolves with your vibe.",
+      image: imageHttp,          // PNG if present; otherwise /og.png
+      animation_url: animHttp,   // present when preview is available
       attributes: [
         { trait_type: "Level",       value: s.level },
         { trait_type: "Mood",        value: s.mood },
@@ -87,14 +84,10 @@ export async function GET(req: Request, context: any) {
     };
 
     return json(payload, 200, {
-      // Light edge cache; marketplaces revalidate frequently anyway
       "cache-control": "public, max-age=0, s-maxage=300, stale-while-revalidate=600",
     });
   } catch (e: any) {
-    return json(
-      { error: "server_error", message: e?.message || "Unexpected error" },
-      500
-    );
+    return json({ error: "server_error", message: e?.message || "Unexpected error" }, 500);
   }
 }
 
