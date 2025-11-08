@@ -2,11 +2,40 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { useEffect, useState } from "react";
 import { useMiniContext } from "@/lib/useMiniContext";
+
+type SupplyResp = {
+  ok: boolean;
+  chainId: number;
+  address: `0x${string}`;
+  mintPriceWei: string;
+  mintPriceEth: string;
+  totalMinted: number;
+  maxSupply: number;
+};
 
 export default function HomeClient() {
   const { user, fid, inMini } = useMiniContext();
-  const isMini = inMini;
+  const [stats, setStats] = useState<SupplyResp | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch("/api/basebots/supply", { cache: "no-store" });
+        const j: SupplyResp = await r.json();
+        if (alive && j?.ok) setStats(j);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const mintPrice = stats?.mintPriceEth ?? "0.001";
+  const totalMinted = stats?.totalMinted ?? 0;
+  const maxSupply = stats?.maxSupply ?? 50000;
 
   return (
     <main className="min-h-[100svh] bg-[#0a0b10] text-white pb-16">
@@ -42,10 +71,9 @@ export default function HomeClient() {
               </Link>
             </div>
 
-            {isMini && (
+            {inMini && (
               <p className="mt-3 text-sm text-white/75">
-                Connected as{" "}
-                {user?.username ? `@${user.username}` : `FID ${fid ?? "—"}`}
+                Connected as {user?.username ? `@${user.username}` : `FID ${fid ?? "—"}`}
               </p>
             )}
           </div>
@@ -59,11 +87,15 @@ export default function HomeClient() {
             <ul className="space-y-2 text-white/85 leading-relaxed">
               <li>
                 <span className="text-orange-300 font-semibold">Mint price:</span>{" "}
-                0.001 Base ETH
+                {mintPrice} Base ETH
               </li>
               <li>
                 <span className="text-orange-300 font-semibold">Max supply:</span>{" "}
-                100,000
+                {maxSupply.toLocaleString()}
+              </li>
+              <li>
+                <span className="text-orange-300 font-semibold">Minted:</span>{" "}
+                {totalMinted.toLocaleString()}
               </li>
               <li>
                 <span className="text-orange-300 font-semibold">Limit:</span>{" "}
@@ -72,9 +104,8 @@ export default function HomeClient() {
             </ul>
 
             <p className="mt-4 text-white/80 text-sm leading-relaxed">
-              Connect your wallet, enter your FID, and mint. If you’re inside the
-              Warpcast Mini, your FID is auto-detected for a seamless minting
-              experience.
+              Connect your wallet, enter your FID, and mint. If you’re inside the Warpcast Mini,
+              your FID is auto-detected and we’ll sign your mint server-side for a seamless flow.
             </p>
           </div>
         </section>
