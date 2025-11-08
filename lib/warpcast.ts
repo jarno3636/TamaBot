@@ -1,3 +1,4 @@
+// lib/warpcast.ts
 import { env } from "@/lib/env";
 
 /**
@@ -6,9 +7,10 @@ import { env } from "@/lib/env";
  * @returns The farcaster manifest for the frame
  */
 export async function getFarcasterManifest() {
-  let frameName = "Mini-app Starter";
+  let frameName = "Basebots Mini-App";
   let noindex = false;
-  const appUrl = env.NEXT_PUBLIC_URL;
+  const appUrl = env.NEXT_PUBLIC_URL || "";
+
   if (appUrl.includes("localhost")) {
     frameName += " Local";
     noindex = true;
@@ -19,11 +21,13 @@ export async function getFarcasterManifest() {
     frameName += " Dev";
     noindex = true;
   }
+
   return {
     accountAssociation: {
-      header: env.NEXT_PUBLIC_FARCASTER_HEADER,
-      payload: env.NEXT_PUBLIC_FARCASTER_PAYLOAD,
-      signature: env.NEXT_PUBLIC_FARCASTER_SIGNATURE,
+      // Safe fallbacks: empty strings are allowed; store listing can be added later
+      header: env.NEXT_PUBLIC_FARCASTER_HEADER || "",
+      payload: env.NEXT_PUBLIC_FARCASTER_PAYLOAD || "",
+      signature: env.NEXT_PUBLIC_FARCASTER_SIGNATURE || "",
     },
     frame: {
       version: "1",
@@ -33,23 +37,21 @@ export async function getFarcasterManifest() {
       imageUrl: `${appUrl}/images/feed.png`,
       buttonTitle: `Launch App`,
       splashImageUrl: `${appUrl}/images/splash.png`,
-      splashBackgroundColor: "#FFFFFF",
+      splashBackgroundColor: "#0a0b10",
       webhookUrl: `${appUrl}/api/webhook`,
       // Metadata https://github.com/farcasterxyz/miniapps/discussions/191
-      subtitle: "Starter kit for mini-apps", // 30 characters, no emojis or special characters, short description under app name
-      description: "Starter kit for mini-apps", // 170 characters, no emojis or special characters, promotional message displayed on Mini App Page
+      subtitle: "On-chain robots from the future",
+      description:
+        "Mint a Basebot: on-chain SVG art, FID-anchored traits, and a neon-blue aesthetic built for Base.",
       primaryCategory: "social",
-      tags: ["mini-app", "starter"], // up to 5 tags, filtering/search tags
-      tagline: "Starter kit for mini-apps", // 30 characters, marketing tagline should be punchy and descriptive
-      ogTitle: `${frameName}`, // 30 characters, app name + short tag, Title case, no emojis
-      ogDescription: "Starter kit for Farcastermini-apps", // 100 characters, summarize core benefits in 1-2 lines
-      screenshotUrls: [
-        // 1284 x 2778, visual previews of the app, max 3 screenshots
-        `${appUrl}/images/feed.png`,
-      ],
-      heroImageUrl: `${appUrl}/images/feed.png`, // 1200 x 630px (1.91:1), promotional display image on top of the mini app store
-      ogImageUrl: `${appUrl}/images/feed.png`, // 1200 x 630px (1.91:1), promotional image, same as app hero image
-      noindex: noindex,
+      tags: ["base", "nft", "on-chain", "mini-app"],
+      tagline: "Forge your Basebot",
+      ogTitle: `${frameName}`,
+      ogDescription: "On-chain SVG robots with FID-bound traits.",
+      screenshotUrls: [`${appUrl}/images/feed.png`],
+      heroImageUrl: `${appUrl}/images/feed.png`,
+      ogImageUrl: `${appUrl}/images/feed.png`,
+      noindex,
     },
   };
 }
