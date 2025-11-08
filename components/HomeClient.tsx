@@ -1,113 +1,318 @@
 "use client";
 
-import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { formatEther, isAddress } from "viem";
+import {
+  useAccount,
+  useReadContract,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+} from "wagmi";
+import { base } from "viem/chains";
+import { BASEBOTS } from "@/lib/abi";
 import { useMiniContext } from "@/lib/useMiniContext";
+import ConnectPill from "@/components/ConnectPill";
 
-type SupplyResp = {
+type SignResp = {
   ok: boolean;
-  chainId: number;
-  address: `0x${string}`;
-  mintPriceWei: string;
-  mintPriceEth: string;
-  totalMinted: number;
-  maxSupply: number;
+  verifier?: `0x${string}`;
+  to?: `0x${string}`;
+  fid?: string;
+  price?: string;
+  deadline?: string;
+  sig?: `0x${string}`;
+  error?: string;
 };
 
+function isValidFID(v: string | number | undefined) {
+  if (v === undefined || v === null) return false;
+  const n = typeof v === "string" ? Number(v) : v;
+  return Number.isFinite(n) && n > 0 && Number.isInteger(n);
+}
+
 export default function HomeClient() {
-  const { user, fid, inMini } = useMiniContext();
-  const [stats, setStats] = useState<SupplyResp | null>(null);
+  /** Identity & network */
+  const { address } = useAccount();
+  const { user, fid: miniFID, inMini } = useMiniContext();
+
+  /** On-chain reads */
+  const { data: price = 0n } = useReadContract({
+    ...BASEBOTS,
+    functionName: "mintPrice",
+  });
+
+  const { data: maxSupply = 50000n } = useReadContract({
+    ...BASEBOTS,
+    functionName: "MAX_SUPPLY",
+  });
+
+  const { data: totalMinted = 0n, refetch: refetchMinted } = useReadContract({
+    ...BASEBOTS,
+    functionName: "totalMinted",
+  });
+
+  const { data: gating = true } = useReadContract({
+    ...BASEBOTS,
+    functionName: "fidGatingEnabled",
+  });
+
+  /** Local UI state */
+  const [fidInput, setFidInput] = useState<string>("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string>("");
+
+  /** Writers */
+  const { writeContract, data: txHash, error: writeErr } = useWriteContract();
+  const { isLoading: pending, isSuccess: mined } = useWaitForTransactionReceipt({
+    hash: txHash,
+    chainId: base.id,
+  });
+
+  /** Prefill FID when inside Mini */
+  useEffect(() => {
+    if (miniFID && !fidInput) setFidInput(String(miniFID));
+  }, [miniFID, fidInput]);
+
+  /** Display helpers */
+  const priceEth = useMemo(() => formatEther(price), [price]);
+  const minted = Number(totalMinted);
+  const cap = Number(maxSupply);
+  const pct = Math.max(0, Math.min(100, Math.round((minted / Math.max(1, cap)) * 100)));
 
   useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const r = await fetch("/api/basebots/supply", { cache: "no-store" });
-        const j: SupplyResp = await r.json();
-        if (alive && j?.ok) setStats(j);
-      } catch {
-        // ignore
-      }
-    })();
-    return () => { alive = false; };
-  }, []);
+    if (mined) refetchMinted();
+  }, [mined, refetchMinted]);
 
-  const mintPrice = stats?.mintPriceEth ?? "0.001";
-  const totalMinted = stats?.totalMinted ?? 0;
-  const maxSupply = stats?.maxSupply ?? 50000;
+  async function handleMint() {
+    try {
+      setErr("");
+      setBusy(true);
+
+      if (!address || !isAddress(address)) {
+        setErr("Connect your wallet first.");
+        return;
+      }
+      if (!isValidFID(fidInput)) {
+        setErr("Enter a valid FID (positive integer).");
+        return;
+      }
+
+      const fidBig = BigInt(fidInput);
+
+      if (gating) {
+        // Get server signature (off-chain)
+        const r = await fetch("/api/basebots/sign", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ to: address, fid: Number(fidBig) }),
+        });
+        const j: SignResp = await r.json();
+
+        if (!j.ok || !j.sig || !j.deadline || !j.price) {
+          throw new Error(j.error || "Signing failed");
+        }
+
+        // Call mintWithSig on-chain (user pays)
+        await writeContract({
+          ...BASEBOTS,
+          functionName: "mintWithSig",
+          args: [fidBig, BigInt(j.deadline), j.sig],
+          value: BigInt(j.price),
+          chainId: base.id,
+        });
+      } else {
+        // Non-gated path
+        await writeContract({
+          ...BASEBOTS,
+          functionName: "mint",
+          args: [fidBig],
+          value: price,
+          chainId: base.id,
+        });
+      }
+    } catch (e: any) {
+      setErr(e?.shortMessage || e?.message || "Mint failed");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
-    <main className="min-h-[100svh] bg-[#0a0b10] text-white pb-16">
-      <div className="container pt-8 px-5">
-        <section className="grid gap-6">
-          {/* Logo Card */}
-          <div className="glass glass-pad relative flex justify-center">
-            <Image
-              src="/logo.PNG"
-              alt="TamaBot"
-              width={200}
-              height={200}
-              priority
-              className="rounded-2xl"
-            />
+    <main className="min-h-[100svh] bg-deep text-white pb-16">
+      <div className="container pt-6 px-5 stack">
+        {/* Top nav row */}
+        <div className="flex items-center justify-between">
+          <div className="chips">
+            <span className="pill-note pill-note--blue">Chain: Base</span>
+            <span className="pill-note pill-note--blue">
+              Contract:{" "}
+              <Link
+                className="underline decoration-dotted underline-offset-4"
+                href={`https://basescan.org/address/${BASEBOTS.address}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {BASEBOTS.address.slice(0, 6)}…{BASEBOTS.address.slice(-4)}
+              </Link>
+            </span>
           </div>
+          <ConnectPill />
+        </div>
 
-          {/* Intro Card */}
-          <div className="glass glass-pad">
-            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
-              Adopt your TamaBot
-            </h1>
-            <p className="mt-2 text-white/90">
-              Your Farcaster-aware pet that grows with your vibe.
-            </p>
-
-            <div className="cta-row mt-5 flex flex-wrap gap-3">
-              <Link href="/mint" className="btn-pill btn-pill--orange">
-                Mint your pet
-              </Link>
-              <Link href="/my" className="btn-pill btn-pill--blue">
-                See my pet
-              </Link>
+        {/* Hero / Identity */}
+        <section className="glass hero-logo-card relative overflow-hidden">
+          {/* subtle starfield-ish gradient */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                "radial-gradient(800px 400px at 10% -20%, rgba(58,166,216,0.18), transparent 60%), radial-gradient(900px 500px at 90% -30%, rgba(121,255,225,0.14), transparent 70%)",
+              maskImage:
+                "radial-gradient(120% 120% at 50% 0%, #000 55%, transparent 100%)",
+            }}
+          />
+          <div className="flex flex-col items-center md:flex-row md:items-center md:gap-8">
+            <div className="hero-logo-wrap">
+              <Image
+                src="/logo.PNG"
+                alt="Basebots"
+                fill
+                sizes="200px"
+                priority
+                className="rounded-2xl object-contain"
+              />
             </div>
-
-            {inMini && (
-              <p className="mt-3 text-sm text-white/75">
-                Connected as {user?.username ? `@${user.username}` : `FID ${fid ?? "—"}`}
+            <div className="mt-6 md:mt-0">
+              <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
+                Basebots: Greetings from the Neon Future
+              </h1>
+              <p className="mt-3 max-w-2xl text-white/90 leading-relaxed">
+                Spin up a cube-chassis robo-buddy forged in Base’s bluish aurora.
+                Traits are entangled with your Farcaster FID, art is fully on-chain SVG,
+                and your bot rolls out with a glint of alien starlight ✨.
               </p>
-            )}
+              {inMini && (
+                <p className="mt-3 text-sm text-white/75">
+                  Detected Mini:{" "}
+                  {user?.username ? `@${user.username}` : `FID ${miniFID ?? "—"}`}
+                </p>
+              )}
+              <div className="pill-row mt-4">
+                <span className="pill-note pill-note--blue">Fully on-chain image</span>
+                <span className="pill-note pill-note--blue">2981 royalties</span>
+                <span className="pill-note pill-note--blue">One per FID</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Stats + progress */}
+        <section className="glass glass-pad bg-[#0f1320]/50 border border-white/10">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h2 className="text-xl md:text-2xl font-bold">Minting & Supply</h2>
+              <ul className="mt-2 space-y-1 text-white/85">
+                <li>
+                  <span className="text-[#79ffe1] font-semibold">Mint price:</span>{" "}
+                  {priceEth} Base ETH
+                </li>
+                <li>
+                  <span className="text-[#79ffe1] font-semibold">Max supply:</span>{" "}
+                  {Number(maxSupply).toLocaleString()}
+                </li>
+                <li>
+                  <span className="text-[#79ffe1] font-semibold">Minted:</span>{" "}
+                  {Number(totalMinted).toLocaleString()} ({pct}%)
+                </li>
+              </ul>
+            </div>
+            <div className="w-full md:w-1/2">
+              <div className="h-3 w-full rounded-full bg-white/10 overflow-hidden">
+                <div
+                  className="h-full bg-[#79ffe1]"
+                  style={{ width: `${pct}%` }}
+                  aria-label={`minted ${pct}%`}
+                />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Mint card */}
+        <section className="glass glass-pad relative overflow-hidden bg-[#0b0f18]/70">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -top-24 -right-24 h-64 w-64 rounded-full blur-3xl"
+            style={{ background: "radial-gradient(circle, #79ffe155 0%, transparent 60%)" }}
+          />
+          <h2 className="text-xl md:text-2xl font-bold">Mint your Basebot</h2>
+          <p className="mt-1 text-white/85">
+            Enter your Farcaster FID and we’ll beam a signed clearance from HQ.
+            Your wallet sends a single tx; your bot arrives in seconds.
+          </p>
+
+          <div className="mt-5 grid gap-3 md:grid-cols-[220px_auto_160px]">
+            <label className="block">
+              <span className="text-xs uppercase tracking-wide text-white/60">Farcaster FID</span>
+              <input
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={fidInput}
+                onChange={(e) => setFidInput(e.target.value.replace(/[^\d]/g, ""))}
+                placeholder="e.g. 12345"
+                className="mt-1 w-full rounded-xl bg-white/10 border border-white/20 px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60"
+              />
+            </label>
+
+            <div className="flex items-end gap-3">
+              <button
+                type="button"
+                onClick={handleMint}
+                disabled={busy || pending}
+                className="btn-pill btn-pill--blue !font-bold"
+                style={{ opacity: busy || pending ? 0.7 : 1 }}
+              >
+                {busy || pending ? "Minting…" : "Mint Basebot"}
+              </button>
+
+              <Link href="/my" className="btn-ghost">See my bot</Link>
+            </div>
           </div>
 
-          {/* Minting & Supply Info */}
-          <div className="glass glass-pad bg-[#12151b]/80 border border-white/10">
-            <h2 className="text-xl md:text-2xl font-bold text-white mb-2">
-              Minting & Supply
-            </h2>
-
-            <ul className="space-y-2 text-white/85 leading-relaxed">
-              <li>
-                <span className="text-orange-300 font-semibold">Mint price:</span>{" "}
-                {mintPrice} Base ETH
-              </li>
-              <li>
-                <span className="text-orange-300 font-semibold">Max supply:</span>{" "}
-                {maxSupply.toLocaleString()}
-              </li>
-              <li>
-                <span className="text-orange-300 font-semibold">Minted:</span>{" "}
-                {totalMinted.toLocaleString()}
-              </li>
-              <li>
-                <span className="text-orange-300 font-semibold">Limit:</span>{" "}
-                One pet per Farcaster FID
-              </li>
-            </ul>
-
-            <p className="mt-4 text-white/80 text-sm leading-relaxed">
-              Connect your wallet, enter your FID, and mint. If you’re inside the Warpcast Mini,
-              your FID is auto-detected and we’ll sign your mint server-side for a seamless flow.
+          {/* Status / errors */}
+          {(err || writeErr) && (
+            <p className="mt-3 text-sm text-red-300">
+              {err || writeErr?.shortMessage || writeErr?.message}
             </p>
-          </div>
+          )}
+          {txHash && !mined && (
+            <p className="mt-3 text-sm text-white/80">
+              Tx sent:{" "}
+              <Link
+                href={`https://basescan.org/tx/${txHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline decoration-dotted underline-offset-4"
+              >
+                {txHash.slice(0, 10)}…{txHash.slice(-8)}
+              </Link>
+            </p>
+          )}
+          {mined && (
+            <p className="mt-3 text-sm text-green-300">
+              Mint confirmed! ⚡ Refresh your wallet/marketplace if you don’t see the art instantly.
+            </p>
+          )}
+        </section>
+
+        {/* Footer blurb */}
+        <section className="text-center text-white/70">
+          <p className="text-sm">
+            “Somewhere beyond the Base horizon, a thousand chrome eyelids blink in unison…”
+          </p>
         </section>
       </div>
     </main>
