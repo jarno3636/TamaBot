@@ -31,6 +31,7 @@ async function tryFinalize(id: number) {
     return false;
   }
 }
+
 async function generatePersonaAndSave(id: number) {
   try {
     const r1 = await fetch(`/api/pet/extras?action=persona&id=${id}`, { cache: "no-store" });
@@ -64,7 +65,12 @@ export default function MintCard() {
     chainId: base.id,
     query: { refetchOnWindowFocus: false },
   });
-  const feeEth = fee ? formatEther(fee as bigint) : "…";
+
+  // Coerce to a real bigint for all downstream calls
+  const feeWei: bigint =
+    typeof fee === "bigint" ? fee : fee != null ? BigInt(fee as any) : 0n;
+
+  const feeEth = feeWei > 0n ? formatEther(feeWei) : "…";
 
   // Already minted?
   const { data: existingTokenId } = useReadContract({
@@ -78,14 +84,14 @@ export default function MintCard() {
   const alreadyMinted =
     typeof existingTokenId === "bigint" && existingTokenId > 0n ? Number(existingTokenId) : null;
 
-  // 🔍 Simulate mint to get *exact* reason if it would fail
-  const canTrySim = Boolean(address && fidNum !== null && fee && !alreadyMinted && chainId === base.id);
+  // 🔍 Simulate mint to get exact reason if it would fail
+  const canTrySim = Boolean(address && fidNum !== null && feeWei > 0n && !alreadyMinted && chainId === base.id);
   const { data: sim, error: simErr } = useSimulateContract({
     address: TAMABOT_CORE.address as `0x${string}`,
     abi: TAMABOT_CORE.abi,
     functionName: "mint",
     args: fidNum ? [BigInt(fidNum)] : undefined,
-    value: fee as bigint | undefined,
+    value: canTrySim ? feeWei : undefined,
     chainId: base.id,
     query: { enabled: canTrySim, refetchOnWindowFocus: false } as any,
   });
@@ -98,26 +104,25 @@ export default function MintCard() {
     if (!address) return false;
     if (chainId !== base.id) return false;
     if (fidNum === null) return false;
-    if (!fee) return false;
+    if (feeWei <= 0n) return false;
     if (alreadyMinted) return false;
-    // If we simulated and got an error, disable button
     if (simErr) return false;
     return true;
-  }, [address, chainId, fidNum, fee, alreadyMinted, simErr]);
+  }, [address, chainId, fidNum, feeWei, alreadyMinted, simErr]);
 
   function onMint() {
     if (!canMint) return;
     if (sim?.request) {
-      // ✅ best: use simulated request (has correct gas, etc.)
+      // ✅ best: use simulated request (has proper value/gas)
       writeContract(sim.request);
     } else {
-      // fallback if simulation didn’t run
+      // Fallback if simulation didn’t run
       writeContract({
         address: TAMABOT_CORE.address as `0x${string}`,
         abi: TAMABOT_CORE.abi,
         functionName: "mint",
         args: [BigInt(fidNum!)],
-        value: fee as bigint,
+        value: feeWei,                 // ✅ ensure value is sent
         chainId: base.id,
       });
     }
@@ -165,7 +170,7 @@ export default function MintCard() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h2 className="text-xl md:text-2xl font-extrabold">Mint your TamaBot</h2>
         <span className="pill-note pill-note--yellow text-sm">
-          Mint fee: {fee ? `${feeEth} ETH` : "…"}
+          Mint fee: {feeWei > 0n ? `${feeEth} ETH` : "…"}
         </span>
       </div>
 
@@ -202,7 +207,7 @@ export default function MintCard() {
             title={disabledReason}
             aria-disabled={!canMint || isPending || confirming}
           >
-            {isPending || confirming ? "Minting…" : fee ? `Mint (${feeEth} ETH)` : "Mint"}
+            {isPending || confirming ? "Minting…" : feeWei > 0n ? `Mint (${feeEth} ETH)` : "Mint"}
           </button>
         </div>
       )}
