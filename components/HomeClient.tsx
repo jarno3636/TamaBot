@@ -1,3 +1,4 @@
+// components/HomeClient.tsx
 "use client";
 
 import Image from "next/image";
@@ -30,6 +31,20 @@ function isValidFID(v: string | number | undefined) {
   if (v === undefined || v === null) return false;
   const n = typeof v === "string" ? Number(v) : v;
   return Number.isFinite(n) && n > 0 && Number.isInteger(n);
+}
+
+function getErrText(e: unknown): string {
+  if (e && typeof e === "object") {
+    const anyE = e as any;
+    if (typeof anyE.shortMessage === "string" && anyE.shortMessage.length > 0) {
+      return anyE.shortMessage;
+    }
+    if (typeof anyE.message === "string" && anyE.message.length > 0) {
+      return anyE.message;
+    }
+  }
+  if (typeof e === "string") return e;
+  try { return JSON.stringify(e); } catch { return "Unknown error"; }
 }
 
 export default function HomeClient() {
@@ -132,8 +147,8 @@ export default function HomeClient() {
           chainId: base.id,
         });
       }
-    } catch (e: any) {
-      setErr(e?.shortMessage || e?.message || "Mint failed");
+    } catch (e) {
+      setErr(getErrText(e));
     } finally {
       setBusy(false);
     }
@@ -285,7 +300,7 @@ export default function HomeClient() {
           {/* Status / errors */}
           {(err || writeErr) && (
             <p className="mt-3 text-sm text-red-300">
-              {err || writeErr?.shortMessage || writeErr?.message}
+              {err || getErrText(writeErr)}
             </p>
           )}
           {txHash && !mined && (
