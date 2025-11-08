@@ -4,10 +4,6 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useAccount, useReadContract } from "wagmi";
 import { BASEBOTS } from "@/lib/abi";
-import { base } from "viem/chains";
-import { isAddress } from "viem";
-import { useMiniContext } from "@/lib/useMiniContext";
-import ConnectPill from "@/components/ConnectPill";
 
 function isValidFID(v: string | number | undefined) {
   if (v === undefined || v === null) return false;
@@ -15,23 +11,34 @@ function isValidFID(v: string | number | undefined) {
   return Number.isFinite(n) && n > 0 && Number.isInteger(n);
 }
 
+/** Safe base64 -> string in the browser */
+function b64ToUtf8(b64: string): string {
+  try {
+    // atob is available in browser; handles our data: JSON
+    return decodeURIComponent(
+      Array.prototype.map
+        .call(atob(b64), (c: string) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+  } catch {
+    try {
+      return atob(b64);
+    } catch {
+      return "";
+    }
+  }
+}
+
 export default function MyBotClient() {
   const { address } = useAccount();
-  const { user, fid: miniFID, inMini } = useMiniContext();
-
   const [fidInput, setFidInput] = useState<string>("");
-
-  // Prefill FID from Mini if present
-  useEffect(() => {
-    if (miniFID && !fidInput) setFidInput(String(miniFID));
-  }, [miniFID, fidInput]);
 
   const fidBigInt = useMemo(
     () => (isValidFID(fidInput) ? BigInt(fidInput) : null),
     [fidInput]
   );
 
-  // Read tokenURI (on-chain JSON w/ embedded data:image/svg+xml;base64)
+  // tokenURI (on-chain JSON with data:image/svg+xml;base64)
   const { data: tokenJsonUri, refetch: refetchToken } = useReadContract({
     ...BASEBOTS,
     functionName: "tokenURI",
@@ -39,7 +46,7 @@ export default function MyBotClient() {
     query: { enabled: Boolean(fidBigInt) },
   });
 
-  // Read ownerOf(fid)
+  // ownerOf(fid)
   const {
     data: owner,
     error: ownerErr,
@@ -52,60 +59,43 @@ export default function MyBotClient() {
   });
 
   const iOwnThis =
-    !!address && isAddress(address) && owner && address.toLowerCase() === (owner as string).toLowerCase();
+    !!address && typeof owner === "string" &&
+    address.toLowerCase() === owner.toLowerCase();
 
-  // Try to parse the on-chain JSON if it’s a data:application/json;base64 URI
+  // Parse on-chain JSON if it's a base64 data URI
   let imageSrc = "";
   let name = "";
   let description = "";
   try {
-    if (typeof tokenJsonUri === "string" && tokenJsonUri.startsWith("data:application/json;base64,")) {
-      const b64 = tokenJsonUri.split(",")[1] || "";
-      const json = JSON.parse(Buffer.from(b64, "base64").toString("utf8"));
-      imageSrc = json?.image || "";
-      name = json?.name || "";
-      description = json?.description || "";
+    if (typeof tokenJsonUri === "string") {
+      const prefix = "data:application/json;base64,";
+      if (tokenJsonUri.startsWith(prefix)) {
+        const b64 = tokenJsonUri.slice(prefix.length);
+        const jsonStr = b64ToUtf8(b64);
+        const json = JSON.parse(jsonStr);
+        imageSrc = json?.image || "";
+        name = json?.name || "";
+        description = json?.description || "";
+      }
     }
   } catch {
-    // ignore parse errors; we’ll just show a fallback
+    // ignore parse errors
   }
 
   return (
     <main className="min-h-[100svh] bg-deep text-white pb-16">
       <div className="container pt-6 px-5 stack">
-        {/* Top row */}
-        <div className="flex items-center justify-between">
-          <div className="chips">
-            <span className="pill-note pill-note--blue">Chain: Base</span>
-            <span className="pill-note pill-note--blue">
-              Contract:{" "}
-              <Link
-                className="underline decoration-dotted underline-offset-4"
-                href={`https://basescan.org/address/${BASEBOTS.address}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {BASEBOTS.address.slice(0, 6)}…{BASEBOTS.address.slice(-4)}
-              </Link>
-            </span>
-          </div>
-          <ConnectPill />
-        </div>
 
-        {/* Header */}
+        {/* Header / Story */}
         <section className="glass glass-pad">
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">
-            Your Basebot, From the Neon Future
+            Meet Your Escort
           </h1>
           <p className="mt-2 text-white/85">
-            Enter your Farcaster FID to fetch its fully on-chain SVG. If you’re inside the Warpcast
-            Mini, we’ll auto-fill your FID.
+            Every Basebot is a tiny guardian stamped with your Farcaster FID.
+            Type your FID and we’ll pull your bot’s on-chain portrait—etched in SVG,
+            colored by the city’s blue aurora, and ready to roll.
           </p>
-          {inMini && (
-            <p className="mt-2 text-sm text-white/70">
-              Detected Mini identity: {user?.username ? `@${user.username}` : `FID ${miniFID ?? "—"}`}
-            </p>
-          )}
         </section>
 
         {/* Finder */}
@@ -141,8 +131,7 @@ export default function MyBotClient() {
           </div>
 
           <p className="mt-3 text-sm text-white/70">
-            Tip: Your FID is the numeric ID in your Farcaster profile. Example:{" "}
-            <span className="text-white/95 font-mono">/profiles/12345</span>
+            Tip: Your FID is the numeric ID in your Farcaster profile.
           </p>
         </section>
 
@@ -156,7 +145,6 @@ export default function MyBotClient() {
             />
             <div className="flex flex-col md:flex-row md:items-start gap-6">
               <div className="w-full md:max-w-[360px]">
-                {/* Render on-chain image (data URI) with plain <img> */}
                 {imageSrc ? (
                   <img
                     src={imageSrc}
@@ -176,21 +164,17 @@ export default function MyBotClient() {
                 </h2>
                 <p className="mt-2 text-white/85">
                   {description ||
-                    "Cube chassis, glowing optics, and a chassis tint straight from the alien-blue aurora."}
+                    "Chrome shell. Soft glow. Patient eyes. Your escort registers the skyline and awaits your first command."}
                 </p>
 
                 <div className="pill-row mt-4">
-                  <span className="pill-note pill-note--blue">
-                    Token ID (FID): {fidInput}
-                  </span>
+                  <span className="pill-note pill-note--blue">Token ID (FID): {fidInput}</span>
                   {owner && (
                     <span className="pill-note pill-note--blue">
                       Owner: {String(owner).slice(0, 6)}…{String(owner).slice(-4)}
                     </span>
                   )}
-                  {ownerErr && (
-                    <span className="pill-note pill-note--red">Not minted or invalid FID</span>
-                  )}
+                  {ownerErr && <span className="pill-note pill-note--red">Not minted or invalid FID</span>}
                   {iOwnThis ? (
                     <span className="pill-note pill-note--green">You own this bot</span>
                   ) : (
@@ -215,6 +199,26 @@ export default function MyBotClient() {
             </div>
           </section>
         )}
+
+        {/* Bottom pills (moved here) */}
+        <section className="flex flex-wrap gap-3 justify-center">
+          <Link
+            href="https://basescan.org/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="pill-note pill-note--blue"
+          >
+            Chain: Base ↗
+          </Link>
+          <Link
+            href={`https://basescan.org/address/${BASEBOTS.address}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="pill-note pill-note--blue"
+          >
+            Contract: {BASEBOTS.address.slice(0,6)}…{BASEBOTS.address.slice(-4)} ↗
+          </Link>
+        </section>
 
         {/* Footer */}
         <section className="text-center text-white/70">
