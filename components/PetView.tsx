@@ -4,6 +4,7 @@
 import { useEffect, useMemo } from "react";
 import useSWR from "swr";
 import { useReadContract } from "wagmi";
+import { base } from "viem/chains";
 import { TAMABOT_CORE } from "@/lib/abi";
 import { CareButtons } from "@/components/CareButtons";
 
@@ -42,13 +43,10 @@ function Bar({ label, pct }: { label: string; pct: number }) {
     <div className="grid gap-1">
       <div className="flex justify-between text-xs opacity-80">
         <span>{label}</span>
-        <span>{Math.round(pct * 100)}%</span>
+        <span>{Math.round(clamp01(pct) * 100)}%</span>
       </div>
       <div className="h-2 rounded-full bg-white/10 overflow-hidden">
-        <div
-          className="h-full rounded-full bg-white/70"
-          style={{ width: `${clamp01(pct) * 100}%` }}
-        />
+        <div className="h-full rounded-full bg-white/70" style={{ width: `${clamp01(pct) * 100}%` }} />
       </div>
     </div>
   );
@@ -56,80 +54,78 @@ function Bar({ label, pct }: { label: string; pct: number }) {
 
 /* ---------- component ---------- */
 export default function PetView({ id, metadataUrl }: { id: number; metadataUrl: string }) {
-  // 1) Metadata (exactly what your /api/metadata returns)
+  // 1) Metadata (what your /api/metadata returns)
   const { data: meta, error, isLoading, mutate } = useSWR(metadataUrl, fetcher, {
     revalidateOnFocus: false,
   });
 
   // 2) On-chain state (for live bars)
-  const {
-    data: chainState,
-    refetch: refetchState,
-  } = useReadContract({
+  const { data: chainState, refetch: refetchState } = useReadContract({
     address: TAMABOT_CORE.address as `0x${string}`,
     abi: TAMABOT_CORE.abi,
+    chainId: base.id,
     functionName: "getState",
     args: [BigInt(id)],
-    query: { refetchOnWindowFocus: false },
+    query: { refetchOnWindowFocus: false } as any,
   });
 
-  // auto-refresh state lightly (10s) to make the page feel alive
+  // Auto-refresh on-chain state every 10s (feels alive)
   useEffect(() => {
     const t = setInterval(() => refetchState(), 10_000);
     return () => clearInterval(t);
   }, [refetchState]);
 
-  // when an action confirms, refresh both state + (if your metadata changes) metadata
-  const onActionConfirmed = () => {
+  // If your metadata changes after interactions, this is safe to call too
+  const refreshAll = () => {
     refetchState();
-    mutate(); // safe if metadata includes dynamic attributes
+    mutate();
   };
 
   /* ---------- UI states ---------- */
   if (isLoading) return <div className="glass glass-pad">Loading pet…</div>;
-  if (error) return (
-    <div className="glass glass-pad text-red-400 text-sm">
-      Error loading metadata: {String((error as any)?.message || error)}
-    </div>
-  );
+  if (error)
+    return (
+      <div className="glass glass-pad text-red-400 text-sm">
+        Error loading metadata: {String((error as any)?.message || error)}
+      </div>
+    );
   if (!meta) return <div className="glass glass-pad">No metadata found.</div>;
 
   // Media
   const img = ipfsToHttp(meta.image || meta.image_url || "");
   const anim = ipfsToHttp(meta.animation_url || "");
 
-  // Attributes: show everything you have in the JSON so nothing “goes missing”
+  // Attributes (show all so nothing is “missing”)
   const attributes: Array<{ trait_type?: string; value?: any }> = Array.isArray(meta.attributes)
     ? meta.attributes
     : [];
 
-  // Pull a few nice-to-have labels if present
+  // Pull labels
   const name = meta.name || `TamaBot #${id}`;
   const personality =
     attributes.find((a) => a.trait_type === "Personality")?.value ??
     meta.personality ??
     "";
 
-  // Chain state → simple % bars (assuming 0..100 style values already)
-  const stateObj = chainState as
+  // Chain state → % bars (assuming 0..100 scale on values)
+  const s = chainState as
     | {
         level: bigint;
         xp: bigint;
-        mood: number;
-        hunger: bigint;
-        energy: bigint;
-        cleanliness: bigint;
+        mood: number | bigint;
+        hunger: number | bigint;
+        energy: number | bigint;
+        cleanliness: number | bigint;
         lastTick: bigint;
         fid: bigint;
       }
     | undefined;
 
-  const pct = (x: bigint | number | undefined) =>
-    clamp01(Number(x ?? 0) / 100);
+  const pct = (x: bigint | number | undefined) => clamp01(Number(x ?? 0) / 100);
 
   return (
-    <div className="glass glass-pad grid gap-4">
-      {/* Media */}
+    <div className="grid gap-4 w-full max-w-md mx-auto">
+      {/* Media (centered, mobile-friendly, no extra top banner) */}
       <div className="relative w-full aspect-square rounded-2xl overflow-hidden">
         {img ? (
           <img
@@ -153,7 +149,7 @@ export default function PetView({ id, metadataUrl }: { id: number; metadataUrl: 
         )}
       </div>
 
-      {/* Title + compact label */}
+      {/* Title + personality */}
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-xl font-semibold truncate">{name}</h3>
         {personality ? (
@@ -164,42 +160,37 @@ export default function PetView({ id, metadataUrl }: { id: number; metadataUrl: 
       </div>
 
       {/* Live bars from chain */}
-      {stateObj && (
+      {s && (
         <div className="grid gap-2">
-          <Bar label="Mood"        pct={pct(stateObj.mood)} />
-          <Bar label="Hunger"      pct={pct(stateObj.hunger)} />
-          <Bar label="Energy"      pct={pct(stateObj.energy)} />
-          <Bar label="Cleanliness" pct={pct(stateObj.cleanliness)} />
+          <Bar label="Mood" pct={pct(s.mood)} />
+          <Bar label="Hunger" pct={pct(s.hunger)} />
+          <Bar label="Energy" pct={pct(s.energy)} />
+          <Bar label="Cleanliness" pct={pct(s.cleanliness)} />
         </div>
       )}
 
-      {/* Interactions */}
-      <CareButtons id={id} />
-      {/* lightweight “done” handling: CareButtons already shows a confirmed tag; we hook the refresher */}
-      {/* We refresh on successful tx by listening to CareButtons via a custom event */}
-      <ActionRefresher onConfirmed={onActionConfirmed} />
-      
-      {/* Show ALL attributes from metadata so nothing is lost */}
+      {/* Interactions (your existing component) */}
+      <div className="flex items-center justify-between gap-3">
+        <CareButtons id={id} />
+        <button onClick={refreshAll} className="btn-ghost text-sm">
+          Refresh
+        </button>
+      </div>
+
+      {/* Full attribute list (compact, no duplication) */}
       {attributes.length > 0 && (
         <div className="grid grid-cols-2 gap-2">
           {attributes.map((a, i) => (
-            <div key={`${a.trait_type ?? i}:${String(a.value)}`} className="pill-note text-xs sm:text-sm">
-              {a.trait_type ? `${a.trait_type}: ` : ""}{String(a.value)}
+            <div
+              key={`${a.trait_type ?? i}:${String(a.value)}`}
+              className="pill-note text-xs sm:text-sm"
+            >
+              {a.trait_type ? `${a.trait_type}: ` : ""}
+              {String(a.value)}
             </div>
           ))}
         </div>
       )}
     </div>
   );
-}
-
-/* ---------- tiny bridge to trigger refresh after actions ---------- */
-/* We don’t change your CareButtons; we listen for tx success via a custom event it can dispatch */
-function ActionRefresher({ onConfirmed }: { onConfirmed: () => void }) {
-  useEffect(() => {
-    const h = () => onConfirmed();
-    window.addEventListener("tamabot:action_confirmed", h);
-    return () => window.removeEventListener("tamabot:action_confirmed", h);
-  }, [onConfirmed]);
-  return null;
 }
