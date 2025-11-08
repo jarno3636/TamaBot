@@ -1,4 +1,3 @@
-// components/TamaBotClient.tsx
 "use client";
 
 import Link from "next/link";
@@ -18,9 +17,11 @@ function toNum(x: unknown): number {
   try {
     if (typeof x === "number") return x;
     if (typeof x === "bigint") return Number(x);
-    const n = Number((x as any)?.toString?.() ?? x as any);
+    const n = Number((x as any)?.toString?.() ?? (x as any));
     return Number.isFinite(n) ? n : 0;
-  } catch { return 0; }
+  } catch {
+    return 0;
+  }
 }
 
 export default function TamaBotClient({ id }: { id: number }) {
@@ -61,16 +62,26 @@ export default function TamaBotClient({ id }: { id: number }) {
   const shareUrl = typeof window !== "undefined" ? window.location.href : "";
   const shareText = `Meet my TamaBot #${validId ? id : ""} — evolving with my Farcaster vibe.`;
   async function shareFarcaster() {
-    try { if (await composeCast({ text: `${shareText} ${shareUrl}` })) return; } catch {}
+    try {
+      if (await composeCast({ text: `${shareText} ${shareUrl}` })) return;
+    } catch {}
     const url = `https://warpcast.com/~/compose?text=${encodeURIComponent(`${shareText} ${shareUrl}`)}`;
     (await openInMini(url)) || window.open(url, "_blank");
   }
   function shareX() {
     const url = buildTweetUrl({ text: shareText, url: shareUrl });
-    openInMini(url).then(ok => { if (!ok) window.open(url, "_blank"); });
+    openInMini(url).then((ok) => {
+      if (!ok) window.open(url, "_blank");
+    });
   }
   const [copied, setCopied] = useState(false);
-  async function copyLink() { try { await navigator.clipboard.writeText(shareUrl); setCopied(true); setTimeout(()=>setCopied(false),1500);} catch {} }
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {}
+  }
 
   return (
     <div className="w-full max-w-3xl mx-auto px-5 pt-6 pb-16">
@@ -98,7 +109,12 @@ export default function TamaBotClient({ id }: { id: number }) {
 
           {/* Media & metadata (no big top banner, centered) */}
           <Card className="glass glass-pad">
-            {metadataUrl ? <PetView tokenURI={metadataUrl} /> : <div>No metadata URL.</div>}
+            {metadataUrl ? (
+              // ✅ FIX: PetView expects { id, metadataUrl }
+              <PetView id={id} metadataUrl={metadataUrl} />
+            ) : (
+              <div>No metadata URL.</div>
+            )}
           </Card>
 
           {/* Share */}
