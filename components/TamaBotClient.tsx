@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 import { useReadContract } from "wagmi";
 import { base } from "viem/chains";
 
-import PetCard from "@/components/PetView";
+import PetView from "@/components/PetView";
 import { TAMABOT_CORE } from "@/lib/abi";
 import { Card, Pill } from "@/components/UI";
 import { composeCast, openInMini } from "@/lib/miniapp";
@@ -26,13 +26,13 @@ function toNum(x: unknown): number {
 export default function TamaBotClient({ id }: { id: number }) {
   const validId = Number.isFinite(id) && id > 0;
 
-  // Always serve metadata from our API
+  // Always use our app’s metadata endpoint
   const metadataUrl = useMemo(
     () => (validId ? `/api/metadata/base/${TAMABOT_CORE.address}/${id}.json` : ""),
     [id, validId]
   );
 
-  // On-chain state
+  // On-chain pet state
   const { data: sRaw, isLoading: loadingState, refetch } = useReadContract({
     address: TAMABOT_CORE.address as `0x${string}`,
     abi: TAMABOT_CORE.abi,
@@ -60,7 +60,6 @@ export default function TamaBotClient({ id }: { id: number }) {
   // Share helpers
   const shareUrl = typeof window !== "undefined" ? window.location.href : "";
   const shareText = `Meet my TamaBot #${validId ? id : ""} — evolving with my Farcaster vibe.`;
-
   async function shareFarcaster() {
     try { if (await composeCast({ text: `${shareText} ${shareUrl}` })) return; } catch {}
     const url = `https://warpcast.com/~/compose?text=${encodeURIComponent(`${shareText} ${shareUrl}`)}`;
@@ -70,11 +69,8 @@ export default function TamaBotClient({ id }: { id: number }) {
     const url = buildTweetUrl({ text: shareText, url: shareUrl });
     openInMini(url).then(ok => { if (!ok) window.open(url, "_blank"); });
   }
-
   const [copied, setCopied] = useState(false);
-  async function copyLink() {
-    try { await navigator.clipboard.writeText(shareUrl); setCopied(true); setTimeout(()=>setCopied(false), 1500); } catch {}
-  }
+  async function copyLink() { try { await navigator.clipboard.writeText(shareUrl); setCopied(true); setTimeout(()=>setCopied(false),1500);} catch {} }
 
   return (
     <div className="w-full max-w-3xl mx-auto px-5 pt-6 pb-16">
@@ -100,9 +96,9 @@ export default function TamaBotClient({ id }: { id: number }) {
             </div>
           </div>
 
-          {/* Media + metadata */}
+          {/* Media & metadata (no big top banner, centered) */}
           <Card className="glass glass-pad">
-            {metadataUrl ? <PetCard tokenURI={metadataUrl} /> : <div>No metadata URL.</div>}
+            {metadataUrl ? <PetView tokenURI={metadataUrl} /> : <div>No metadata URL.</div>}
           </Card>
 
           {/* Share */}
@@ -143,7 +139,7 @@ export default function TamaBotClient({ id }: { id: number }) {
                   <KV k="Last Tick (day)" v={state.lastTick} />
                 </div>
 
-                {/* Interactive buttons refresh state on confirm */}
+                {/* Buttons: refetch state after tx confirmation */}
                 <CareButtons id={id} onConfirmed={() => refetch()} />
               </div>
             )}
