@@ -1,4 +1,3 @@
-// components/HomeClient.tsx
 "use client";
 
 import Image from "next/image";
@@ -14,7 +13,6 @@ import {
 import { base } from "viem/chains";
 import { BASEBOTS } from "@/lib/abi";
 import { useMiniContext } from "@/lib/useMiniContext";
-import ConnectPill from "@/components/ConnectPill";
 
 type SignResp = {
   ok: boolean;
@@ -53,25 +51,12 @@ export default function HomeClient() {
   const { user, fid: miniFID, inMini } = useMiniContext();
 
   /** On-chain reads */
-  const { data: price = 0n } = useReadContract({
-    ...BASEBOTS,
-    functionName: "mintPrice",
-  });
-
-  const { data: maxSupply = 50000n } = useReadContract({
-    ...BASEBOTS,
-    functionName: "MAX_SUPPLY",
-  });
-
+  const { data: price = 0n } = useReadContract({ ...BASEBOTS, functionName: "mintPrice" });
+  const { data: maxSupply = 50000n } = useReadContract({ ...BASEBOTS, functionName: "MAX_SUPPLY" });
   const { data: totalMinted = 0n, refetch: refetchMinted } = useReadContract({
-    ...BASEBOTS,
-    functionName: "totalMinted",
+    ...BASEBOTS, functionName: "totalMinted",
   });
-
-  const { data: gating = true } = useReadContract({
-    ...BASEBOTS,
-    functionName: "fidGatingEnabled",
-  });
+  const { data: gating = true } = useReadContract({ ...BASEBOTS, functionName: "fidGatingEnabled" });
 
   /** Local UI state */
   const [fidInput, setFidInput] = useState<string>("");
@@ -81,8 +66,7 @@ export default function HomeClient() {
   /** Writers */
   const { writeContract, data: txHash, error: writeErr } = useWriteContract();
   const { isLoading: pending, isSuccess: mined } = useWaitForTransactionReceipt({
-    hash: txHash,
-    chainId: base.id,
+    hash: txHash, chainId: base.id,
   });
 
   /** Prefill FID when inside Mini */
@@ -96,9 +80,7 @@ export default function HomeClient() {
   const cap = Number(maxSupply);
   const pct = Math.max(0, Math.min(100, Math.round((minted / Math.max(1, cap)) * 100)));
 
-  useEffect(() => {
-    if (mined) refetchMinted();
-  }, [mined, refetchMinted]);
+  useEffect(() => { if (mined) refetchMinted(); }, [mined, refetchMinted]);
 
   async function handleMint() {
     try {
@@ -124,7 +106,6 @@ export default function HomeClient() {
           body: JSON.stringify({ to: address, fid: Number(fidBig) }),
         });
         const j: SignResp = await r.json();
-
         if (!j.ok || !j.sig || !j.deadline || !j.price) {
           throw new Error(j.error || "Signing failed");
         }
@@ -157,26 +138,8 @@ export default function HomeClient() {
   return (
     <main className="min-h-[100svh] bg-deep text-white pb-16">
       <div className="container pt-6 px-5 stack">
-        {/* Top nav row */}
-        <div className="flex items-center justify-between">
-          <div className="chips">
-            <span className="pill-note pill-note--blue">Chain: Base</span>
-            <span className="pill-note pill-note--blue">
-              Contract:{" "}
-              <Link
-                className="underline decoration-dotted underline-offset-4"
-                href={`https://basescan.org/address/${BASEBOTS.address}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {BASEBOTS.address.slice(0, 6)}…{BASEBOTS.address.slice(-4)}
-              </Link>
-            </span>
-          </div>
-          <ConnectPill />
-        </div>
 
-        {/* Hero / Identity */}
+        {/* Hero / Story */}
         <section className="glass hero-logo-card relative overflow-hidden">
           {/* subtle starfield-ish gradient */}
           <div
@@ -202,23 +165,26 @@ export default function HomeClient() {
             </div>
             <div className="mt-6 md:mt-0">
               <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
-                Basebots: Greetings from the Neon Future
+                Basebots: Couriers from the Blue Tomorrow
               </h1>
               <p className="mt-3 max-w-2xl text-white/90 leading-relaxed">
-                Spin up a cube-chassis robo-buddy forged in Base’s bluish aurora.
-                Traits are entangled with your Farcaster FID, art is fully on-chain SVG,
-                and your bot rolls out with a glint of alien starlight ✨.
+                In a not-so-distant future, Base is the lifeblood of the open city—
+                and the Basebots are its guides. Mint one and a chrome-cheeked
+                companion steps through the veil to escort you forward—loyal,
+                curious, and stamped with your Farcaster FID. The art lives fully
+                on-chain (pure SVG), and every bot carries a different glow from
+                the neon aurora overhead.
               </p>
               {inMini && (
                 <p className="mt-3 text-sm text-white/75">
-                  Detected Mini:{" "}
+                  Detected Mini identity:{" "}
                   {user?.username ? `@${user.username}` : `FID ${miniFID ?? "—"}`}
                 </p>
               )}
               <div className="pill-row mt-4">
-                <span className="pill-note pill-note--blue">Fully on-chain image</span>
+                <span className="pill-note pill-note--blue">On-chain SVG art</span>
                 <span className="pill-note pill-note--blue">2981 royalties</span>
-                <span className="pill-note pill-note--blue">One per FID</span>
+                <span className="pill-note pill-note--blue">1 bot per FID</span>
               </div>
             </div>
           </div>
@@ -230,27 +196,14 @@ export default function HomeClient() {
             <div>
               <h2 className="text-xl md:text-2xl font-bold">Minting & Supply</h2>
               <ul className="mt-2 space-y-1 text-white/85">
-                <li>
-                  <span className="text-[#79ffe1] font-semibold">Mint price:</span>{" "}
-                  {priceEth} Base ETH
-                </li>
-                <li>
-                  <span className="text-[#79ffe1] font-semibold">Max supply:</span>{" "}
-                  {Number(maxSupply).toLocaleString()}
-                </li>
-                <li>
-                  <span className="text-[#79ffe1] font-semibold">Minted:</span>{" "}
-                  {Number(totalMinted).toLocaleString()} ({pct}%)
-                </li>
+                <li><span className="text-[#79ffe1] font-semibold">Mint price:</span> {priceEth} Base ETH</li>
+                <li><span className="text-[#79ffe1] font-semibold">Max supply:</span> {Number(maxSupply).toLocaleString()}</li>
+                <li><span className="text-[#79ffe1] font-semibold">Minted:</span> {Number(totalMinted).toLocaleString()} ({pct}%)</li>
               </ul>
             </div>
             <div className="w-full md:w-1/2">
               <div className="h-3 w-full rounded-full bg-white/10 overflow-hidden">
-                <div
-                  className="h-full bg-[#79ffe1]"
-                  style={{ width: `${pct}%` }}
-                  aria-label={`minted ${pct}%`}
-                />
+                <div className="h-full bg-[#79ffe1]" style={{ width: `${pct}%` }} aria-label={`minted ${pct}%`} />
               </div>
             </div>
           </div>
@@ -263,10 +216,10 @@ export default function HomeClient() {
             className="pointer-events-none absolute -top-24 -right-24 h-64 w-64 rounded-full blur-3xl"
             style={{ background: "radial-gradient(circle, #79ffe155 0%, transparent 60%)" }}
           />
-          <h2 className="text-xl md:text-2xl font-bold">Mint your Basebot</h2>
+          <h2 className="text-xl md:text-2xl font-bold">Call your escort</h2>
           <p className="mt-1 text-white/85">
-            Enter your Farcaster FID and we’ll beam a signed clearance from HQ.
-            Your wallet sends a single tx; your bot arrives in seconds.
+            Enter your Farcaster FID and HQ will sign your passage. Your wallet
+            sends one tx—your Basebot steps through.
           </p>
 
           <div className="mt-5 grid gap-3 md:grid-cols-[220px_auto_160px]">
@@ -290,7 +243,7 @@ export default function HomeClient() {
                 className="btn-pill btn-pill--blue !font-bold"
                 style={{ opacity: busy || pending ? 0.7 : 1 }}
               >
-                {busy || pending ? "Minting…" : "Mint Basebot"}
+                {busy || pending ? "Summoning…" : "Mint Basebot"}
               </button>
 
               <Link href="/my" className="btn-ghost">See my bot</Link>
@@ -318,7 +271,7 @@ export default function HomeClient() {
           )}
           {mined && (
             <p className="mt-3 text-sm text-green-300">
-              Mint confirmed! ⚡ Refresh your wallet/marketplace if you don’t see the art instantly.
+              Arrival confirmed. Your escort awaits. ✨
             </p>
           )}
         </section>
@@ -326,8 +279,28 @@ export default function HomeClient() {
         {/* Footer blurb */}
         <section className="text-center text-white/70">
           <p className="text-sm">
-            “Somewhere beyond the Base horizon, a thousand chrome eyelids blink in unison…”
+            “In the chrome dawn, the city speaks in light. Basebots understand.”
           </p>
+        </section>
+
+        {/* Bottom pills (moved here) */}
+        <section className="flex flex-wrap gap-3 justify-center">
+          <Link
+            href="https://basescan.org/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="pill-note pill-note--blue"
+          >
+            Chain: Base ↗
+          </Link>
+          <Link
+            href={`https://basescan.org/address/${BASEBOTS.address}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="pill-note pill-note--blue"
+          >
+            Contract: {BASEBOTS.address.slice(0,6)}…{BASEBOTS.address.slice(-4)} ↗
+          </Link>
         </section>
       </div>
     </main>
