@@ -7,8 +7,8 @@ export const revalidate = 0;
 export const runtime = "nodejs";
 
 export const metadata: Metadata = {
-  title: "TamaBot — On-Chain Farcaster Pet",
-  description: "Adopt, evolve, and share your on-chain AI pet directly from Warpcast.",
+  title: "Basebots — Mint your on-chain robot",
+  description: "Summon a Basebot from the future. Fully on-chain SVG, FID-powered traits.",
 };
 
 export default function Page() {
