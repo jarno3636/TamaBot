@@ -34,23 +34,17 @@ function isValidFID(v: string | number | undefined) {
 function getErrText(e: unknown): string {
   if (e && typeof e === "object") {
     const anyE = e as any;
-    if (typeof anyE.shortMessage === "string" && anyE.shortMessage.length > 0) {
-      return anyE.shortMessage;
-    }
-    if (typeof anyE.message === "string" && anyE.message.length > 0) {
-      return anyE.message;
-    }
+    if (typeof anyE.shortMessage === "string" && anyE.shortMessage.length > 0) return anyE.shortMessage;
+    if (typeof anyE.message === "string" && anyE.message.length > 0) return anyE.message;
   }
   if (typeof e === "string") return e;
   try { return JSON.stringify(e); } catch { return "Unknown error"; }
 }
 
 export default function HomeClient() {
-  /** Identity & network */
   const { address } = useAccount();
   const { user, fid: miniFID, inMini } = useMiniContext();
 
-  /** On-chain reads */
   const { data: price = 0n } = useReadContract({ ...BASEBOTS, functionName: "mintPrice" });
   const { data: maxSupply = 50000n } = useReadContract({ ...BASEBOTS, functionName: "MAX_SUPPLY" });
   const { data: totalMinted = 0n, refetch: refetchMinted } = useReadContract({
@@ -58,23 +52,17 @@ export default function HomeClient() {
   });
   const { data: gating = true } = useReadContract({ ...BASEBOTS, functionName: "fidGatingEnabled" });
 
-  /** Local UI state */
   const [fidInput, setFidInput] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string>("");
 
-  /** Writers */
   const { writeContract, data: txHash, error: writeErr } = useWriteContract();
   const { isLoading: pending, isSuccess: mined } = useWaitForTransactionReceipt({
     hash: txHash, chainId: base.id,
   });
 
-  /** Prefill FID when inside Mini */
-  useEffect(() => {
-    if (miniFID && !fidInput) setFidInput(String(miniFID));
-  }, [miniFID, fidInput]);
+  useEffect(() => { if (miniFID && !fidInput) setFidInput(String(miniFID)); }, [miniFID, fidInput]);
 
-  /** Display helpers */
   const priceEth = useMemo(() => formatEther(price), [price]);
   const minted = Number(totalMinted);
   const cap = Number(maxSupply);
@@ -84,33 +72,22 @@ export default function HomeClient() {
 
   async function handleMint() {
     try {
-      setErr("");
-      setBusy(true);
+      setErr(""); setBusy(true);
 
-      if (!address || !isAddress(address)) {
-        setErr("Connect your wallet first.");
-        return;
-      }
-      if (!isValidFID(fidInput)) {
-        setErr("Enter a valid FID (positive integer).");
-        return;
-      }
+      if (!address || !isAddress(address)) { setErr("Connect your wallet first."); return; }
+      if (!isValidFID(fidInput)) { setErr("Enter a valid FID (positive integer)."); return; }
 
       const fidBig = BigInt(fidInput);
 
       if (gating) {
-        // Get server signature (off-chain)
         const r = await fetch("/api/basebots/sign", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ to: address, fid: Number(fidBig) }),
         });
         const j: SignResp = await r.json();
-        if (!j.ok || !j.sig || !j.deadline || !j.price) {
-          throw new Error(j.error || "Signing failed");
-        }
+        if (!j.ok || !j.sig || !j.deadline || !j.price) throw new Error(j.error || "Signing failed");
 
-        // Call mintWithSig on-chain (user pays)
         await writeContract({
           ...BASEBOTS,
           functionName: "mintWithSig",
@@ -119,7 +96,6 @@ export default function HomeClient() {
           chainId: base.id,
         });
       } else {
-        // Non-gated path
         await writeContract({
           ...BASEBOTS,
           functionName: "mint",
@@ -141,15 +117,13 @@ export default function HomeClient() {
 
         {/* Hero / Story */}
         <section className="glass hero-logo-card relative overflow-hidden">
-          {/* subtle starfield-ish gradient */}
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0"
             style={{
               background:
                 "radial-gradient(800px 400px at 10% -20%, rgba(58,166,216,0.18), transparent 60%), radial-gradient(900px 500px at 90% -30%, rgba(121,255,225,0.14), transparent 70%)",
-              maskImage:
-                "radial-gradient(120% 120% at 50% 0%, #000 55%, transparent 100%)",
+              maskImage: "radial-gradient(120% 120% at 50% 0%, #000 55%, transparent 100%)",
             }}
           />
           <div className="flex flex-col items-center md:flex-row md:items-center md:gap-8">
@@ -169,23 +143,12 @@ export default function HomeClient() {
               </h1>
               <p className="mt-3 max-w-2xl text-white/90 leading-relaxed">
                 In a not-so-distant future, Base is the lifeblood of the open city—
-                and the Basebots are its guides. Mint one and a chrome-cheeked
-                companion steps through the veil to escort you forward—loyal,
-                curious, and stamped with your Farcaster FID. The art lives fully
-                on-chain (pure SVG), and every bot carries a different glow from
-                the neon aurora overhead.
+                and the Basebots are its guides. Mint one and a chrome-cheeked companion
+                steps through the veil to escort you forward—loyal, curious, and stamped
+                with your Farcaster FID. Each bot’s look lives on-chain and in the network,
+                carrying a different glow from the neon aurora overhead.
               </p>
-              {inMini && (
-                <p className="mt-3 text-sm text-white/75">
-                  Detected Mini identity:{" "}
-                  {user?.username ? `@${user.username}` : `FID ${miniFID ?? "—"}`}
-                </p>
-              )}
-              <div className="pill-row mt-4">
-                <span className="pill-note pill-note--blue">On-chain SVG art</span>
-                <span className="pill-note pill-note--blue">2981 royalties</span>
-                <span className="pill-note pill-note--blue">1 bot per FID</span>
-              </div>
+              {/* Removed the feature chips (SVG/royalties/one-per-FID) per request */}
             </div>
           </div>
         </section>
@@ -250,7 +213,6 @@ export default function HomeClient() {
             </div>
           </div>
 
-          {/* Status / errors */}
           {(err || writeErr) && (
             <p className="mt-3 text-sm text-red-300">
               {err || getErrText(writeErr)}
@@ -276,14 +238,14 @@ export default function HomeClient() {
           )}
         </section>
 
-        {/* Footer blurb */}
+        {/* Footer line */}
         <section className="text-center text-white/70">
           <p className="text-sm">
             “In the chrome dawn, the city speaks in light. Basebots understand.”
           </p>
         </section>
 
-        {/* Bottom pills (moved here) */}
+        {/* Bottom: chain/contract links (kept at bottom) */}
         <section className="flex flex-wrap gap-3 justify-center">
           <Link
             href="https://basescan.org/"
