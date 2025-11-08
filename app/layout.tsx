@@ -5,24 +5,32 @@ import Providers from "./providers";
 import Nav from "@/components/Nav";
 import AppReady from "@/components/AppReady";
 
-// Keep metadata simple; complex logic belongs in pages
+/** ================================
+ *  🛸 Basebots — Layout
+ *  Global wrapper: nav, providers, styling
+ *  ================================= */
 export const metadata: Metadata = {
-  title: "TamaBot — On-Chain Farcaster Pet",
-  description: "Adopt, evolve, and share your on-chain AI pet directly from Warpcast.",
-  themeColor: "#0a0b10",
+  title: "Basebots — On-Chain AI Companions",
+  description:
+    "Mint, evolve, and display your Farcaster-linked Basebot — fully on-chain SVGs from the neon future.",
+  themeColor: "#0a0b12",
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  themeColor: "#0a0b12",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="min-h-screen bg-[#0a0b10] text-white antialiased">
-        {/* Accessible skip link for keyboard users */}
+      <body className="min-h-screen bg-[#0a0b12] text-white antialiased">
+        {/* Accessibility: skip link for keyboard users */}
         <a
           href="#main"
           className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:bg-white focus:text-black focus:px-3 focus:py-2 focus:rounded-lg"
@@ -30,11 +38,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Skip to content
         </a>
 
+        {/* React Query / Wagmi / RainbowKit / OnchainKit Providers */}
         <Providers>
-          {/* Fire Farcaster MiniApp ready() as soon as the app hydrates */}
+          {/* MiniKit ready event for Farcaster */}
           <AppReady />
 
-          {/* Global navigation (sticky header lives inside the component) */}
+          {/* Global navigation bar */}
           <header role="banner">
             <Nav />
           </header>
