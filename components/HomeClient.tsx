@@ -27,7 +27,7 @@ type SignResp = {
 };
 
 type RecentMint = {
-  tokenId: string;
+  tokenId: string;            // FID == tokenId
   to: `0x${string}`;
   txHash: `0x${string}`;
   blockNumber?: number;
@@ -130,7 +130,6 @@ export default function HomeClient() {
       setRecent(j.items as RecentMint[]);
       setRecentAt(Date.now());
     } catch (e) {
-      // show short/clean message instead of a huge RPC blob
       const msg = getErrText(e);
       if (/503|no backend is currently healthy/i.test(msg)) {
         setRecentErr("Network is busy on Base right now. Try again in a minute.");
@@ -152,8 +151,8 @@ export default function HomeClient() {
     <main className="min-h-[100svh] bg-deep text-white pb-16 page-layer">
       <div className="container pt-6 px-5 stack">
 
-        {/* Speaker pinned just below nav */}
-        <AudioToggle src="/audio/basebots-loop.mp3" className="audio-under-nav" />
+        {/* Speaker placed in-flow; scrolls away with page */}
+        <AudioToggle src="/audio/basebots-loop.mp3" className="" />
 
         {/* Hero / Story */}
         <section className="glass hero-logo-card relative overflow-hidden">
@@ -283,45 +282,25 @@ export default function HomeClient() {
             <h2 className="text-xl md:text-2xl font-bold">
               Recent Basebots — leading us to the Blue Tomorrow
             </h2>
-            <button
-              type="button"
-              onClick={() => fetchRecent()}
-              className="btn-ghost"
-              title="Refresh"
-            >
+            <button type="button" onClick={fetchRecent} className="btn-ghost" title="Refresh">
               Refresh
             </button>
           </div>
 
-          {recentErr && (
-            <p className="mt-2 text-sm text-red-300">
-              {recentErr}
-            </p>
-          )}
+          {recentErr && <p className="mt-2 text-sm text-red-300">{recentErr}</p>}
 
           <div className="mt-4 grid gap-3">
             {(recent ?? []).map((m) => (
-              <div
-                key={m.txHash}
-                className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3"
-              >
+              <div key={m.txHash} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3">
                 <div className="flex items-center gap-3">
                   <span className="pill-note pill-note--blue">FID #{m.tokenId}</span>
-                  <span className="text-white/80">
-                    to {m.to.slice(0, 6)}…{m.to.slice(-4)}
-                  </span>
+                  <span className="text-white/80">to {m.to.slice(0, 6)}…{m.to.slice(-4)}</span>
                 </div>
-                <Link
-                  href={`https://basescan.org/tx/${m.txHash}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn-ghost"
-                >
+                <Link href={`https://basescan.org/tx/${m.txHash}`} target="_blank" rel="noopener noreferrer" className="btn-ghost">
                   View tx ↗
                 </Link>
               </div>
             ))}
-
             {!recent?.length && !recentErr && (
               <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-5 text-white/70">
                 No recent mints yet.
