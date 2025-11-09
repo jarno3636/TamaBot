@@ -52,7 +52,7 @@ body {
 .cubes-canvas {
   position: fixed;
   inset: 0;
-  z-index: -20;               /* was 0 — ensure it's under header/content */
+  z-index: -20;               /* keep it behind nav + content */
   pointer-events: none;
   opacity: .6;
   filter: saturate(1.1);
@@ -61,11 +61,8 @@ body {
   .cubes-canvas { display: none; }
 }
 
-/* To ensure your content stays above cubes */
-.page-layer {
-  position: relative;
-  z-index: 10;
-}
+/* Keep content above cubes */
+.page-layer { position: relative; z-index: 10; }
 
 /* ===== Cards ===== */
 .glass {
@@ -97,7 +94,7 @@ body {
 .btn-pill:hover { filter:brightness(.97); transform:translateY(-1px); }
 .btn-pill:focus-visible { outline:2px solid rgba(255,255,255,.5); outline-offset:2px; }
 
-/* Brand variants (neon-first) */
+/* Brand variants */
 .btn-pill--blue   { background: var(--bb-neon);  color:#02201d; box-shadow:0 8px 22px rgba(121,255,225,.35); }
 .btn-pill--cyan   { background: var(--bb-cyan);  color:#032129; box-shadow:0 8px 22px rgba(109,211,239,.35); }
 .btn-pill--violet { background: var(--bb-violet);color:#0e1024; box-shadow:0 8px 22px rgba(138,166,255,.35); }
@@ -105,7 +102,7 @@ body {
 .btn-pill--yellow { background: var(--bb-warn);  color:#1e1603; box-shadow:0 8px 22px rgba(255,211,107,.35); }
 .btn-pill--red    { background: var(--bb-danger);color:#1a0a08; box-shadow:0 8px 22px rgba(255,116,116,.35); }
 
-/* Ghost */
+/* Ghost button */
 .btn-ghost {
   display:inline-flex; align-items:center; justify-content:center;
   padding:.65rem 1.05rem; border-radius:9999px; font-weight:600;
@@ -119,17 +116,14 @@ body {
   transform:translateY(-1px);
 }
 
-/* CTA rows */
 .cta-row { display:flex; flex-wrap:wrap; gap: 16px; margin-top: 1.4rem; }
 
-/* ===== Chips / info pills ===== */
+/* ===== Pills ===== */
 .pill-note {
   display:inline-block; padding:.55rem .95rem; border-radius:9999px;
   background:rgba(255,255,255,.10); color:#fff;
   border:1px solid rgba(255,255,255,.18); backdrop-filter: blur(6px);
 }
-
-/* Brand tint variants (blue-centric) */
 .pill-note--blue   { background:rgba(121,255,225,.10); border-color:rgba(121,255,225,.30); color:#d9fff8; }
 .pill-note--cyan   { background:rgba(109,211,239,.10); border-color:rgba(109,211,239,.28); color:#dff6ff; }
 .pill-note--violet { background:rgba(138,166,255,.10); border-color:rgba(138,166,255,.30); color:#e6ebff; }
@@ -138,17 +132,13 @@ body {
 .pill-note--red    { background:rgba(255,116,116,.10); border-color:rgba(255,116,116,.30); color:#ffe4e4; }
 
 .pill-row, .chips { display:flex; flex-wrap:wrap; gap: 16px 16px; }
-
-/* Safari fallback */
 @supports not (gap: 16px 16px) {
   .pill-row > *, .chips > * { margin-right: 16px; margin-bottom: 16px; }
   .pill-row > *:last-child, .chips > *:last-child { margin-right: 0; }
 }
 
-/* ===== Media ===== */
+/* ===== Media & layout ===== */
 img, svg, video, canvas { max-width:100%; height:auto; }
-
-/* ===== Layout helpers ===== */
 .container { max-width:72rem; margin-inline:auto; padding-inline:1.25rem; }
 
 /* ===== Logo boxes ===== */
@@ -158,7 +148,7 @@ img, svg, video, canvas { max-width:100%; height:auto; }
 .hero-logo { position:relative; width:100%; max-width:180px; margin-inline:auto; aspect-ratio:1/1; }
 .hero-logo img, .hero-logo-wrap img { object-fit:contain !important; pointer-events:none; user-select:none; }
 
-/* ===== Nav pills (for inline navs, not burger) ===== */
+/* ===== Nav pills ===== */
 .nav-pill {
   display:inline-block; padding:.6rem 1rem; border-radius:9999px;
   border:1px solid rgba(255,255,255,.22);
@@ -174,13 +164,13 @@ img, svg, video, canvas { max-width:100%; height:auto; }
   box-shadow:0 0 0 2px rgba(121,255,225,.50), 0 0 18px 4px rgba(121,255,225,.22);
 }
 
-/* ===== Section spacing consistency ===== */
+/* Section spacing */
 .container > section + section { margin-top: 2.25rem; }
 @media (min-width:768px){ .container > section + section { margin-top: 3rem; } }
 
-/* --- Premium nav sizing & elements --- */
-.nav-root { height: var(--nav-h); }  /* allow panel to anchor under it */
-.nav-bar { height: var(--nav-h); display:flex; align-items:center; justify-content:space-between; color:#fff; }
+/* --- Nav on top --- */
+.nav-root { height: var(--nav-h); position: sticky; top: 0; z-index: 100; }
+.nav-bar  { height: var(--nav-h); display:flex; align-items:center; justify-content:space-between; color:#fff; }
 
 .nav-avatar{
   position:relative; width:48px; height:48px; border-radius:9999px; overflow:hidden;
@@ -191,7 +181,6 @@ img, svg, video, canvas { max-width:100%; height:auto; }
 }
 .nav-avatar:hover{ transform: translateY(-1px); box-shadow:0 10px 24px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.18); }
 
-/* --- Burger button & icon --- */
 .nav-burger{
   width:48px; height:48px; display:grid; place-items:center; border-radius:18px;
   border:1px solid rgba(255,255,255,.22); background:rgba(255,255,255,.12);
@@ -200,9 +189,8 @@ img, svg, video, canvas { max-width:100%; height:auto; }
 }
 .nav-burger:hover{ background:rgba(255,255,255,.18); transform:translateY(-1px); }
 .nav-burger:focus-visible{ outline:2px solid rgba(121,255,225,.5); outline-offset:3px; }
-.nav-burger svg rect { fill: currentColor; } /* visible bars */
+.nav-burger svg rect { fill: currentColor; }
 
-/* --- Blue-steel brand title --- */
 .brand-steel{
   font-weight: 900;
   letter-spacing: .04em;
@@ -213,13 +201,12 @@ img, svg, video, canvas { max-width:100%; height:auto; }
   text-shadow: 0 2px 10px rgba(121,255,225,.18);
 }
 
-/* --- Burger dropdown panel (fixed under nav, above cards) --- */
+/* Dropdown panel */
 .menu-panel{
   position: fixed;
   top: var(--nav-h);
-  left: 0;
-  right: 0;
-  z-index: 60; /* below nav (>=70), above content */
+  left: 0; right: 0;
+  z-index: 90;                  /* below nav (100), above content (10) */
   background: rgba(11,13,18,.92);
   border-top: 1px solid rgba(255,255,255,.08);
   backdrop-filter: blur(10px);
@@ -230,42 +217,29 @@ img, svg, video, canvas { max-width:100%; height:auto; }
   from { opacity: 0; transform: translateY(-6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-
-/* Click-catcher overlay so panel sits ABOVE cards and closes on tap */
-.menu-overlay{
-  position: fixed;
-  inset: var(--nav-h) 0 0 0;
-  background: transparent;
-  z-index: 55;
-}
+.menu-overlay{ position: fixed; inset: var(--nav-h) 0 0 0; background: transparent; z-index: 85; }
 
 /* Menu links */
 .menu-link{
-  display:inline-block;
-  padding:.7rem 1rem;
-  border-radius:14px;
+  display:inline-block; padding:.7rem 1rem; border-radius:14px;
   border:1px solid rgba(255,255,255,.15);
-  background: rgba(255,255,255,.06);
-  color:#fff;
-  font-weight:700;
+  background: rgba(255,255,255,.06); color:#fff; font-weight:700;
 }
 .menu-link--active{
   box-shadow:0 0 0 2px rgba(121,255,225,.45), 0 0 18px 4px rgba(121,255,225,.18);
 }
 
-/* ===== Audio toggle (top-right) ===== */
+/* ===== Audio toggle ===== */
 .audio-toggle {
   position: fixed;
   top: calc(env(safe-area-inset-top, 0) + 10px);
   right: calc(env(safe-area-inset-right, 0) + 10px);
-  z-index: 80; /* above nav */
-  display: grid;
-  place-items: center;
+  z-index: 95;
+  display: grid; place-items: center;
   width: 44px; height: 44px;
   border-radius: 14px;
   border: 1px solid rgba(255,255,255,.22);
-  background: rgba(255,255,255,.10);
-  color: #fff;
+  background: rgba(255,255,255,.10); color: #fff;
   box-shadow: 0 8px 24px rgba(0,0,0,.35);
   backdrop-filter: blur(8px);
   transition: background .15s ease, transform .12s ease;
@@ -274,7 +248,15 @@ img, svg, video, canvas { max-width:100%; height:auto; }
 .audio-toggle:focus-visible { outline: 2px solid rgba(121,255,225,.5); outline-offset: 3px; }
 .audio-toggle svg { display:block; }
 
-/* Respect reduced motion (hide background animation & dim glows) */
+/* Place the speaker just under the nav bar */
+.audio-under-nav {
+  position: fixed;
+  top: calc(var(--nav-h) + max(env(safe-area-inset-top, 0px), 0px) + 8px);
+  right: calc(env(safe-area-inset-right, 0px) + 10px);
+  z-index: 95;
+}
+
+/* Respect reduced motion */
 @media (prefers-reduced-motion: reduce) {
   .brand-steel { text-shadow: none; }
 }
