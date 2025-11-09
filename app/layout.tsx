@@ -4,7 +4,7 @@ import "./globals.css";
 import Providers from "./providers";
 import Nav from "@/components/Nav";
 import AppReady from "@/components/AppReady";
-import AnimatedCubes from "@/components/AnimatedCubes";   // 👈 background cubes
+import AnimatedCubes from "@/components/BackgroundCubes";   // 👈 background cubes
 import AudioToggle from "@/components/AudioToggle";       // 👈 mute/unmute button
 
 /** ================================
@@ -33,7 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <body className="min-h-screen bg-[#0a0b12] text-white antialiased">
         {/* Background animation (fixed, behind everything) */}
-        <AnimatedCubes />
+        <BackgroundCubes />
 
         {/* Accessibility: skip link for keyboard users */}
         <a
