@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
       webhookUrl: `${origin}/api/webhook`,
 
       // Optional but recommended metadata
-      subtitle: "On-chain companions from the neon future",
+      subtitle: "On-chain Bot Companion",
       description: desc,
       primaryCategory: "social",
       tags: ["miniapp", "basebots", "base"],
