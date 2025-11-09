@@ -1,8 +1,7 @@
-// components/MyBotClient.tsx
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useAccount, useReadContract } from "wagmi";
 import { BASEBOTS } from "@/lib/abi";
 import AudioToggle from "@/components/AudioToggle";
@@ -71,10 +70,11 @@ export default function MyBotClient() {
     <main className="min-h-[100svh] bg-deep text-white pb-16">
       <div className="container pt-6 px-5 stack">
 
-        {/* Header / Story (audio pinned here) */}
-        <section className="glass glass-pad relative">
-          <AudioToggle src="/audio/basebots-loop.mp3" className="absolute top-3 right-3 z-20" />
+        {/* global audio toggle (fixed at top-right; icon only) */}
+        <AudioToggle src="/audio/basebots-loop.mp3" iconOnly />
 
+        {/* Header / Story */}
+        <section className="glass glass-pad relative">
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">
             Meet Your Escort
           </h1>
@@ -83,7 +83,6 @@ export default function MyBotClient() {
             Type your FID and we’ll pull your bot’s portrait—living on-chain and in the network.
           </p>
 
-          {/* Share buttons */}
           <ShareRow url={siteUrl} className="mt-3" />
         </section>
 
