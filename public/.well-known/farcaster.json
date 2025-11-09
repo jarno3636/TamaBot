@@ -1,19 +1,19 @@
 {
   "accountAssociation": {
     "header": "eyJmaWQiOjE0MzQxNzEsInR5cGUiOiJjdXN0b2R5Iiwia2V5IjoiMHhFNkMwQTQxMEI0QzcyMmI4NDdmNjE2Mjk4MTllM0Q2MjE1ODA2MENGIn0",
-    "payload": "eyJkb21haW4iOiJ0YW1hYm90LnZlcmNlbC5hcHAifQ",
-    "signature": "iHaWHbcVV0WGUEIHxMEjWJBlJXg495/ZMI3nS6R0xoR6xTO0HGKY0eTUu8/5/D6Rf/Rr3OJIfiRSlJIC1l7BRxw="
+    "payload": "eyJkb21haW4iOiJiYXNlYm90cy52ZXJjZWwuYXBwIn0",
+    "signature": "sUIN0qNFJyUlOupMZ/2rK8ejXiJDcrCCudjs8DUG5Bth0npnt9EoYw7NIKOy5oYY4tVdw+wAgai235FlDit5ths="
   },
   "frame": {
     "version": "1",
-    "name": "TamaBot — On-Chain Farcaster Pet",
-    "iconUrl": "https://tamabot.vercel.app/icon.png",
-    "homeUrl": "https://tamabot.vercel.app",
-    "imageUrl": "https://tamabot.vercel.app/og.png",
-    "buttonTitle": "Adopt Your TamaBot",
-    "splashImageUrl": "https://tamabot.vercel.app/splash.png",
+    "name": "Basebots — On-Chain Escorts from the Neon Future",
+    "iconUrl": "https://basebots.vercel.app/icon.png",
+    "homeUrl": "https://basebots.vercel.app/",
+    "imageUrl": "https://basebots.vercel.app/og.png",
+    "buttonTitle": "Launch Basebots",
+    "splashImageUrl": "https://basebots.vercel.app/splash.png",
     "splashBackgroundColor": "#0a0b10",
-    "webhookUrl": "https://tamabot.vercel.app/api/webhook",
-    "description": "Adopt, evolve, and share your on-chain AI pet directly from Warpcast — powered by Base."
+    "webhookUrl": "https://basebots.vercel.app/api/webhook",
+    "description": "Summon your Farcaster-linked Basebot. A little bit lives on-chain, and on the network."
   }
 }
