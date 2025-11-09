@@ -292,7 +292,7 @@ export default function HomeClient() {
           <Link href="https://basescan.org/" target="_blank" rel="noopener noreferrer" className="pill-note pill-note--blue">
             Chain: Base ↗
           </Link>
-          <Link href={`https://basescan.org/address/${BASEBOTS.address}`} target="_blank" rel="noopener noreferrer" className="pill-note pill-note--blue">
+          <Link href={`https://base.blockscout.com/address/${BASEBOTS.address}`} target="_blank" rel="noopener noreferrer" className="pill-note pill-note--blue">
             Contract: {BASEBOTS.address.slice(0,6)}…{BASEBOTS.address.slice(-4)} ↗
           </Link>
         </section>
