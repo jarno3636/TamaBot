@@ -6,7 +6,7 @@ export const revalidate = 0;
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { fid: string } }   // 👈 inline this type
+  { params }: { params: { fid: string } }
 ): Promise<Response> {
   const key = process.env.NEYNAR_API_KEY;
   if (!key) {
@@ -30,6 +30,7 @@ export async function GET(
     });
   }
 
+  // Neynar v2 user (single)
   const r = await fetch(`https://api.neynar.com/v2/farcaster/user?fid=${fidNum}`, {
     headers: { "x-api-key": key },
     cache: "no-store",
