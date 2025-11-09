@@ -1,3 +1,4 @@
+// components/HomeClient.tsx
 "use client";
 
 import Image from "next/image";
@@ -12,7 +13,8 @@ import {
 } from "wagmi";
 import { base } from "viem/chains";
 import { BASEBOTS } from "@/lib/abi";
-import { useMiniContext } from "@/lib/useMiniContext";
+import AudioToggle from "@/components/AudioToggle";
+import ShareRow from "@/components/ShareRow";
 
 type SignResp = {
   ok: boolean;
@@ -30,7 +32,6 @@ function isValidFID(v: string | number | undefined) {
   const n = typeof v === "string" ? Number(v) : v;
   return Number.isFinite(n) && n > 0 && Number.isInteger(n);
 }
-
 function getErrText(e: unknown): string {
   if (e && typeof e === "object") {
     const anyE = e as any;
@@ -43,7 +44,6 @@ function getErrText(e: unknown): string {
 
 export default function HomeClient() {
   const { address } = useAccount();
-  const { user, fid: miniFID, inMini } = useMiniContext();
 
   const { data: price = 0n } = useReadContract({ ...BASEBOTS, functionName: "mintPrice" });
   const { data: maxSupply = 50000n } = useReadContract({ ...BASEBOTS, functionName: "MAX_SUPPLY" });
@@ -61,8 +61,6 @@ export default function HomeClient() {
     hash: txHash, chainId: base.id,
   });
 
-  useEffect(() => { if (miniFID && !fidInput) setFidInput(String(miniFID)); }, [miniFID, fidInput]);
-
   const priceEth = useMemo(() => formatEther(price), [price]);
   const minted = Number(totalMinted);
   const cap = Number(maxSupply);
@@ -73,7 +71,6 @@ export default function HomeClient() {
   async function handleMint() {
     try {
       setErr(""); setBusy(true);
-
       if (!address || !isAddress(address)) { setErr("Connect your wallet first."); return; }
       if (!isValidFID(fidInput)) { setErr("Enter a valid FID (positive integer)."); return; }
 
@@ -111,12 +108,16 @@ export default function HomeClient() {
     }
   }
 
+  const siteUrl = process.env.NEXT_PUBLIC_FC_MINIAPP_LINK || process.env.NEXT_PUBLIC_URL || "/";
+
   return (
     <main className="min-h-[100svh] bg-deep text-white pb-16">
       <div className="container pt-6 px-5 stack">
 
-        {/* Hero / Story */}
+        {/* Hero / Story (audio pinned here) */}
         <section className="glass hero-logo-card relative overflow-hidden">
+          <AudioToggle src="/audio/basebots-loop.mp3" className="absolute top-3 right-3 z-20" />
+
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0"
@@ -148,7 +149,9 @@ export default function HomeClient() {
                 with your Farcaster FID. Each bot’s look lives on-chain and in the network,
                 carrying a different glow from the neon aurora overhead.
               </p>
-              {/* Removed the feature chips (SVG/royalties/one-per-FID) per request */}
+
+              {/* Share buttons */}
+              <ShareRow url={siteUrl} className="mt-4" />
             </div>
           </div>
         </section>
@@ -245,14 +248,9 @@ export default function HomeClient() {
           </p>
         </section>
 
-        {/* Bottom: chain/contract links (kept at bottom) */}
+        {/* Bottom: chain/contract links */}
         <section className="flex flex-wrap gap-3 justify-center">
-          <Link
-            href="https://basescan.org/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="pill-note pill-note--blue"
-          >
+          <Link href="https://basescan.org/" target="_blank" rel="noopener noreferrer" className="pill-note pill-note--blue">
             Chain: Base ↗
           </Link>
           <Link
