@@ -3,17 +3,24 @@
 
 import { useEffect } from "react";
 
+/**
+ * AppReady: announces to the Farcaster/Base Mini App host that the UI is ready.
+ * - Works whether the SDK is injected via <script> or bundled via ESM.
+ * - Quietly degrades when *not* inside a Mini App (so it’s safe on web).
+ */
 export default function AppReady() {
   useEffect(() => {
     let cancelled = false;
-    let pingIv: ReturnType<typeof setInterval> | null = null;
+    let iv: ReturnType<typeof setInterval> | null = null;
 
+    const d = document.documentElement;
+    const DEBUG = process.env.NEXT_PUBLIC_MINI_DEBUG === "true";
+
+    /** Locate the SDK (globals first, ESM as fallback). */
     async function getSdk(): Promise<any | null> {
-      // Prefer the global (added by <script src="https://miniapps.farcaster.xyz/sdk/v2.js">)
-      const g: any = (globalThis as any);
+      const g: any = globalThis as any;
       if (g?.farcaster?.miniapp?.sdk) return g.farcaster.miniapp.sdk;
       if (g?.Farcaster?.mini?.sdk) return g.Farcaster.mini.sdk;
-      // Fallback to ESM import if available
       try {
         const mod: any = await import("@farcaster/miniapp-sdk");
         return mod?.sdk ?? mod?.default ?? null;
@@ -22,72 +29,92 @@ export default function AppReady() {
       }
     }
 
-    async function readyOnce() {
+    /** Best-effort Mini detection (never throws). */
+    async function probeMini(sdk: any): Promise<boolean> {
+      try {
+        if (typeof sdk?.isInMiniApp === "function") {
+          // small timeout to avoid hanging during cold starts
+          const p = sdk.isInMiniApp(150);
+          const t = new Promise<boolean>((r) => setTimeout(() => r(false), 180));
+          return await Promise.race([p, t]);
+        }
+      } catch {}
+      // Fallback UA sniff (harmless if it’s wrong)
+      try {
+        const ua = navigator.userAgent || "";
+        if (/BaseApp|FarcasterMini|Warpcast/i.test(ua)) return true;
+      } catch {}
+      return false;
+    }
+
+    /** Fire a single ready(), with a short timeout gate. */
+    async function fireReadyOnce() {
       if (cancelled) return;
       const sdk = await getSdk();
       if (!sdk) return;
 
-      // Best-effort environment probe (don’t throw if not supported)
-      let isMini = false;
+      // stamp a tiny debug attribute
       try {
-        isMini = !!(await sdk.isInMiniApp?.(200));
-      } catch {}
-
-      // Fire a quick, non-blocking ready()
-      try {
-        await Promise.race([
-          Promise.resolve(sdk.actions?.ready?.()),
-          new Promise((r) => setTimeout(r, 600)),
-        ]);
-      } catch {}
-
-      // Optional: light debug
-      try {
-        if (process.env.NEXT_PUBLIC_MINI_DEBUG === "true") {
+        const isMini = await probeMini(sdk);
+        d.setAttribute("data-fc-mini", String(isMini));
+        if (DEBUG) {
           const ctxSrc = sdk.context;
           const ctx = typeof ctxSrc === "function" ? await ctxSrc() : await ctxSrc;
           // eslint-disable-next-line no-console
-          console.log("[Mini] isMini:", isMini, "context:", ctx);
+          console.log("[Mini] ready() run. isMini:", isMini, ctx ?? null);
         }
       } catch {}
+
+      try {
+        await Promise.race([
+          Promise.resolve(sdk.actions?.ready?.()),
+          new Promise((r) => setTimeout(r, 500)),
+        ]);
+      } catch {
+        // Swallow: we never want ready() to break the web app
+      }
     }
 
-    // Ping multiple times (hosts sometimes attach late on resume)
+    /** Heartbeat ready(): nudge late SDK injection for a few seconds. */
     function startHeartbeat() {
-      if (pingIv) return;
-      pingIv = setInterval(() => {
-        getSdk().then((sdk) => {
-          if (!sdk) return;
-          try { sdk.actions?.ready?.(); } catch {}
-          try { (globalThis as any).farcaster?.actions?.ready?.(); } catch {}
-        });
+      if (iv) return;
+      let ticks = 0;
+      iv = setInterval(async () => {
+        if (cancelled) return;
+        ticks += 1;
+        try {
+          const sdk = await getSdk();
+          if (sdk?.actions?.ready) {
+            sdk.actions.ready().catch(() => {});
+          }
+          // also try legacy global just in case
+          (globalThis as any).farcaster?.actions?.ready?.();
+        } catch {}
+        if (ticks >= 40) { // ~6s at 150ms
+          if (iv) clearInterval(iv);
+          iv = null;
+        }
       }, 150);
-      // Stop after ~10s of heartbeats
-      setTimeout(() => {
-        if (pingIv) clearInterval(pingIv);
-        pingIv = null;
-      }, 10_000);
     }
 
-    // Initial “ready”
-    readyOnce();
+    // Initial announce
+    fireReadyOnce();
     startHeartbeat();
 
-    // Re-announce on common lifecycle events
-    const onShow = () => readyOnce();
-    const onFocus = () => readyOnce();
-    const onVisible = () => { if (!document.hidden) readyOnce(); };
-
-    window.addEventListener("pageshow", onShow);
-    window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", onVisible);
+    // Re-announce on common visibility/activation events
+    const again = () => fireReadyOnce();
+    window.addEventListener("pageshow", again);
+    window.addEventListener("focus", again);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) fireReadyOnce();
+    });
 
     return () => {
       cancelled = true;
-      if (pingIv) clearInterval(pingIv);
-      window.removeEventListener("pageshow", onShow);
-      window.removeEventListener("focus", onFocus);
-      document.removeEventListener("visibilitychange", onVisible);
+      if (iv) clearInterval(iv);
+      window.removeEventListener("pageshow", again);
+      window.removeEventListener("focus", again);
+      document.removeEventListener("visibilitychange", again);
     };
   }, []);
 
