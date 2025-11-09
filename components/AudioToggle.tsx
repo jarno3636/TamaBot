@@ -1,93 +1,61 @@
-// components/AudioToggle.tsx
 "use client";
 
 import { useEffect, useRef, useState } from "react";
 
-type Props = {
-  src: string;
-  className?: string; // parent controls position
-  loop?: boolean;
-  startMuted?: boolean;
-  volume?: number; // 0..1
-};
+type Props = { src: string; className?: string; volume?: number };
 
-function IconVolumeOn(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden {...props}>
-      <path fill="currentColor" d="M3 9v6h4l5 4V5L7 9H3z"></path>
-      <path fill="currentColor" d="M16.5 8.5a4.5 4.5 0 010 6.36l-1.06-1.06a3 3 0 000-4.24L16.5 8.5z"></path>
-      <path fill="currentColor" d="M19 6a8 8 0 010 12l-1.06-1.06a6.5 6.5 0 000-9.19L19 6z"></path>
-    </svg>
-  );
-}
-
-function IconVolumeOff(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden {...props}>
-      <path fill="currentColor" d="M3 9v6h4l5 4V5L7 9H3z"></path>
-      <path fill="currentColor" d="M16 9l5 5-1.41 1.41L14.59 10.4 12.17 8 13.6 6.59 16 9z"></path>
-      <path fill="currentColor" d="M21 9l-5 5-1.41-1.41L19.6 7.6 21 9z"></path>
-    </svg>
-  );
-}
-
-export default function AudioToggle({
-  src,
-  className = "",
-  loop = true,
-  startMuted = true,
-  volume = 0.35,
-}: Props) {
+export default function AudioToggle({ src, className = "", volume = 0.35 }: Props) {
+  const [on, setOn] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [muted, setMuted] = useState(startMuted);
-  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const a = new Audio(src);
-    a.loop = loop;
-    a.preload = "auto";
-    a.muted = startMuted;
-    a.volume = Math.max(0, Math.min(1, volume));
+    a.loop = true;
+    a.volume = volume;
     audioRef.current = a;
 
-    const onCanPlay = () => setReady(true);
-    a.addEventListener("canplay", onCanPlay);
+    try {
+      if (localStorage.getItem("bb_audio_on") === "1") {
+        a.play().then(() => setOn(true)).catch(() => setOn(false));
+      }
+    } catch {}
 
-    return () => {
-      a.pause();
-      a.removeEventListener("canplay", onCanPlay);
-      audioRef.current = null;
-    };
-  }, [src, loop, startMuted, volume]);
+    return () => { a.pause(); audioRef.current = null; };
+  }, [src, volume]);
 
   async function toggle() {
     const a = audioRef.current;
     if (!a) return;
-    const next = !muted;
-    setMuted(next);
-    a.muted = next;
-    if (!next) {
-      try { await a.play(); } catch {}
+    if (on) {
+      a.pause(); setOn(false);
+      try { localStorage.setItem("bb_audio_on","0"); } catch {}
     } else {
-      a.pause();
+      try { await a.play(); setOn(true); localStorage.setItem("bb_audio_on","1"); } catch {}
     }
   }
 
   return (
     <button
       type="button"
-      aria-label={muted ? "Unmute ambiance" : "Mute ambiance"}
       onClick={toggle}
-      disabled={!ready}
-      className={[
-        "rounded-xl border border-white/20 bg-white/10 backdrop-blur-md px-3 py-2",
-        "shadow-[0_8px_24px_rgba(0,0,0,.35)] hover:bg-white/14 transition",
-        "flex items-center gap-2",
-        className,
-      ].join(" ")}
+      aria-label={on ? "Mute background audio" : "Unmute background audio"}
+      className={`audio-toggle ${className}`}
     >
-      {muted ? <IconVolumeOff /> : <IconVolumeOn />}
-      <span className="text-xs font-semibold">{muted ? "Sound off" : "Sound on"}</span>
+      {on ? (
+        /* speaker ON */
+        <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden>
+          <path fill="currentColor" d="M4 9v6h4l5 4V5L8 9H4z"/>
+          <path fill="currentColor" d="M16.5 8.1a5 5 0 0 1 0 7.8l-1.1-1.1a3.5 3.5 0 0 0 0-5.6l1.1-1.1z"/>
+          <path fill="currentColor" d="M18.7 5.9a8 8 0 0 1 0 12.2l-1.1-1.1a6.5 6.5 0 0 0 0-10l1.1-1.1z"/>
+        </svg>
+      ) : (
+        /* speaker MUTED (X) */
+        <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden>
+          <path fill="currentColor" d="M4 9v6h4l5 4V5L8 9H4z"/>
+          <path fill="currentColor" d="M19 8.5 17.6 7 15 9.6 12.4 7 11 8.4 13.6 11 11 13.6 12.4 15 15 12.4 17.6 15 19 13.6 16.4 11 19 8.5z"/>
+        </svg>
+      )}
+      <span className="sr-only">{on ? "Sound on" : "Sound off"}</span>
     </button>
   );
 }
