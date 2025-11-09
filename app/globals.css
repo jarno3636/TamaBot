@@ -52,7 +52,7 @@ body {
 .cubes-canvas {
   position: fixed;
   inset: 0;
-  z-index: 0;                 /* keep behind all UI */
+  z-index: -20;               /* was 0 — ensure it's under header/content */
   pointer-events: none;
   opacity: .6;
   filter: saturate(1.1);
