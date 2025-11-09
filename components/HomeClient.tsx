@@ -1,4 +1,3 @@
-// components/HomeClient.tsx
 "use client";
 
 import Image from "next/image";
@@ -114,17 +113,19 @@ export default function HomeClient() {
     <main className="min-h-[100svh] bg-deep text-white pb-16">
       <div className="container pt-6 px-5 stack">
 
-        {/* Hero / Story (audio pinned here) */}
-        <section className="glass hero-logo-card relative overflow-hidden">
-          <AudioToggle src="/audio/basebots-loop.mp3" className="absolute top-3 right-3 z-20" />
+        {/* global audio toggle (fixed at top-right; icon only) */}
+        <AudioToggle src="/audio/basebots-loop.mp3" className="" iconOnly />
 
+        {/* Hero / Story */}
+        <section className="glass hero-logo-card relative overflow-hidden">
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0"
             style={{
               background:
                 "radial-gradient(800px 400px at 10% -20%, rgba(58,166,216,0.18), transparent 60%), radial-gradient(900px 500px at 90% -30%, rgba(121,255,225,0.14), transparent 70%)",
-              maskImage: "radial-gradient(120% 120% at 50% 0%, #000 55%, transparent 100%)",
+              maskImage:
+                "radial-gradient(120% 120% at 50% 0%, #000 55%, transparent 100%)",
             }}
           />
           <div className="flex flex-col items-center md:flex-row md:items-center md:gap-8">
@@ -150,13 +151,12 @@ export default function HomeClient() {
                 carrying a different glow from the neon aurora overhead.
               </p>
 
-              {/* Share buttons */}
               <ShareRow url={siteUrl} className="mt-4" />
             </div>
           </div>
         </section>
 
-        {/* Stats + progress */}
+        {/* Stats */}
         <section className="glass glass-pad bg-[#0f1320]/50 border border-white/10">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
@@ -241,14 +241,14 @@ export default function HomeClient() {
           )}
         </section>
 
-        {/* Footer line */}
+        {/* Footer quote */}
         <section className="text-center text-white/70">
           <p className="text-sm">
             “In the chrome dawn, the city speaks in light. Basebots understand.”
           </p>
         </section>
 
-        {/* Bottom: chain/contract links */}
+        {/* Bottom links */}
         <section className="flex flex-wrap gap-3 justify-center">
           <Link href="https://basescan.org/" target="_blank" rel="noopener noreferrer" className="pill-note pill-note--blue">
             Chain: Base ↗
