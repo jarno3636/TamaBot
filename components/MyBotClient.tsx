@@ -112,7 +112,7 @@ export default function MyBotClient() {
 
               <div className="flex-1">
                 <h2 className="text-xl md:text-2xl font-bold">{name || `Basebot #${fidInput}`}</h2>
-                <p className="mt-2 text-white/85">{description || "Chrome shell. Soft glow. Patient eyes. Your escort registers the skyline and awaits your first command."}</p>
+                <p className="mt-2 text-white/85">{description || "Chrome shell. Soft glow. Patient eyes. Your BaseBot registers the skyline and awaits your first command."}</p>
 
                 <div className="pill-row mt-4">
                   <span className="pill-note pill-note--blue">Token ID (FID): {fidInput}</span>
