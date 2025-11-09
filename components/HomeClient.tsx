@@ -26,6 +26,14 @@ type SignResp = {
   error?: string;
 };
 
+type RecentMint = {
+  tokenId: string;
+  to: `0x${string}`;
+  txHash: `0x${string}`;
+  blockNumber?: number;
+  timestamp?: number;
+};
+
 function isValidFID(v: string | number | undefined) {
   if (v === undefined || v === null) return false;
   const n = typeof v === "string" ? Number(v) : v;
@@ -59,6 +67,10 @@ export default function HomeClient() {
   const { isLoading: pending, isSuccess: mined } = useWaitForTransactionReceipt({
     hash: txHash, chainId: base.id,
   });
+
+  // recent mints state
+  const [recent, setRecent] = useState<RecentMint[] | null>(null);
+  const [recentErr, setRecentErr] = useState<string>("");
 
   const priceEth = useMemo(() => formatEther(price), [price]);
   const minted = Number(totalMinted);
@@ -106,6 +118,25 @@ export default function HomeClient() {
       setBusy(false);
     }
   }
+
+  // ---- Recent Couriers fetcher (hourly refresh) ----
+  async function fetchRecent() {
+    try {
+      setRecentErr("");
+      const r = await fetch("/api/basebots/recent?limit=3", { cache: "no-store" });
+      const j = await r.json();
+      if (!r.ok || !j?.ok) throw new Error(j?.error || "Failed to load recent mints");
+      setRecent(j.items as RecentMint[]);
+    } catch (e) {
+      setRecentErr(getErrText(e));
+    }
+  }
+
+  useEffect(() => {
+    fetchRecent();
+    const id = setInterval(fetchRecent, 60 * 60 * 1000); // 1 hour
+    return () => clearInterval(id);
+  }, []);
 
   const siteUrl = process.env.NEXT_PUBLIC_FC_MINIAPP_LINK || process.env.NEXT_PUBLIC_URL || "/";
 
@@ -239,6 +270,57 @@ export default function HomeClient() {
               Arrival confirmed. Your escort awaits. ✨
             </p>
           )}
+        </section>
+
+        {/* === Recent Couriers card (new) === */}
+        <section className="glass glass-pad bg-[#0b0f18]/70">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl md:text-2xl font-bold">Recent Couriers</h2>
+            <button
+              type="button"
+              onClick={() => fetchRecent()}
+              className="btn-ghost"
+              aria-label="Refresh recent mints"
+              title="Refresh"
+            >
+              Refresh
+            </button>
+          </div>
+
+          {recentErr && (
+            <p className="mt-2 text-sm text-red-300">
+              {recentErr}
+            </p>
+          )}
+
+          <div className="mt-4 grid gap-3">
+            {(recent ?? []).map((m) => (
+              <div key={m.txHash} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <span className="pill-note pill-note--blue">FID #{m.tokenId}</span>
+                  <span className="text-white/80">
+                    to {m.to.slice(0, 6)}…{m.to.slice(-4)}
+                  </span>
+                </div>
+                <Link
+                  href={`https://basescan.org/tx/${m.txHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-ghost"
+                >
+                  View tx ↗
+                </Link>
+              </div>
+            ))}
+
+            {!recent?.length && !recentErr && (
+              <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-5 text-white/70">
+                No recent mints found.
+              </div>
+            )}
+          </div>
+
+          <p className="mt-3 text-xs text-white/60">Auto-updates hourly.</p>
         </section>
 
         {/* Footer quote */}
