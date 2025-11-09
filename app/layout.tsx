@@ -4,21 +4,15 @@ import "./globals.css";
 import Providers from "./providers";
 import Nav from "@/components/Nav";
 import AppReady from "@/components/AppReady";
-import AnimatedCubes from "@/components/BackgroundCubes";   // 👈 background cubes
-import AudioToggle from "@/components/AudioToggle";       // 👈 mute/unmute button
+import BackgroundCubes from "@/components/BackgroundCubes"; // ✅ match default export name
+import AudioToggle from "@/components/AudioToggle";
 
-/** ================================
- *  🛸 Basebots — Layout
- *  Global wrapper: nav, providers, styling
- *  ================================= */
 export const metadata: Metadata = {
   title: "Basebots — On-Chain AI Companions",
   description:
     "Mint, evolve, and display your Farcaster-linked Basebot — fully on-chain from the neon future.",
   themeColor: "#0a0b12",
-  icons: {
-    icon: "/favicon.ico",
-  },
+  icons: { icon: "/favicon.ico" },
 };
 
 export const viewport: Viewport = {
@@ -43,12 +37,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Skip to content
         </a>
 
-        {/* Providers (Wagmi / RainbowKit / etc.) */}
         <Providers>
-          {/* Farcaster MiniApp ready() */}
           <AppReady />
 
-          {/* Global navigation */}
           <header role="banner">
             <Nav />
           </header>
@@ -56,7 +47,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {/* Floating audio toggle (top-right, above content) */}
           <AudioToggle src="/audio/basebots-loop.mp3" />
 
-          {/* Main content */}
           <main id="main" role="main">
             {children}
           </main>
