@@ -1,3 +1,4 @@
+// components/AudioToggle.tsx
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -5,7 +6,7 @@ import { Volume2, VolumeX } from "lucide-react";
 
 type Props = {
   src: string;
-  className?: string; // parent controls position
+  className?: string; // let parent control position
   loop?: boolean;
   startMuted?: boolean;
   volume?: number; // 0..1
@@ -33,8 +34,6 @@ export default function AudioToggle({
     const onCanPlay = () => setReady(true);
     a.addEventListener("canplay", onCanPlay);
 
-    // Some browsers require user gesture to start.
-    // We'll start playback on first unmute click.
     return () => {
       a.pause();
       a.removeEventListener("canplay", onCanPlay);
@@ -45,18 +44,11 @@ export default function AudioToggle({
   async function toggle() {
     const a = audioRef.current;
     if (!a) return;
-
     const next = !muted;
     setMuted(next);
     a.muted = next;
-
     if (!next) {
-      try {
-        // attempt to play after user gesture
-        await a.play();
-      } catch {
-        // ignore autoplay block
-      }
+      try { await a.play(); } catch {}
     } else {
       a.pause();
     }
