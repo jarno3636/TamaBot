@@ -13,7 +13,7 @@ export function tryDetectFIDFromEnvironment(): number | null {
     }
   } catch {}
 
-  // 2) MiniKit/Farcaster contexts (best-effort)
+  // 2) Mini/Farcaster contexts (best-effort)
   try {
     const w: any = window;
     const candidates = [
@@ -47,4 +47,14 @@ export function rememberFID(fid: string | number) {
     const s = String(fid ?? "").trim();
     if (/^\d+$/.test(s)) localStorage.setItem("basebots.fid", s);
   } catch {}
+}
+
+/** Optional convenience: detect and persist in one call. */
+export function detectAndRememberFID(): number | null {
+  const n = tryDetectFIDFromEnvironment();
+  if (typeof n === "number" && Number.isFinite(n) && n > 0) {
+    rememberFID(n);
+    return n;
+  }
+  return null;
 }
