@@ -1,31 +1,27 @@
+// components/MyBotClient.tsx
 "use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useAccount, useReadContract } from "wagmi";
 import { BASEBOTS } from "@/lib/abi";
+import AudioToggle from "@/components/AudioToggle";
+import ShareRow from "@/components/ShareRow";
 
 function isValidFID(v: string | number | undefined) {
   if (v === undefined || v === null) return false;
   const n = typeof v === "string" ? Number(v) : v;
   return Number.isFinite(n) && n > 0 && Number.isInteger(n);
 }
-
-/** Safe base64 -> string in the browser */
 function b64ToUtf8(b64: string): string {
   try {
-    // atob is available in browser; handles our data: JSON
     return decodeURIComponent(
       Array.prototype.map
         .call(atob(b64), (c: string) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
         .join("")
     );
   } catch {
-    try {
-      return atob(b64);
-    } catch {
-      return "";
-    }
+    try { return atob(b64); } catch { return ""; }
   }
 }
 
@@ -38,7 +34,6 @@ export default function MyBotClient() {
     [fidInput]
   );
 
-  // tokenURI (on-chain JSON with data:image/svg+xml;base64)
   const { data: tokenJsonUri, refetch: refetchToken } = useReadContract({
     ...BASEBOTS,
     functionName: "tokenURI",
@@ -46,12 +41,7 @@ export default function MyBotClient() {
     query: { enabled: Boolean(fidBigInt) },
   });
 
-  // ownerOf(fid)
-  const {
-    data: owner,
-    error: ownerErr,
-    refetch: refetchOwner,
-  } = useReadContract({
+  const { data: owner, error: ownerErr, refetch: refetchOwner } = useReadContract({
     ...BASEBOTS,
     functionName: "ownerOf",
     args: fidBigInt ? [fidBigInt] : undefined,
@@ -62,40 +52,39 @@ export default function MyBotClient() {
     !!address && typeof owner === "string" &&
     address.toLowerCase() === owner.toLowerCase();
 
-  // Parse on-chain JSON if it's a base64 data URI
   let imageSrc = "";
   let name = "";
   let description = "";
   try {
-    if (typeof tokenJsonUri === "string") {
-      const prefix = "data:application/json;base64,";
-      if (tokenJsonUri.startsWith(prefix)) {
-        const b64 = tokenJsonUri.slice(prefix.length);
-        const jsonStr = b64ToUtf8(b64);
-        const json = JSON.parse(jsonStr);
-        imageSrc = json?.image || "";
-        name = json?.name || "";
-        description = json?.description || "";
-      }
+    if (typeof tokenJsonUri === "string" && tokenJsonUri.startsWith("data:application/json;base64,")) {
+      const b64 = tokenJsonUri.split(",")[1] || "";
+      const json = JSON.parse(b64ToUtf8(b64));
+      imageSrc = json?.image || "";
+      name = json?.name || "";
+      description = json?.description || "";
     }
-  } catch {
-    // ignore parse errors
-  }
+  } catch {}
+
+  const siteUrl = process.env.NEXT_PUBLIC_FC_MINIAPP_LINK || process.env.NEXT_PUBLIC_URL || "/";
 
   return (
     <main className="min-h-[100svh] bg-deep text-white pb-16">
       <div className="container pt-6 px-5 stack">
 
-        {/* Header / Story */}
-        <section className="glass glass-pad">
+        {/* Header / Story (audio pinned here) */}
+        <section className="glass glass-pad relative">
+          <AudioToggle src="/audio/basebots-loop.mp3" className="absolute top-3 right-3 z-20" />
+
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">
             Meet Your Escort
           </h1>
           <p className="mt-2 text-white/85">
             Every Basebot is a tiny guardian stamped with your Farcaster FID.
-            Type your FID and we’ll pull your bot’s on-chain portrait—etched in SVG,
-            colored by the city’s blue aurora, and ready to roll.
+            Type your FID and we’ll pull your bot’s portrait—living on-chain and in the network.
           </p>
+
+          {/* Share buttons */}
+          <ShareRow url={siteUrl} className="mt-3" />
         </section>
 
         {/* Finder */}
@@ -116,11 +105,7 @@ export default function MyBotClient() {
             <div className="flex items-end gap-3">
               <button
                 type="button"
-                onClick={() => {
-                  if (!fidBigInt) return;
-                  refetchOwner();
-                  refetchToken();
-                }}
+                onClick={() => { if (!fidBigInt) return; refetchOwner(); refetchToken(); }}
                 className="btn-pill btn-pill--blue !font-bold"
               >
                 View my bot
@@ -163,8 +148,7 @@ export default function MyBotClient() {
                   {name || `Basebot #${fidInput}`}
                 </h2>
                 <p className="mt-2 text-white/85">
-                  {description ||
-                    "Chrome shell. Soft glow. Patient eyes. Your escort registers the skyline and awaits your first command."}
+                  {description || "Chrome shell. Soft glow. Patient eyes. Your escort registers the skyline and awaits your first command."}
                 </p>
 
                 <div className="pill-row mt-4">
@@ -199,33 +183,6 @@ export default function MyBotClient() {
             </div>
           </section>
         )}
-
-        {/* Bottom pills (moved here) */}
-        <section className="flex flex-wrap gap-3 justify-center">
-          <Link
-            href="https://basescan.org/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="pill-note pill-note--blue"
-          >
-            Chain: Base ↗
-          </Link>
-          <Link
-            href={`https://basescan.org/address/${BASEBOTS.address}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="pill-note pill-note--blue"
-          >
-            Contract: {BASEBOTS.address.slice(0,6)}…{BASEBOTS.address.slice(-4)} ↗
-          </Link>
-        </section>
-
-        {/* Footer */}
-        <section className="text-center text-white/70">
-          <p className="text-sm">
-            “Diagnostics nominal. Optics bright. Awaiting orders, Commander.” 🤖
-          </p>
-        </section>
       </div>
     </main>
   );
