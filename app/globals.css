@@ -172,6 +172,10 @@ img, svg, video, canvas { max-width:100%; height:auto; }
 }
 .nav-avatar:hover{ transform: translateY(-1px); box-shadow:0 10px 24px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.18); }
 
+/* --- Nav root height var for panel placement --- */
+.nav-root { --nav-h: 64px; }
+
+/* --- Burger button & icon --- */
 .nav-burger{
   width:48px; height:48px; display:grid; place-items:center; border-radius:18px;
   border:1px solid rgba(255,255,255,.22); background:rgba(255,255,255,.12);
@@ -179,6 +183,9 @@ img, svg, video, canvas { max-width:100%; height:auto; }
   color:#fff; transition: background .15s ease, transform .12s ease;
 }
 .nav-burger:hover{ background:rgba(255,255,255,.18); transform:translateY(-1px); }
+.nav-burger:focus-visible{ outline:2px solid rgba(121,255,225,.5); outline-offset:3px; }
+/* ensure the bars are visible */
+.nav-burger svg rect { fill: currentColor; }
 
 /* Wallet buttons inside menu */
 .btn-wallet--connect{
@@ -192,13 +199,6 @@ img, svg, video, canvas { max-width:100%; height:auto; }
   border:0; box-shadow:0 10px 24px rgba(247,195,71,.35);
 }
 
-/* Ensure visual space BETWEEN cards/sections */
-.container > section + section { margin-top: 32px; }
-.card-stack > .glass + .glass { margin-top: 22px; }
-@media (min-width: 768px){
-  .container > section + section { margin-top: 40px; }
-  .card-stack > .glass + .glass { margin-top: 26px; }
-}
 /* --- Blue-steel brand title --- */
 .brand-steel{
   font-weight: 900;
@@ -210,14 +210,27 @@ img, svg, video, canvas { max-width:100%; height:auto; }
   text-shadow: 0 2px 10px rgba(121,255,225,.18);
 }
 
-/* --- Burger dropdown panel --- */
+/* --- Burger dropdown panel (fixed under nav, above cards) --- */
 .menu-panel{
-  position: absolute;
-  inset: auto 0 0 0;
-  background: rgba(11,13,18,.85);
+  position: fixed;
+  top: var(--nav-h);
+  left: 0;
+  right: 0;
+  z-index: 60; /* below nav (70), above content */
+  background: rgba(11,13,18,.92);
   border-top: 1px solid rgba(255,255,255,.08);
   backdrop-filter: blur(10px);
 }
+
+/* Click-catcher overlay so panel sits ABOVE cards and closes on tap */
+.menu-overlay{
+  position: fixed;
+  inset: var(--nav-h) 0 0 0;
+  background: transparent;
+  z-index: 55;
+}
+
+/* Menu links */
 .menu-link{
   display:inline-block;
   padding:.7rem 1rem;
