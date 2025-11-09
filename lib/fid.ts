@@ -1,35 +1,34 @@
 // lib/fid.ts
 "use client";
 
-/**
- * Best-effort FID detection:
- * - ?fid=123 or ?viewerFid=123 in URL
- * - MiniKit context (if running inside Farcaster mini app)
- * - last used FID from localStorage
- */
 export function tryDetectFIDFromEnvironment(): number | null {
   if (typeof window === "undefined") return null;
 
+  // 1) URL params
   try {
     const sp = new URLSearchParams(window.location.search);
-    const keys = ["fid", "viewerFid", "userFid"];
-    for (const k of keys) {
+    for (const k of ["fid", "viewerFid", "userFid"]) {
       const v = sp.get(k);
       if (v && /^\d+$/.test(v)) return Number(v);
     }
   } catch {}
 
+  // 2) MiniKit/Farcaster contexts (best-effort)
   try {
-    // MiniKit / Farcaster mini-app contexts (defensive checks)
-    const anyWin = window as any;
-    const mkFid =
-      anyWin?.MiniKit?.context?.user?.fid ??
-      anyWin?.farcaster?.session?.fid ??
-      anyWin?.frame?.context?.user?.fid ??
-      null;
-    if (typeof mkFid === "number" && mkFid > 0) return mkFid;
+    const w: any = window;
+    const candidates = [
+      w?.MiniKit?.context?.user?.fid,
+      w?.farcaster?.session?.fid,
+      w?.frame?.context?.user?.fid,
+      w?.__FC__?.viewerFid,
+    ];
+    for (const c of candidates) {
+      if (typeof c === "number" && c > 0) return c;
+      if (typeof c === "string" && /^\d+$/.test(c)) return Number(c);
+    }
   } catch {}
 
+  // 3) Last known
   try {
     const last = localStorage.getItem("basebots.fid");
     if (last && /^\d+$/.test(last)) return Number(last);
@@ -38,13 +37,11 @@ export function tryDetectFIDFromEnvironment(): number | null {
   return null;
 }
 
-/** Normalize to string for inputs */
 export function detectedFIDString(): string {
   const n = tryDetectFIDFromEnvironment();
   return typeof n === "number" && Number.isFinite(n) ? String(n) : "";
 }
 
-/** Store last used FID for future auto-fill */
 export function rememberFID(fid: string | number) {
   try {
     const s = String(fid ?? "").trim();
