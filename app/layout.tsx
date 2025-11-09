@@ -4,6 +4,8 @@ import "./globals.css";
 import Providers from "./providers";
 import Nav from "@/components/Nav";
 import AppReady from "@/components/AppReady";
+import AnimatedCubes from "@/components/AnimatedCubes";   // 👈 background cubes
+import AudioToggle from "@/components/AudioToggle";       // 👈 mute/unmute button
 
 /** ================================
  *  🛸 Basebots — Layout
@@ -12,7 +14,7 @@ import AppReady from "@/components/AppReady";
 export const metadata: Metadata = {
   title: "Basebots — On-Chain AI Companions",
   description:
-    "Mint, evolve, and display your Farcaster-linked Basebot — fully on-chain SVGs from the neon future.",
+    "Mint, evolve, and display your Farcaster-linked Basebot — fully on-chain from the neon future.",
   themeColor: "#0a0b12",
   icons: {
     icon: "/favicon.ico",
@@ -30,6 +32,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="min-h-screen bg-[#0a0b12] text-white antialiased">
+        {/* Background animation (fixed, behind everything) */}
+        <AnimatedCubes />
+
         {/* Accessibility: skip link for keyboard users */}
         <a
           href="#main"
@@ -38,17 +43,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Skip to content
         </a>
 
-        {/* React Query / Wagmi / RainbowKit / OnchainKit Providers */}
+        {/* Providers (Wagmi / RainbowKit / etc.) */}
         <Providers>
-          {/* MiniKit ready event for Farcaster */}
+          {/* Farcaster MiniApp ready() */}
           <AppReady />
 
-          {/* Global navigation bar */}
+          {/* Global navigation */}
           <header role="banner">
             <Nav />
           </header>
 
-          {/* Main content area */}
+          {/* Floating audio toggle (top-right, above content) */}
+          <AudioToggle src="/audio/basebots-loop.mp3" />
+
+          {/* Main content */}
           <main id="main" role="main">
             {children}
           </main>
