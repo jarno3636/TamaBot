@@ -9,8 +9,10 @@ import { useEffect, useMemo, useState } from "react";
 import { detectedFIDString } from "@/lib/fid";
 
 type MiniProfile = {
-  pfpUrl?: string | null;
-  displayName?: string | null;
+  pfp_url?: string | null;       // from Neynar /v2/farcaster/user
+  pfpUrl?: string | null;        // (defensive alias)
+  display_name?: string | null;
+  displayName?: string | null;   // (defensive alias)
   username?: string | null;
 };
 
@@ -18,24 +20,36 @@ export default function Nav() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
-  // Detect possible FID on mount
   const [fid, setFid] = useState<string>("");
   const [mp, setMp] = useState<MiniProfile | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Detect FID once
   useEffect(() => {
     setFid(detectedFIDString());
   }, []);
 
+  // Load profile when fid present
   useEffect(() => {
     let aborted = false;
     async function load() {
       if (!fid) { setMp(null); return; }
       try {
         setLoading(true);
-        const r = await fetch(`/api/fc/profile?fid=${fid}`, { cache: "force-cache" });
+        const r = await fetch(`/api/neynar/user/${fid}`, { cache: "no-store" });
+        // Neynar shape: { user: {...} }
         const j = await r.json().catch(() => ({}));
-        if (!aborted && j?.ok) setMp(j.profile as MiniProfile);
+        if (aborted) return;
+        const user = j?.user ?? null;
+        if (user) {
+          setMp({
+            pfp_url: user?.pfp_url ?? user?.pfp?.url ?? null,
+            display_name: user?.display_name ?? user?.profile?.display_name ?? null,
+            username: user?.username ?? user?.profile?.username ?? null,
+          });
+        } else {
+          setMp(null);
+        }
       } catch {
         if (!aborted) setMp(null);
       } finally {
@@ -51,7 +65,11 @@ export default function Nav() {
     { href: "/my", label: "My Bot" },
   ]), []);
 
-  const hasProfile = Boolean(mp?.pfpUrl || mp?.displayName || mp?.username);
+  const hasProfile = Boolean(mp?.pfp_url || mp?.display_name || mp?.username);
+
+  // helpers
+  const pfp = (mp?.pfp_url ?? (mp as any)?.pfpUrl) || null;
+  const name = (mp?.display_name ?? (mp as any)?.displayName) || null;
 
   return (
     <nav className="bg-[#0b0d12]/70 border-b border-white/10" aria-label="Primary">
@@ -67,7 +85,7 @@ export default function Nav() {
               className="object-contain rounded-md"
             />
           </div>
-        <span className="brand-steel text-xl md:text-2xl">BASEBOTS</span>
+          <span className="brand-steel text-xl md:text-2xl">BASEBOTS</span>
         </Link>
 
         {/* Right: burger + connect */}
@@ -93,13 +111,12 @@ export default function Nav() {
         <>
           <div className="menu-panel z-[60]">
             <div className="container py-3 px-4 flex flex-col gap-3">
-              {/* Profile header (if we have FID/profile) */}
               {(loading || hasProfile) && (
                 <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-3">
                   <div className="relative w-10 h-10 rounded-full overflow-hidden border border-white/15 bg-white/10">
-                    {mp?.pfpUrl ? (
+                    {pfp ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={mp.pfpUrl} alt="pfp" className="w-full h-full object-cover" />
+                      <img src={pfp} alt="pfp" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full grid place-items-center text-white/40 text-sm">
                         {loading ? "…" : "?"}
@@ -108,7 +125,7 @@ export default function Nav() {
                   </div>
                   <div className="min-w-0">
                     <div className="text-sm text-white/80 truncate">
-                      {mp?.displayName || (loading ? "Loading…" : "Farcaster user")}
+                      {name || (loading ? "Loading…" : "Farcaster user")}
                     </div>
                     <div className="text-xs text-white/60 truncate">
                       {mp?.username ? `@${mp.username}` : (fid ? `FID ${fid}` : "—")}
@@ -126,7 +143,6 @@ export default function Nav() {
                 </div>
               )}
 
-              {/* Main links */}
               {links.map(l => {
                 const active = pathname === l.href;
                 return (
@@ -143,7 +159,6 @@ export default function Nav() {
             </div>
           </div>
 
-          {/* Overlay */}
           <button
             aria-label="Close menu"
             onClick={() => setOpen(false)}
