@@ -1,5 +1,5 @@
 /* ===== Basebots: Alien-Blue Neon Theme ===== */
-:root { color-scheme: dark; }
+:root { color-scheme: dark; --nav-h: 68px; }  /* unified nav height */
 html, body { margin: 0; padding: 0; }
 
 body {
@@ -41,12 +41,30 @@ body {
     linear-gradient(180deg, #0b0d12 0%, #0a0b12 40%, #0a0a0f 100%);
 }
 
-/* Blue nebula variant */
 .bg-nebula {
   background:
     radial-gradient(1000px 520px at 10% -10%, rgba(138,166,255,0.20), transparent 60%),
     radial-gradient(800px 520px at 95% -15%, rgba(109,211,239,0.16), transparent 70%),
     linear-gradient(180deg, #0b0f18 0%, #0a0b12 35%, #0b0f18 100%);
+}
+
+/* ===== Animated cubes canvas (fixed behind everything) ===== */
+.cubes-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;                 /* keep behind all UI */
+  pointer-events: none;
+  opacity: .6;
+  filter: saturate(1.1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .cubes-canvas { display: none; }
+}
+
+/* To ensure your content stays above cubes */
+.page-layer {
+  position: relative;
+  z-index: 10;
 }
 
 /* ===== Cards ===== */
@@ -62,7 +80,6 @@ body {
   content:""; pointer-events:none; position:absolute; inset:0; border-radius:20px;
   box-shadow: 0 0 0 1px rgba(255,255,255,.06), 0 0 50px rgba(121,255,225,.06);
 }
-
 .glass-pad { padding: 1.6rem 1.4rem; }
 
 /* Vertical spacing between sibling blocks */
@@ -141,7 +158,7 @@ img, svg, video, canvas { max-width:100%; height:auto; }
 .hero-logo { position:relative; width:100%; max-width:180px; margin-inline:auto; aspect-ratio:1/1; }
 .hero-logo img, .hero-logo-wrap img { object-fit:contain !important; pointer-events:none; user-select:none; }
 
-/* ===== Nav (pills) ===== */
+/* ===== Nav pills (for inline navs, not burger) ===== */
 .nav-pill {
   display:inline-block; padding:.6rem 1rem; border-radius:9999px;
   border:1px solid rgba(255,255,255,.22);
@@ -162,7 +179,9 @@ img, svg, video, canvas { max-width:100%; height:auto; }
 @media (min-width:768px){ .container > section + section { margin-top: 3rem; } }
 
 /* --- Premium nav sizing & elements --- */
-.nav-bar { height: 68px; display:flex; align-items:center; justify-content:space-between; color:#fff; }
+.nav-root { height: var(--nav-h); }  /* allow panel to anchor under it */
+.nav-bar { height: var(--nav-h); display:flex; align-items:center; justify-content:space-between; color:#fff; }
+
 .nav-avatar{
   position:relative; width:48px; height:48px; border-radius:9999px; overflow:hidden;
   border:1px solid rgba(255,255,255,.28); background:rgba(255,255,255,.12);
@@ -171,9 +190,6 @@ img, svg, video, canvas { max-width:100%; height:auto; }
   transition: transform .12s ease, box-shadow .2s ease;
 }
 .nav-avatar:hover{ transform: translateY(-1px); box-shadow:0 10px 24px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.18); }
-
-/* --- Nav root height var for panel placement --- */
-.nav-root { --nav-h: 64px; }
 
 /* --- Burger button & icon --- */
 .nav-burger{
@@ -184,20 +200,7 @@ img, svg, video, canvas { max-width:100%; height:auto; }
 }
 .nav-burger:hover{ background:rgba(255,255,255,.18); transform:translateY(-1px); }
 .nav-burger:focus-visible{ outline:2px solid rgba(121,255,225,.5); outline-offset:3px; }
-/* ensure the bars are visible */
-.nav-burger svg rect { fill: currentColor; }
-
-/* Wallet buttons inside menu */
-.btn-wallet--connect{
-  padding:.6rem 1.1rem; border-radius:9999px; font-weight:700; color:#061214;
-  background:linear-gradient(90deg, var(--bb-azure), var(--bb-cyan));
-  border:0; box-shadow:0 10px 24px rgba(109,211,239,.35);
-}
-.btn-wallet--disconnect{
-  padding:.6rem 1.1rem; border-radius:9999px; font-weight:700; color:#1b1206;
-  background:linear-gradient(90deg, var(--bb-warn), #f7c347);
-  border:0; box-shadow:0 10px 24px rgba(247,195,71,.35);
-}
+.nav-burger svg rect { fill: currentColor; } /* visible bars */
 
 /* --- Blue-steel brand title --- */
 .brand-steel{
@@ -216,10 +219,16 @@ img, svg, video, canvas { max-width:100%; height:auto; }
   top: var(--nav-h);
   left: 0;
   right: 0;
-  z-index: 60; /* below nav (70), above content */
+  z-index: 60; /* below nav (>=70), above content */
   background: rgba(11,13,18,.92);
   border-top: 1px solid rgba(255,255,255,.08);
   backdrop-filter: blur(10px);
+  transform: translateY(-4px);
+  animation: menuDrop .18s ease-out both;
+}
+@keyframes menuDrop {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* Click-catcher overlay so panel sits ABOVE cards and closes on tap */
@@ -242,4 +251,30 @@ img, svg, video, canvas { max-width:100%; height:auto; }
 }
 .menu-link--active{
   box-shadow:0 0 0 2px rgba(121,255,225,.45), 0 0 18px 4px rgba(121,255,225,.18);
+}
+
+/* ===== Audio toggle (top-right) ===== */
+.audio-toggle {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0) + 10px);
+  right: calc(env(safe-area-inset-right, 0) + 10px);
+  z-index: 80; /* above nav */
+  display: grid;
+  place-items: center;
+  width: 44px; height: 44px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.22);
+  background: rgba(255,255,255,.10);
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  backdrop-filter: blur(8px);
+  transition: background .15s ease, transform .12s ease;
+}
+.audio-toggle:hover { background: rgba(255,255,255,.16); transform: translateY(-1px); }
+.audio-toggle:focus-visible { outline: 2px solid rgba(121,255,225,.5); outline-offset: 3px; }
+.audio-toggle svg { display:block; }
+
+/* Respect reduced motion (hide background animation & dim glows) */
+@media (prefers-reduced-motion: reduce) {
+  .brand-steel { text-shadow: none; }
 }
