@@ -1,56 +1,73 @@
-// app/.well-known/farcaster.json/route.ts
-import { NextResponse, NextRequest } from "next/server";
+import { NextRequest } from "next/server";
 
 export const dynamic = "force-static";
 export const revalidate = 300;
 
-// --- AccountAssociation blob for basebots.vercel.app
-const AA_BASEBOTS = {
-  header:
-    "eyJmaWQiOjE0MzQxNzEsInR5cGUiOiJjdXN0b2R5Iiwia2V5IjoiMHhFNkMwQTQxMEI0QzcyMmI4NDdmNjE2Mjk4MTllM0Q2MjE1ODA2MENGIn0",
-  payload: "eyJkb21haW4iOiJiYXNlYm90cy52ZXJjZWwuYXBwIn0",
-  signature:
-    "sUIN0qNFJyUlOupMZ/2rK8ejXiJDcrCCudjs8DUG5Bth0npnt9EoYw7NIKOy5oYY4tVdw+wAgai235FlDit5ths=",
-};
-
-export async function GET(req: NextRequest) {
-  const host =
+function pickHost(req: NextRequest) {
+  return (
     req.headers.get("x-forwarded-host") ||
     req.headers.get("host") ||
-    "basebots.vercel.app";
-  const origin = `https://${host}`;
+    process.env.NEXT_PUBLIC_URL?.replace(/^https?:\/\//, "") ||
+    "localhost:3000"
+  );
+}
+function originFromHost(host: string) {
+  const proto = process.env.NEXT_PUBLIC_URL?.startsWith("http://") ? "http" : "https";
+  return `${proto}://${host}`;
+}
 
-  const brandName = "Basebots – Based Couriers";
-  const shortName = "Basebots";
-  const desc =
-    "Summon your Farcaster-linked Basebot. A little bit lives on-chain, and on the network.";
+export async function GET(req: NextRequest) {
+  const host = pickHost(req);
+  const origin = originFromHost(host);
+
+  const homeUrl   = process.env.NEXT_PUBLIC_URL || origin;
+  const iconUrl   = process.env.NEXT_PUBLIC_MINIAPP_ICON_URL   || `${origin}/icon.png`;
+  const splashUrl = process.env.NEXT_PUBLIC_MINIAPP_SPLASH_URL || `${origin}/splash.png`;
+  const heroUrl   = process.env.NEXT_PUBLIC_MINIAPP_HERO_URL   || `${origin}/og.png`;
+  const ss1       = process.env.NEXT_PUBLIC_MINIAPP_SCREENSHOT_1 || `${origin}/og.png`;
+  const ss2       = process.env.NEXT_PUBLIC_MINIAPP_SCREENSHOT_2 || `${origin}/og.png`;
+  const ss3       = process.env.NEXT_PUBLIC_MINIAPP_SCREENSHOT_3 || `${origin}/og.png`;
+
+  // Account association fields from Base Build (Account association tool)
+  const accountAssociation = {
+    header:    process.env.AA_HEADER    || "",
+    payload:   process.env.AA_PAYLOAD   || "",
+    signature: process.env.AA_SIGNATURE || "",
+  };
+
+  // <-- Added: baseBuilder with your ownerAddress
+  const baseBuilder = {
+    ownerAddress: "0x7fd97A417F64d2706cF5C93c8fdf493EdA42D25c",
+  };
 
   const manifest = {
-    accountAssociation: AA_BASEBOTS,
-    frame: {
+    accountAssociation,
+    baseBuilder,
+    miniapp: {
       version: "1",
-      name: brandName, // <= 32 chars
-      iconUrl: `${origin}/icon.png`,
-      homeUrl: `${origin}/`,
-      imageUrl: `${origin}/og.png`,
-      buttonTitle: "Launch Basebots",
-      splashImageUrl: `${origin}/splash.png`,
-      splashBackgroundColor: "#0a0b10",
+      name: "Basebots — Based Couriers",
+      homeUrl,
+      iconUrl,
+      splashImageUrl: splashUrl,
+      splashBackgroundColor: "#0a0b12",
       webhookUrl: `${origin}/api/webhook`,
-      // Optional metadata for some Farcaster mini-app surfaces:
-      description: desc,
+      subtitle: "Fast, fun, on-chain companions",
+      description:
+        "Mint, evolve, and display your Farcaster-linked Basebot — fully on-chain from the neon future.",
+      screenshotUrls: [ss1, ss2, ss3],
       primaryCategory: "social",
-      tags: ["mini-app", "basebots", "base"],
-      ogTitle: shortName,
-      ogDescription: desc,
-      screenshotUrls: [`${origin}/og.png`],
-      heroImageUrl: `${origin}/og.png`,
-      ogImageUrl: `${origin}/og.png`,
+      tags: ["basebots", "miniapp", "baseapp", "onchain"],
+      heroImageUrl: heroUrl,
+      tagline: "Bring forth your Basebot",
+      ogTitle: "Basebots — Based Couriers",
+      ogDescription:
+        "Summon a chrome-cheeked courier from the Blue Tomorrow—right inside Base.",
+      ogImageUrl: heroUrl,
       noindex: false,
     },
   };
 
-  return NextResponse.json(manifest, {
+  return Response.json(manifest, {
     headers: {
       "content-type": "application/json; charset=utf-8",
       "cache-control": "public, max-age=300, must-revalidate",
