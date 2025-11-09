@@ -1,5 +1,5 @@
 {
-  "name": "tamabot",
+  "name": "basebots",
   "private": true,
   "engines": { "node": ">=18.18 <23" },
   "packageManager": "npm@10.8.2",
