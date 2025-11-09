@@ -17,7 +17,7 @@ export default function Nav() {
 
   return (
     <nav
-      className="nav-root sticky top-0 z-[70] backdrop-blur-md bg-[#0b0d12]/70 border-b border-white/10"
+      className="bg-[#0b0d12]/70 border-b border-white/10"
       aria-label="Primary"
     >
       <div className="container flex items-center justify-between py-3 px-4">
@@ -44,18 +44,16 @@ export default function Nav() {
             onClick={() => setOpen(v => !v)}
             className="nav-burger text-white/90"
           >
-            {/* Visible lines (use currentColor) */}
             <svg width="26" height="26" viewBox="0 0 24 24" role="img">
-              <rect x="3" y="6"  width="18" height="2" rx="1" fill="currentColor" />
-              <rect x="3" y="11" width="18" height="2" rx="1" fill="currentColor" />
-              <rect x="3" y="16" width="18" height="2" rx="1" fill="currentColor" />
+              <rect x="3" y="6"  width="18" height="2" rx="1" />
+              <rect x="3" y="11" width="18" height="2" rx="1" />
+              <rect x="3" y="16" width="18" height="2" rx="1" />
             </svg>
           </button>
           <ConnectPill />
         </div>
       </div>
 
-      {/* Dropdown panel (fixed under nav, above cards) */}
       {open && (
         <>
           <div className="menu-panel z-[60]">
@@ -75,7 +73,6 @@ export default function Nav() {
               })}
             </div>
           </div>
-          {/* Optional dim overlay to show the panel is above content */}
           <button
             aria-label="Close menu"
             onClick={() => setOpen(false)}
