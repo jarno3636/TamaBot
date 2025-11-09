@@ -30,27 +30,35 @@ export default function MyBotClient() {
   const { address } = useAccount();
   const [fidInput, setFidInput] = useState<string>("");
 
+  // Prime input from env / URL / storage
   useEffect(() => {
     const first = detectedFIDString();
     if (first) setFidInput(first);
   }, []);
 
+  // Persist valid FIDs locally
   useEffect(() => {
     if (isValidFID(fidInput)) rememberFID(fidInput);
   }, [fidInput]);
 
-  const fidBigInt = useMemo(
+  // Use a null check (not &&) later to avoid 0n unions in JSX
+  const fidBigInt = useMemo<bigint | null>(
     () => (isValidFID(fidInput) ? BigInt(fidInput) : null),
     [fidInput]
   );
 
   const { data: tokenJsonUri, refetch: refetchToken } = useReadContract({
-    ...BASEBOTS, functionName: "tokenURI",
-    args: fidBigInt ? [fidBigInt] : undefined, query: { enabled: Boolean(fidBigInt) },
+    ...BASEBOTS,
+    functionName: "tokenURI",
+    args: fidBigInt !== null ? [fidBigInt] : undefined,
+    query: { enabled: fidBigInt !== null },
   });
+
   const { data: owner, error: ownerErr, refetch: refetchOwner } = useReadContract({
-    ...BASEBOTS, functionName: "ownerOf",
-    args: fidBigInt ? [fidBigInt] : undefined, query: { enabled: Boolean(fidBigInt) },
+    ...BASEBOTS,
+    functionName: "ownerOf",
+    args: fidBigInt !== null ? [fidBigInt] : undefined,
+    query: { enabled: fidBigInt !== null },
   });
 
   const iOwnThis =
@@ -99,7 +107,11 @@ export default function MyBotClient() {
             </label>
 
             <div className="flex items-end gap-3">
-              <button type="button" onClick={() => { if (!fidBigInt) return; refetchOwner(); refetchToken(); }} className="btn-pill btn-pill--blue !font-bold">
+              <button
+                type="button"
+                onClick={() => { if (fidBigInt === null) return; refetchOwner(); refetchToken(); }}
+                className="btn-pill btn-pill--blue !font-bold"
+              >
                 View my bot
               </button>
               <Link href="/" className="btn-ghost">Mint a bot</Link>
@@ -110,14 +122,22 @@ export default function MyBotClient() {
         </section>
 
         {/* Result */}
-        {fidBigInt && (
+        {fidBigInt !== null ? (
           <section className="glass glass-pad relative overflow-hidden bg-[#0b0f18]/70">
-            <div aria-hidden className="pointer-events-none absolute -top-24 -right-24 h-64 w-64 rounded-full blur-3xl" style={{ background: "radial-gradient(circle, #79ffe155 0%, transparent 60%)" }} />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute -top-24 -right-24 h-64 w-64 rounded-full blur-3xl"
+              style={{ background: "radial-gradient(circle, #79ffe155 0%, transparent 60%)" }}
+            />
             <div className="flex flex-col md:flex-row md:items-start gap-6">
               <div className="w-full md:max-w-[360px]">
                 {imageSrc ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={imageSrc} alt={name || `Basebot #${fidInput}`} className="w-full rounded-2xl border border-white/10 shadow-xl" />
+                  <img
+                    src={imageSrc}
+                    alt={name || `Basebot #${fidInput}`}
+                    className="w-full rounded-2xl border border-white/10 shadow-xl"
+                  />
                 ) : (
                   <div className="aspect-square w-full rounded-2xl border border-dashed border-white/20 grid place-items-center text-white/50">
                     No image yet — is this FID minted?
@@ -127,23 +147,42 @@ export default function MyBotClient() {
 
               <div className="flex-1">
                 <h2 className="text-xl md:text-2xl font-bold">{name || `Basebot #${fidInput}`}</h2>
-                <p className="mt-2 text-white/85">{description || "Chrome shell. Soft glow. Patient eyes. Your BaseBot registers the skyline and awaits your first command."}</p>
+                <p className="mt-2 text-white/85">
+                  {description || "Chrome shell. Soft glow. Patient eyes. Your BaseBot registers the skyline and awaits your first command."}
+                </p>
 
                 <div className="pill-row mt-4">
                   <span className="pill-note pill-note--blue">Token ID (FID): {fidInput}</span>
-                  {owner && <span className="pill-note pill-note--blue">Owner: {String(owner).slice(0, 6)}…{String(owner).slice(-4)}</span>}
+                  {typeof owner === "string" && (
+                    <span className="pill-note pill-note--blue">
+                      Owner: {owner.slice(0, 6)}…{owner.slice(-4)}
+                    </span>
+                  )}
                   {ownerErr && <span className="pill-note pill-note--red">Not minted or invalid FID</span>}
-                  {iOwnThis ? <span className="pill-note pill-note--green">You own this bot</span> : owner && <span className="pill-note pill-note--yellow">Owned by someone else</span>}
+                  {iOwnThis ? (
+                    <span className="pill-note pill-note--green">You own this bot</span>
+                  ) : (
+                    typeof owner === "string" && <span className="pill-note pill-note--yellow">Owned by someone else</span>
+                  )}
                 </div>
 
                 <div className="cta-row mt-5">
-                  <Link href={`https://basescan.org/token/${BASEBOTS.address}?a=${fidInput}`} target="_blank" rel="noopener noreferrer" className="btn-ghost">View on BaseScan</Link>
-                  <Link href="/" className="btn-pill btn-pill--blue !font-bold">Mint another</Link>
+                  <Link
+                    href={`https://basescan.org/token/${BASEBOTS.address}?a=${fidInput}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-ghost"
+                  >
+                    View on BaseScan
+                  </Link>
+                  <Link href="/" className="btn-pill btn-pill--blue !font-bold">
+                    Mint another
+                  </Link>
                 </div>
               </div>
             </div>
           </section>
-        )}
+        ) : null}
       </div>
     </main>
   );
