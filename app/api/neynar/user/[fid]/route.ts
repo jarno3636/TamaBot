@@ -1,13 +1,8 @@
 // app/api/neynar/user/[fid]/route.ts
-import type { NextRequest } from "next/server";
-
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { fid: string } }
-): Promise<Response> {
+export async function GET(_req: Request, { params }: any) {
   const key = process.env.NEYNAR_API_KEY;
   if (!key) {
     return new Response(JSON.stringify({ ok: false, error: "missing NEYNAR_API_KEY" }), {
@@ -19,8 +14,9 @@ export async function GET(
     });
   }
 
-  const fidNum = Number(params.fid);
-  if (!Number.isFinite(fidNum) || fidNum <= 0) {
+  const fidStr = params?.fid as string | undefined;
+  const fidNum = Number(fidStr);
+  if (!fidStr || !Number.isFinite(fidNum) || fidNum <= 0) {
     return new Response(JSON.stringify({ ok: false, error: "bad fid" }), {
       status: 400,
       headers: {
