@@ -16,7 +16,10 @@ export default function Nav() {
   ];
 
   return (
-    <nav className="sticky top-0 z-40 backdrop-blur-md bg-[#0b0d12]/70 border-b border-white/10">
+    <nav
+      className="nav-root sticky top-0 z-[70] backdrop-blur-md bg-[#0b0d12]/70 border-b border-white/10"
+      aria-label="Primary"
+    >
       <div className="container flex items-center justify-between py-3 px-4">
         {/* Left: logo + title */}
         <Link href="/" className="flex items-center gap-3">
@@ -37,39 +40,48 @@ export default function Nav() {
           <button
             type="button"
             aria-label="Menu"
+            aria-expanded={open}
             onClick={() => setOpen(v => !v)}
-            className="nav-burger"
+            className="nav-burger text-white/90"
           >
-            {/* simple icon */}
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-              <rect x="3" y="6" width="18" height="2" rx="1" />
-              <rect x="3" y="11" width="18" height="2" rx="1" />
-              <rect x="3" y="16" width="18" height="2" rx="1" />
+            {/* Visible lines (use currentColor) */}
+            <svg width="26" height="26" viewBox="0 0 24 24" role="img">
+              <rect x="3" y="6"  width="18" height="2" rx="1" fill="currentColor" />
+              <rect x="3" y="11" width="18" height="2" rx="1" fill="currentColor" />
+              <rect x="3" y="16" width="18" height="2" rx="1" fill="currentColor" />
             </svg>
           </button>
           <ConnectPill />
         </div>
       </div>
 
-      {/* Dropdown panel */}
+      {/* Dropdown panel (fixed under nav, above cards) */}
       {open && (
-        <div className="menu-panel">
-          <div className="container py-3 px-4 flex flex-col gap-2">
-            {links.map(l => {
-              const active = pathname === l.href;
-              return (
-                <Link
-                  key={l.href}
-                  href={l.href}
-                  onClick={() => setOpen(false)}
-                  className={`menu-link ${active ? "menu-link--active" : ""}`}
-                >
-                  {l.label}
-                </Link>
-              );
-            })}
+        <>
+          <div className="menu-panel z-[60]">
+            <div className="container py-3 px-4 flex flex-col gap-2">
+              {links.map(l => {
+                const active = pathname === l.href;
+                return (
+                  <Link
+                    key={l.href}
+                    href={l.href}
+                    onClick={() => setOpen(false)}
+                    className={`menu-link ${active ? "menu-link--active" : ""}`}
+                  >
+                    {l.label}
+                  </Link>
+                );
+              })}
+            </div>
           </div>
-        </div>
+          {/* Optional dim overlay to show the panel is above content */}
+          <button
+            aria-label="Close menu"
+            onClick={() => setOpen(false)}
+            className="menu-overlay"
+          />
+        </>
       )}
     </nav>
   );
