@@ -195,7 +195,7 @@ export default function HomeClient() {
         <section className="glass glass-pad relative overflow-hidden bg-[#0b0f18]/70">
           <div aria-hidden className="pointer-events-none absolute -top-24 -right-24 h-64 w-64 rounded-full blur-3xl" style={{ background: "radial-gradient(circle, #79ffe155 0%, transparent 60%)" }} />
           <h2 className="text-xl md:text-2xl font-bold">Call your escort</h2>
-          <p className="mt-1 text-white/85">Enter your Farcaster FID and HQ will sign your passage. Your wallet sends one tx—your Basebot steps through.</p>
+          <p className="mt-1 text-white/85">Enter your Farcaster FID and HQ will sign your passage. Your wallet sends a transmission—your Basebot steps through.</p>
 
           <div className="mt-5 grid gap-3 md:grid-cols-[220px_auto_160px]">
             <label className="block">
@@ -224,7 +224,7 @@ export default function HomeClient() {
               Tx sent: <Link href={`https://basescan.org/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="underline decoration-dotted underline-offset-4">{txHash.slice(0, 10)}…{txHash.slice(-8)}</Link>
             </p>
           )}
-          {mined && <p className="mt-3 text-sm text-green-300">Arrival confirmed. Your escort awaits. ✨</p>}
+          {mined && <p className="mt-3 text-sm text-green-300">Arrival confirmed. Your Basebot awaits. ✨</p>}
         </section>
 
         {/* Recent Couriers */}
