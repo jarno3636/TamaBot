@@ -4,8 +4,7 @@ import "./globals.css";
 import Providers from "./providers";
 import Nav from "@/components/Nav";
 import AppReady from "@/components/AppReady";
-import BackgroundCubes from "@/components/BackgroundCubes"; // ✅ match default export name
-import AudioToggle from "@/components/AudioToggle";
+import BackgroundCubes from "@/components/BackgroundCubes";
 
 export const metadata: Metadata = {
   title: "Basebots — On-Chain AI Companions",
@@ -27,7 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <body className="min-h-screen bg-[#0a0b12] text-white antialiased">
         {/* Background animation (fixed, behind everything) */}
-        <BackgroundCubes />
+        <BackgroundCubes className="-z-20" />
 
         {/* Accessibility: skip link for keyboard users */}
         <a
@@ -40,12 +39,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Providers>
           <AppReady />
 
-          <header role="banner">
+          {/* Nav above everything else */}
+          <header role="banner" className="nav-root sticky top-0 z-[70]">
             <Nav />
           </header>
-
-          {/* Floating audio toggle (top-right, above content) */}
-          <AudioToggle src="/audio/basebots-loop.mp3" />
 
           <main id="main" role="main">
             {children}
