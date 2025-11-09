@@ -4,7 +4,7 @@
 
 export const BASEBOTS = {
   chainId: 8453,
-  address: "0x3c46f9AbA2d733f7DF13b30611479F0E99eE9Bf8" as const,
+  address: "0x92E29025fd6bAdD17c3005084fe8C43D928222B4" as const,
   abi: [
     {"inputs":[{"internalType":"address","name":"initialOwner","type":"address"},{"internalType":"address","name":"royaltyReceiver","type":"address"},{"internalType":"uint96","name":"royaltyBps","type":"uint96"}],"stateMutability":"nonpayable","type":"constructor"},
     {"inputs":[],"name":"AlreadyMinted","type":"error"},
