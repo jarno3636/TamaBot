@@ -1,59 +1,53 @@
 // lib/fid.ts
-export function coerceFID(v: unknown): number | null {
-  const n = typeof v === "string" ? Number(v) : typeof v === "number" ? v : NaN;
-  return Number.isInteger(n) && n > 0 ? n : null;
-}
+"use client";
 
-/** Try multiple known places a Farcaster Mini-App might expose the viewer FID. */
-function tryFidFromMiniApp(): number | null {
-  const w = typeof window !== "undefined" ? (window as any) : undefined;
-  if (!w) return null;
+/**
+ * Best-effort FID detection:
+ * - ?fid=123 or ?viewerFid=123 in URL
+ * - MiniKit context (if running inside Farcaster mini app)
+ * - last used FID from localStorage
+ */
+export function tryDetectFIDFromEnvironment(): number | null {
+  if (typeof window === "undefined") return null;
 
-  // A few common SDK shapes; all optional/safe:
-  const candidates = [
-    w?.farcaster?.context?.user?.fid,
-    w?.farcaster?.session?.user?.fid,
-    w?.MiniKit?.context?.user?.fid,
-    w?.miniKit?.context?.user?.fid,
-    w?.miniapp?.context?.user?.fid,
-    w?.__MINIAPP__?.viewer?.fid,
-    w?.__FC__?.viewer?.fid,
-  ];
+  try {
+    const sp = new URLSearchParams(window.location.search);
+    const keys = ["fid", "viewerFid", "userFid"];
+    for (const k of keys) {
+      const v = sp.get(k);
+      if (v && /^\d+$/.test(v)) return Number(v);
+    }
+  } catch {}
 
-  for (const c of candidates) {
-    const fid = coerceFID(c);
-    if (fid) return fid;
-  }
+  try {
+    // MiniKit / Farcaster mini-app contexts (defensive checks)
+    const anyWin = window as any;
+    const mkFid =
+      anyWin?.MiniKit?.context?.user?.fid ??
+      anyWin?.farcaster?.session?.fid ??
+      anyWin?.frame?.context?.user?.fid ??
+      null;
+    if (typeof mkFid === "number" && mkFid > 0) return mkFid;
+  } catch {}
+
+  try {
+    const last = localStorage.getItem("basebots.fid");
+    if (last && /^\d+$/.test(last)) return Number(last);
+  } catch {}
+
   return null;
 }
 
-/** Extract `fid` from URL ?fid=... */
-function tryFidFromURL(): number | null {
+/** Normalize to string for inputs */
+export function detectedFIDString(): string {
+  const n = tryDetectFIDFromEnvironment();
+  return typeof n === "number" && Number.isFinite(n) ? String(n) : "";
+}
+
+/** Store last used FID for future auto-fill */
+export function rememberFID(fid: string | number) {
   try {
-    const usp = new URLSearchParams(window.location.search);
-    const q = usp.get("fid");
-    return coerceFID(q);
-  } catch {
-    return null;
-  }
-}
-
-const LS_KEY = "basebots:last_fid";
-
-export function saveFIDToLocalStorage(fid: number) {
-  try { localStorage.setItem(LS_KEY, String(fid)); } catch {}
-}
-function tryFidFromLocalStorage(): number | null {
-  try { return coerceFID(localStorage.getItem(LS_KEY)); } catch { return null; }
-}
-
-/** Resolves a reasonable FID if available; returns null if nothing found. */
-export function resolveInitialFID(): number | null {
-  // Order matters:
-  return (
-    tryFidFromURL() ??
-    tryFidFromMiniApp() ??
-    tryFidFromLocalStorage() ??
-    null
-  );
+    const s = String(fid ?? "").trim();
+    if (/^\d+$/.test(s)) localStorage.setItem("basebots.fid", s);
+  } catch {}
 }
