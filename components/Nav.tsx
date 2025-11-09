@@ -3,43 +3,60 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import ConnectPill from "@/components/ConnectPill";
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
+import { useAccount } from "wagmi";
+import ConnectPill from "@/components/ConnectPill";
 import { detectedFIDString } from "@/lib/fid";
+import { resolveDisplayName } from "@/lib/domains";
 
 type MiniProfile = {
-  pfp_url?: string | null;       // from Neynar /v2/farcaster/user
-  pfpUrl?: string | null;        // (defensive alias)
+  pfp_url?: string | null;
+  pfpUrl?: string | null;       // defensive alias
   display_name?: string | null;
-  displayName?: string | null;   // (defensive alias)
+  displayName?: string | null;  // defensive alias
   username?: string | null;
 };
 
 export default function Nav() {
   const pathname = usePathname();
+  const { address } = useAccount();
+
   const [open, setOpen] = useState(false);
 
+  // Farcaster mini profile (from fid)
   const [fid, setFid] = useState<string>("");
   const [mp, setMp] = useState<MiniProfile | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Compact wallet-friendly name (.base / ENS)
+  const [walletName, setWalletName] = useState<string>("");
 
   // Detect FID once
   useEffect(() => {
     setFid(detectedFIDString());
   }, []);
 
-  // Load profile when fid present
+  // Resolve wallet display name on connect
   useEffect(() => {
-    let aborted = false;
-    async function load() {
+    let cancelled = false;
+    (async () => {
+      if (!address) { setWalletName(""); return; }
+      const name = await resolveDisplayName(address);
+      if (!cancelled) setWalletName(name || "");
+    })();
+    return () => { cancelled = true; };
+  }, [address]);
+
+  // Load Farcaster profile when fid present
+  useEffect(() => {
+    const ctrl = new AbortController();
+    (async () => {
       if (!fid) { setMp(null); return; }
       try {
         setLoading(true);
-        const r = await fetch(`/api/neynar/user/${fid}`, { cache: "no-store" });
-        // Neynar shape: { user: {...} }
+        const r = await fetch(`/api/neynar/user/${fid}`, { cache: "no-store", signal: ctrl.signal });
         const j = await r.json().catch(() => ({}));
-        if (aborted) return;
         const user = j?.user ?? null;
         if (user) {
           setMp({
@@ -51,13 +68,12 @@ export default function Nav() {
           setMp(null);
         }
       } catch {
-        if (!aborted) setMp(null);
+        if (!ctrl.signal.aborted) setMp(null);
       } finally {
-        if (!aborted) setLoading(false);
+        if (!ctrl.signal.aborted) setLoading(false);
       }
-    }
-    load();
-    return () => { aborted = true; };
+    })();
+    return () => ctrl.abort();
   }, [fid]);
 
   const links = useMemo(() => ([
@@ -66,15 +82,31 @@ export default function Nav() {
   ]), []);
 
   const hasProfile = Boolean(mp?.pfp_url || mp?.display_name || mp?.username);
-
-  // helpers
   const pfp = (mp?.pfp_url ?? (mp as any)?.pfpUrl) || null;
   const name = (mp?.display_name ?? (mp as any)?.displayName) || null;
+
+  // Small wallet badge (md+ only to avoid crowding)
+  const walletBadge = address ? (
+    <span
+      title={address}
+      className="hidden md:inline-block text-xs px-2 py-1 rounded-full border border-white/15 bg-white/10 text-white/80 max-w-[180px] truncate"
+    >
+      {walletName || `${address.slice(0, 6)}…${address.slice(-4)}`}
+    </span>
+  ) : null;
+
+  // Tiny avatar next to burger on md+ only (keeps mobile clean)
+  const inlineAvatar = pfp ? (
+    <div className="hidden md:block relative w-7 h-7 rounded-full overflow-hidden border border-white/15 bg-white/10">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={pfp} alt="pfp" className="w-full h-full object-cover" />
+    </div>
+  ) : null;
 
   return (
     <nav className="bg-[#0b0d12]/70 border-b border-white/10" aria-label="Primary">
       <div className="container flex items-center justify-between py-3 px-4">
-        {/* Left: logo + title */}
+        {/* Left: logo + brand */}
         <Link href="/" className="flex items-center gap-3">
           <div className="relative w-8 h-8">
             <Image
@@ -85,11 +117,13 @@ export default function Nav() {
               className="object-contain rounded-md"
             />
           </div>
-          <span className="brand-steel text-xl md:text-2xl">BASEBOTS</span>
+          <span className="brand-steel text-lg sm:text-xl md:text-2xl">BASEBOTS</span>
         </Link>
 
-        {/* Right: burger + connect */}
-        <div className="flex items-center gap-3">
+        {/* Right: wallet badge (md+), avatar (md+), burger, connect */}
+        <div className="flex items-center gap-2 md:gap-3">
+          {walletBadge}
+          {inlineAvatar}
           <button
             type="button"
             aria-label="Menu"
@@ -131,11 +165,23 @@ export default function Nav() {
                       {mp?.username ? `@${mp.username}` : (fid ? `FID ${fid}` : "—")}
                     </div>
                   </div>
+
+                  {/* Connected wallet (compact) */}
+                  {address && (
+                    <div className="ml-auto text-right">
+                      <div className="text-xs text-white/80 max-w-[160px] truncate">
+                        {walletName || `${address.slice(0, 6)}…${address.slice(-4)}`}
+                      </div>
+                      <div className="text-[11px] text-white/40">connected</div>
+                    </div>
+                  )}
+
                   {fid && (
                     <Link
                       href={mp?.username ? `https://warpcast.com/${mp.username}` : `https://warpcast.com/~/profiles/${fid}`}
-                      target="_blank" rel="noopener noreferrer"
-                      className="ml-auto btn-ghost text-xs"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ml-2 btn-ghost text-xs"
                     >
                       Profile ↗
                     </Link>
