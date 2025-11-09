@@ -4,9 +4,10 @@ import type { NextRequest } from "next/server";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-type RouteContext = { params: { fid: string } };
-
-export async function GET(_req: NextRequest, { params }: RouteContext): Promise<Response> {
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: { fid: string } }   // 👈 inline this type
+): Promise<Response> {
   const key = process.env.NEYNAR_API_KEY;
   if (!key) {
     return new Response(JSON.stringify({ ok: false, error: "missing NEYNAR_API_KEY" }), {
@@ -31,7 +32,6 @@ export async function GET(_req: NextRequest, { params }: RouteContext): Promise<
 
   const r = await fetch(`https://api.neynar.com/v2/farcaster/user?fid=${fidNum}`, {
     headers: { "x-api-key": key },
-    // keep server-to-server fresh
     cache: "no-store",
   });
 
