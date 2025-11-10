@@ -1,7 +1,7 @@
 // app/api/basebots/recent/route.ts
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { createPublicClient, http, parseAbiItem, type PublicClient } from "viem";
+import { createPublicClient, http, parseAbiItem } from "viem";
 import { base } from "viem/chains";
 import { BASEBOTS } from "@/lib/abi";
 
@@ -15,6 +15,17 @@ const TRANSFER = parseAbiItem(
 );
 const ZERO = "0x0000000000000000000000000000000000000000" as const;
 
+// --- Minimal client shape to avoid viem type collisions ---------------------
+type LogClient = {
+  getLogs: (args: {
+    address?: `0x${string}` | `0x${string}`[];
+    event?: any;
+    fromBlock?: bigint;
+    toBlock?: bigint;
+    args?: any;
+  }) => Promise<any[]>;
+};
+
 // Provider-safe chunking (Base RPC often limits long ranges)
 async function getLogsChunked({
   client,
@@ -23,7 +34,7 @@ async function getLogsChunked({
   toBlock,
   chunkSize = 5_000n,
 }: {
-  client: PublicClient;              // ✅ proper viem client type
+  client: LogClient;               // 👈 decoupled from viem’s concrete type
   address: `0x${string}`;
   fromBlock: bigint;
   toBlock: bigint;
@@ -84,7 +95,7 @@ export async function GET(req: NextRequest) {
 
     // Pull logs in chunks to avoid RPC 413/timeout issues
     const logs = await getLogsChunked({
-      client,
+      client: client as unknown as LogClient, // 👈 sidestep type collision
       address: BASEBOTS.address as `0x${string}`,
       fromBlock,
       toBlock,
@@ -101,15 +112,16 @@ export async function GET(req: NextRequest) {
 
     const pick = logs.slice(0, limit);
 
-    // Batch fetch block timestamps (hash-only tx list keeps types simple)
+    // Batch fetch block timestamps
     const uniqueBlocks = Array.from(new Set(pick.map((l: any) => l.blockNumber.toString()))).map(
       (s) => BigInt(s)
     );
     const blockMap = new Map<bigint, number>();
     await Promise.all(
       uniqueBlocks.map(async (bn) => {
-        const blk = await client.getBlock({ blockNumber: bn, includeTransactions: false });
-        blockMap.set(bn, Number(blk.timestamp) * 1000);
+        // Use includeTransactions: false to keep a narrow return shape
+        const blk = await client.getBlock({ blockNumber: bn, includeTransactions: false } as any);
+        blockMap.set(bn, Number((blk as any).timestamp) * 1000);
       })
     );
 
