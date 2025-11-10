@@ -1,42 +1,50 @@
 // lib/share.ts
-export function buildTweetUrl({ text, url }: { text: string; url: string }) {
-  const base = "https://twitter.com/intent/tweet";
-  const q = new URLSearchParams();
-  if (text) q.set("text", text);
-  if (url) q.set("url", url);
-  return `${base}?${q.toString()}`;
+function absBase(): string {
+  const env = (process.env.NEXT_PUBLIC_FC_MINIAPP_LINK || process.env.NEXT_PUBLIC_URL || "").replace(/\/$/, "");
+  if (env) return env;
+  if (typeof window !== "undefined") return window.location.origin;
+  return "https://basebots.vercel.app";
 }
 
-export function farcasterComposeUrl({ text, url }: { text: string; url: string }) {
-  const u = new URL("https://warpcast.com/~/compose");
+export function toAbs(url: string): string {
+  try {
+    if (/^https?:\/\//i.test(url)) return url;
+    return new URL(url, absBase()).toString();
+  } catch {
+    return url;
+  }
+}
+
+export function buildTweetUrl({ text = "", url = "" }: { text?: string; url?: string }) {
+  const u = new URL("https://x.com/intent/post");  // works; twitter.com/intent/tweet also OK
   if (text) u.searchParams.set("text", text);
-  if (url) u.searchParams.append("embeds[]", url);
+  if (url) u.searchParams.set("url", toAbs(url));
   return u.toString();
 }
 
-const TEMPLATES = {
-  farcaster: [
-    "Summoning a Basebot from the blue tomorrow. #BaseBots with @base.base.eth",
-    "Minted my escort through the neon city. #BaseBots // @base.base.eth",
-    "One FID, one bot. The skyline just blinked. #BaseBots @base.base.eth",
-    "On-chain companion acquired. Meet my Basebot. #BaseBots @base.base.eth",
-    "Doors open. Optics online. #BaseBots with @base.base.eth",
-    "Into the aurora we go—Basebot online. #BaseBots @base.base.eth",
-  ],
-  twitter: [
-    "Summoning a Basebot from the blue tomorrow. #BaseBots with @base",
-    "Minted my escort through the neon city. #BaseBots // @base",
-    "One FID, one bot. The skyline just blinked. #BaseBots @base",
-    "On-chain companion acquired. Meet my Basebot. #BaseBots @base",
-    "Doors open. Optics online. #BaseBots with @base",
-    "Into the aurora we go—Basebot online. #BaseBots @base",
-  ],
-} as const;
+const FARCASTER_LINES = [
+  "Summoned a Basebot ⚙️✨",
+  "My courier from the Blue Tomorrow just arrived",
+  "On-chain robot vibes on Base",
+  "Minting robots like it’s 2099",
+];
 
-function pick<T>(arr: readonly T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
+const TWITTER_LINES = [
+  "Meet my on-chain Basebot 🤖✨",
+  "Summoned a courier from the Blue Tomorrow",
+  "Fully on-chain SVG robot on Base",
+  "My robot just touched down on Base",
+];
+
+export function getRandomShareText(kind: "farcaster" | "twitter" = "twitter") {
+  const src = kind === "farcaster" ? FARCASTER_LINES : TWITTER_LINES;
+  return src[Math.floor(Math.random() * src.length)];
 }
 
-export function getRandomShareText(platform: "farcaster" | "twitter") {
-  return pick(TEMPLATES[platform]);
+// Handy: build a Farcaster web composer URL (fallback when not in MiniKit)
+export function buildWarpcastCompose({ text = "", embed = "" }: { text?: string; embed?: string }) {
+  const u = new URL("https://warpcast.com/~/compose");
+  if (text) u.searchParams.set("text", text);
+  if (embed) u.searchParams.append("embeds[]", toAbs(embed));
+  return u.toString();
 }
