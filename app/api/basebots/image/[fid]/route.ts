@@ -6,12 +6,11 @@ import { createPublicClient, http } from "viem";
 import { base } from "viem/chains";
 import { BASEBOTS } from "@/lib/abi";
 
-// Run on Node (sharp won't work on edge)
+// Sharp needs Node runtime
 export const runtime = "nodejs";
-
-// Cache at the CDN but compute dynamically per request
-export const revalidate = 300;          // 5 min
-export const dynamic = "force-dynamic"; // don't try to pre-render at build
+// Cache for 5m, but still compute per request
+export const revalidate = 300;
+export const dynamic = "force-dynamic";
 
 // Decode a tokenURI like: data:application/json;base64,<B64>
 function decodeTokenJSON(uri: string): any | null {
@@ -25,11 +24,8 @@ function decodeTokenJSON(uri: string): any | null {
   }
 }
 
-export async function GET(
-  _req: NextRequest,
-  context: { params: { fid: string } }
-) {
-  const fidStr = context?.params?.fid;
+export async function GET(_req: NextRequest, { params }: any) {
+  const fidStr = params?.fid;
   const fidNum = Number(fidStr);
   if (!Number.isInteger(fidNum) || fidNum <= 0) {
     return NextResponse.json({ error: "bad fid" }, { status: 400 });
@@ -54,7 +50,7 @@ export async function GET(
       return NextResponse.json({ error: "no image" }, { status: 404 });
     }
 
-    // If the contract returns an inline SVG (data URL), render to PNG
+    // Inline SVG ➜ render to PNG
     if (imageField.startsWith("data:image/svg+xml")) {
       const base64 = imageField.split(",")[1] || "";
       const svgRaw = Buffer.from(base64, "base64").toString("utf8");
@@ -74,7 +70,7 @@ export async function GET(
       });
     }
 
-    // If the contract ever returns an https image, proxy it (optional)
+    // Absolute image URL ➜ proxy (optional)
     if (/^https?:\/\//i.test(imageField)) {
       const r = await fetch(imageField);
       if (!r.ok) throw new Error("fetch image failed");
