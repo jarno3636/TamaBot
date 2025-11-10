@@ -1,20 +1,18 @@
 // app/mini/page.tsx
 "use client";
 
-import dynamic from "next/dynamic";
 import AppReady from "@/components/AppReady";
+import dynamic from "next/dynamic";
 
-const MiniHome = dynamic(() => import("@/components/MiniHome"), { ssr: false });
-// ^ create a lightweight Mini-only home (buttons, simple UI); avoid heavy providers here
+// keep the first paint tiny; client-load heavier UI after the ready ping
+const HomeClient = dynamic(() => import("@/components/HomeClient"), { ssr: false });
 
 export default function MiniPage() {
   return (
     <div className="min-h-screen bg-[#0a0b12] text-white">
-      {/* Signal readiness on first paint */}
+      {/* Signal Farcaster/Base ASAP */}
       <AppReady />
-      <div className="p-4">
-        <MiniHome />
-      </div>
+      <HomeClient />
     </div>
   );
 }
