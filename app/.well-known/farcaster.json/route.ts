@@ -31,56 +31,34 @@ export async function GET(req: NextRequest) {
   const icon = `${origin}/icon.png`;
   const splash = `${origin}/splash.png`;
 
+  // Use a single object for BOTH miniapp and frame so they're identical
+  const COMMON = {
+    version: "1",
+    name: brandName,
+    homeUrl: `${origin}/mini`,          // point to your lightweight /mini entry
+    iconUrl: icon,
+    splashImageUrl: splash,
+    splashBackgroundColor: "#0a0b10",
+    webhookUrl: `${origin}/api/webhook`,
+    // metadata (intersection that both accept)
+    subtitle: "On-chain Bot Companion",
+    description: desc,
+    primaryCategory: "social",
+    tags: ["miniapp", "basebots", "base"],
+    screenshotUrls: [image],
+    heroImageUrl: image,
+    tagline: "Bring forth your Basebot",
+    ogTitle: shortName,
+    ogDescription: desc,
+    ogImageUrl: image,
+    noindex: false,
+  };
+
   const manifest = {
     accountAssociation: AA_BASEBOTS,
     baseBuilder: BASE_BUILDER,
-
-    // ✅ New schema used by modern Farcaster Mini surfaces
-    miniapp: {
-      version: "1",
-      name: brandName,
-      homeUrl: `${origin}/mini`,            // ⬅️ point Minis to the lightweight entry
-      iconUrl: icon,
-      splashImageUrl: splash,
-      splashBackgroundColor: "#0a0b10",
-      webhookUrl: `${origin}/api/webhook`,
-
-      // Optional metadata
-      subtitle: "On-chain Bot Companion",
-      description: desc,
-      primaryCategory: "social",
-      tags: ["miniapp", "basebots", "base"],
-      screenshotUrls: [image],
-      heroImageUrl: image,
-      tagline: "Bring forth your Basebot",
-      ogTitle: shortName,
-      ogDescription: desc,
-      ogImageUrl: image,
-      noindex: false,
-    },
-
-    // 🧰 Legacy/alt readers (some tools still peek here)
-    frame: {
-      version: "1",
-      name: brandName,
-      homeUrl: `${origin}/mini`,
-      iconUrl: icon,
-      imageUrl: image,
-      buttonTitle: "Launch Basebots",
-      splashImageUrl: splash,
-      splashBackgroundColor: "#0a0b10",
-      webhookUrl: `${origin}/api/webhook`,
-      subtitle: "On-chain Bot Companion",
-      description: desc,
-      primaryCategory: "social",
-      tags: ["miniapp", "basebots", "base"],
-      screenshotUrls: [image],
-      heroImageUrl: image,
-      ogTitle: shortName,
-      ogDescription: desc,
-      ogImageUrl: image,
-      noindex: false,
-    },
+    miniapp: COMMON,
+    frame: COMMON, // <- EXACTLY the same object
   };
 
   return NextResponse.json(manifest, {
