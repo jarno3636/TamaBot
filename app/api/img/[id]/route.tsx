@@ -28,7 +28,7 @@ const PALETTES: readonly [string, string, string, string, string, string][] = [
   ["#39FF14","#003300","#B2FFAD","#000F00","#00CC00","#061006"],
 ];
 
-// Simple SHA-256 → PRNG helpers (Edge has crypto.subtle)
+// ---- helpers ---------------------------------------------------------------
 async function hashBytes(input: string): Promise<Uint8Array> {
   const data = new TextEncoder().encode(input);
   const digest = await crypto.subtle.digest("SHA-256", data);
@@ -48,8 +48,6 @@ function rint(bytes: Uint8Array, i: number, maxExclusive: number) {
 function rbool(bytes: Uint8Array, i: number) {
   return (u32(bytes, i) & 1) === 1;
 }
-
-// Rounded “faceplate” radii similar to the contract
 function radii(faceIdx: number): [number, number] {
   if (faceIdx === 0) return [32, 32];
   if (faceIdx === 1) return [18, 18];
@@ -57,13 +55,9 @@ function radii(faceIdx: number): [number, number] {
   return [26, 26];
 }
 
-// ---- ROUTE HANDLER ---------------------------------------------------------
-// ✅ Next 15 wants: (req: Request, context: { params: { id: string } })
-export async function GET(
-  _req: Request,
-  { params }: { params: { id: string } }
-): Promise<Response> {
-  const idStr = params.id ?? "";
+// ---- ROUTE HANDLER (untyped 2nd arg to satisfy Next 15 validator) ----------
+export async function GET(_req: Request, ctx: any): Promise<Response> {
+  const idStr = String((ctx?.params ?? {}).id ?? "");
   const idRaw = idStr.replace(/[^0-9]/g, "");
   if (!idRaw) return new Response("Missing id", { status: 400 });
 
@@ -91,7 +85,7 @@ export async function GET(
     h: SIZE - (PADDING + 120) * 2,
   };
 
-  // Tiny helpers as absolutely-positioned shapes
+  // tiny absolutely-positioned shapes
   const Rect = ({
     x, y, w, h, r = 0, fill, strokeColor, strokeWidth = 0, opacity = 1, shadow = "",
   }: {
@@ -124,10 +118,10 @@ export async function GET(
     />
   );
 
-  // Background variants (grid, rings, stripe, dots, radial)
+  // Background variants
   const BgLayer = () => {
     if (bgIdx === 1) {
-      const lines: JSX.Element[] = [];
+      const lines: any[] = [];
       for (let i = 0; i <= SIZE; i += 64) {
         lines.push(<Rect key={`h-${i}`} x={0} y={i} w={SIZE} h={2} fill={stroke + "14"} />);
         lines.push(<Rect key={`v-${i}`} x={i} y={0} w={2} h={SIZE} fill={stroke + "14"} />);
@@ -154,7 +148,7 @@ export async function GET(
       );
     }
     if (bgIdx === 4) {
-      const dots: JSX.Element[] = [];
+      const dots: any[] = [];
       for (let y = 48; y < SIZE; y += 96) {
         for (let x = 48; x < SIZE; x += 96) {
           dots.push(<Circle key={`${x}-${y}`} cx={x} cy={y} r={3} fill={stroke + "22"} />);
@@ -175,15 +169,9 @@ export async function GET(
 
   // Eyes
   const Eyes = () => {
-    if (eyesIdx === 0) {
-      return (<><Circle cx={box.x + box.w*0.28} cy={box.y + box.h*0.44} r={28} fill={eye} /><Circle cx={box.x + box.w*0.72} cy={box.y + box.h*0.44} r={28} fill={eye} /></>);
-    }
-    if (eyesIdx === 1) {
-      return (<><Rect x={box.x + box.w*0.22} y={box.y + box.h*0.38} w={64} h={64} r={8} fill={eye} /><Rect x={box.x + box.w*0.64} y={box.y + box.h*0.38} w={64} h={64} r={8} fill={eye} /></>);
-    }
-    if (eyesIdx === 2) {
-      return (<Rect x={box.x + box.w*0.22} y={box.y + box.h*0.40} w={box.w*0.56} h={48} r={14} fill={eye} />);
-    }
+    if (eyesIdx === 0) return (<><Circle cx={box.x + box.w*0.28} cy={box.y + box.h*0.44} r={28} fill={eye} /><Circle cx={box.x + box.w*0.72} cy={box.y + box.h*0.44} r={28} fill={eye} /></>);
+    if (eyesIdx === 1) return (<><Rect x={box.x + box.w*0.22} y={box.y + box.h*0.38} w={64} h={64} r={8} fill={eye} /><Rect x={box.x + box.w*0.64} y={box.y + box.h*0.38} w={64} h={64} r={8} fill={eye} /></>);
+    if (eyesIdx === 2) return (<Rect x={box.x + box.w*0.22} y={box.y + box.h*0.40} w={box.w*0.56} h={48} r={14} fill={eye} />);
     if (eyesIdx === 3) {
       const Diamond = ({ cx }: { cx: number }) => (
         <div style={{ position: "absolute", left: cx - 24, top: box.y + box.h*0.40, width: 48, height: 48, background: eye, transform: "rotate(45deg)", borderRadius: 6 }} />
@@ -196,21 +184,15 @@ export async function GET(
   // Mouth
   const Mouth = () => {
     if (mouthIdx === 0) {
-      const bars: JSX.Element[] = [];
-      for (let i = 0; i < 5; i++) {
-        bars.push(<Rect key={i} x={box.x + box.w*0.40 + i*20} y={box.y + box.h*0.56} w={8} h={24} fill={accent} opacity={0.45} />);
-      }
+      const bars: any[] = [];
+      for (let i = 0; i < 5; i++) bars.push(<Rect key={i} x={box.x + box.w*0.40 + i*20} y={box.y + box.h*0.56} w={8} h={24} fill={accent} opacity={0.45} />);
       return (<><Rect x={box.x + box.w*0.38} y={box.y + box.h*0.56} w={box.w*0.24} h={28} r={8} fill={chassis} />{bars}</>);
     }
     if (mouthIdx === 1) return (<Rect x={box.x + box.w*0.36} y={box.y + box.h*0.58} w={box.w*0.28} h={14} r={8} fill={accent} />);
-    if (mouthIdx === 2) {
-      return (<div style={{ position: "absolute", left: box.x + box.w*0.34, top: box.y + box.h*0.58, width: box.w*0.32, height: 48, borderBottom: `8px solid ${accent}`, borderRadius: "0 0 40px 40px" }} />);
-    }
+    if (mouthIdx === 2) return (<div style={{ position: "absolute", left: box.x + box.w*0.34, top: box.y + box.h*0.58, width: box.w*0.32, height: 48, borderBottom: `8px solid ${accent}`, borderRadius: "0 0 40px 40px" }} />);
     if (mouthIdx === 3) {
-      const vents: JSX.Element[] = [];
-      for (let i = 0; i < 5; i++) {
-        vents.push(<Rect key={i} x={box.x + box.w*0.36 + i*24} y={box.y + box.h*0.59} w={6} h={18} fill={accent} opacity={0.4} />);
-      }
+      const vents: any[] = [];
+      for (let i = 0; i < 5; i++) vents.push(<Rect key={i} x={box.x + box.w*0.36 + i*24} y={box.y + box.h*0.59} w={6} h={18} fill={accent} opacity={0.4} />);
       return (<><Rect x={box.x + box.w*0.34} y={box.y + box.h*0.58} w={box.w*0.32} h={4} fill={stroke} opacity={0.6} />{vents}</>);
     }
     return (<div style={{ position: "absolute", left: box.x + box.w*0.34, top: box.y + box.h*0.60, width: box.w*0.32, height: 40, borderTop: `6px solid ${accent}`, borderRadius: "40px 40px 0 0" }} />);
@@ -228,9 +210,7 @@ export async function GET(
         </>
       );
     }
-    if (armIdx === 1) {
-      return (<><Rect x={box.x - 28} y={box.y + box.h*0.46} w={26} h={60} r={8} fill={chassis} /><Rect x={box.x + box.w + 2} y={box.y + box.h*0.46} w={26} h={60} r={8} fill={chassis} /></>);
-    }
+    if (armIdx === 1) return (<><Rect x={box.x - 28} y={box.y + box.h*0.46} w={26} h={60} r={8} fill={chassis} /><Rect x={box.x + box.w + 2} y={box.y + box.h*0.46} w={26} h={60} r={8} fill={chassis} /></>);
     return (<><Rect x={box.x - 16} y={box.y + box.h*0.48} w={50} h={14} r={7} fill={accent} /><Rect x={box.x + box.w - 34} y={box.y + box.h*0.48} w={50} h={14} r={7} fill={accent} /></>);
   };
 
