@@ -1,13 +1,7 @@
-// components/AppReady.tsx
 "use client";
 
 import { useEffect } from "react";
 
-/**
- * AppReady: announces to the Farcaster/Base Mini App host that the UI is ready.
- * - Works whether the SDK is injected via <script> or bundled via ESM.
- * - Quietly degrades when *not* inside a Mini App (so it’s safe on web).
- */
 export default function AppReady() {
   useEffect(() => {
     let cancelled = false;
@@ -16,8 +10,7 @@ export default function AppReady() {
     const d = document.documentElement;
     const DEBUG = process.env.NEXT_PUBLIC_MINI_DEBUG === "true";
 
-    /** Locate the SDK (globals first, ESM as fallback). */
-    async function getSdk(): Promise<any | null> {
+    async function getFarcasterSdk(): Promise<any | null> {
       const g: any = globalThis as any;
       if (g?.farcaster?.miniapp?.sdk) return g.farcaster.miniapp.sdk;
       if (g?.Farcaster?.mini?.sdk) return g.Farcaster.mini.sdk;
@@ -29,53 +22,45 @@ export default function AppReady() {
       }
     }
 
-    /** Best-effort Mini detection (never throws). */
-    async function probeMini(sdk: any): Promise<boolean> {
-      try {
-        if (typeof sdk?.isInMiniApp === "function") {
-          // small timeout to avoid hanging during cold starts
-          const p = sdk.isInMiniApp(150);
-          const t = new Promise<boolean>((r) => setTimeout(() => r(false), 180));
-          return await Promise.race([p, t]);
-        }
-      } catch {}
-      // Fallback UA sniff (harmless if it’s wrong)
-      try {
-        const ua = navigator.userAgent || "";
-        if (/BaseApp|FarcasterMini|Warpcast/i.test(ua)) return true;
-      } catch {}
-      return false;
+    function getMiniKit(): any | null {
+      const w = window as any;
+      return w?.miniKit || w?.coinbase?.miniKit || w?.MiniKit || w?.coinbase?.minikit || null;
     }
 
-    /** Fire a single ready(), with a short timeout gate. */
     async function fireReadyOnce() {
       if (cancelled) return;
-      const sdk = await getSdk();
-      if (!sdk) return;
 
-      // stamp a tiny debug attribute
+      // 1) Farcaster MiniApp SDK
       try {
-        const isMini = await probeMini(sdk);
-        d.setAttribute("data-fc-mini", String(isMini));
-        if (DEBUG) {
-          const ctxSrc = sdk.context;
-          const ctx = typeof ctxSrc === "function" ? await ctxSrc() : await ctxSrc;
-          // eslint-disable-next-line no-console
-          console.log("[Mini] ready() run. isMini:", isMini, ctx ?? null);
+        const sdk = await getFarcasterSdk();
+        if (sdk?.actions?.ready) {
+          await Promise.race([
+            Promise.resolve(sdk.actions.ready()),
+            new Promise((r) => setTimeout(r, 500)),
+          ]);
+          // stamp context for debugging
+          try {
+            const ctx = typeof sdk.context === "function" ? await sdk.context() : await sdk.context;
+            if (ctx?.client) d.setAttribute("data-fc-client", String(ctx.client));
+            if (DEBUG) console.log("[Mini] Farcaster ready ✓ ctx:", ctx ?? null);
+          } catch {}
         }
       } catch {}
 
+      // 2) Base App MiniKit readiness (separate from Farcaster)
       try {
-        await Promise.race([
-          Promise.resolve(sdk.actions?.ready?.()),
-          new Promise((r) => setTimeout(r, 500)),
-        ]);
-      } catch {
-        // Swallow: we never want ready() to break the web app
-      }
+        const mk = getMiniKit();
+        if (mk?.setFrameReady) {
+          await Promise.race([
+            Promise.resolve(mk.setFrameReady()),
+            new Promise((r) => setTimeout(r, 500)),
+          ]);
+          if (DEBUG) console.log("[Mini] Base MiniKit setFrameReady ✓");
+          d.setAttribute("data-base-minikit", "ready");
+        }
+      } catch {}
     }
 
-    /** Heartbeat ready(): nudge late SDK injection for a few seconds. */
     function startHeartbeat() {
       if (iv) return;
       let ticks = 0;
@@ -83,25 +68,23 @@ export default function AppReady() {
         if (cancelled) return;
         ticks += 1;
         try {
-          const sdk = await getSdk();
-          if (sdk?.actions?.ready) {
-            sdk.actions.ready().catch(() => {});
-          }
-          // also try legacy global just in case
-          (globalThis as any).farcaster?.actions?.ready?.();
+          const sdk = await getFarcasterSdk();
+          sdk?.actions?.ready?.();
         } catch {}
-        if (ticks >= 40) { // ~6s at 150ms
-          if (iv) clearInterval(iv);
+        try {
+          const mk = getMiniKit();
+          mk?.setFrameReady?.();
+        } catch {}
+        if (ticks >= 40) { // ~6s @150ms
+          clearInterval(iv!);
           iv = null;
         }
       }, 150);
     }
 
-    // Initial announce
     fireReadyOnce();
     startHeartbeat();
 
-    // Re-announce on common visibility/activation events
     const again = () => fireReadyOnce();
     window.addEventListener("pageshow", again);
     window.addEventListener("focus", again);
