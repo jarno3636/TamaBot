@@ -27,11 +27,11 @@ function b64ToUtf8(b64: string): string {
 }
 
 export default function MyBotClient() {
-  const { address } = useAccount();
-  const { fid } = useFid(); // <- canonical source
+  const { address } = useAccount(); // harmless, may be unused
+  const { fid } = useFid();         // ✅ canonical FID source
   const [fidInput, setFidInput] = useState<string>("");
 
-  // Populate when hook resolves/changes
+  // Populate input when hook resolves/changes
   useEffect(() => {
     if (isValidFID(fid)) setFidInput(String(fid));
   }, [fid]);
@@ -41,6 +41,7 @@ export default function MyBotClient() {
     [fidInput]
   );
 
+  // Pull the on-chain tokenURI (basic bot JSON with image data URL)
   const { data: tokenJsonUri, refetch: refetchToken } = useReadContract({
     ...BASEBOTS,
     functionName: "tokenURI",
@@ -48,6 +49,7 @@ export default function MyBotClient() {
     query: { enabled: fidBigInt !== null },
   });
 
+  // Decode image/name/description from tokenURI
   let imageSrc = "", name = "", description = "";
   try {
     if (typeof tokenJsonUri === "string" && tokenJsonUri.startsWith("data:application/json;base64,")) {
@@ -57,13 +59,21 @@ export default function MyBotClient() {
       name = json?.name || "";
       description = json?.description || "";
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore decode errors; UI will show "No image yet" */
+  }
 
+  // Determine absolute origin (works in web and mini)
   const siteOrigin =
     (typeof window !== "undefined" && window.location?.origin) ||
-    (process.env.NEXT_PUBLIC_FC_MINIAPP_LINK || process.env.NEXT_PUBLIC_URL || "").replace(/\/$/, "");
+    (process.env.NEXT_PUBLIC_URL || "").replace(/\/$/, "") ||
+    "https://basebots.vercel.app";
 
+  // Page to share (permalink to this bot)
   const shareUrl = fidInput ? `${siteOrigin}/bot/${fidInput}` : (siteOrigin || "/");
+
+  // ✅ Public PNG for Farcaster embed (from your /api route)
+  const imagePngUrl = isValidFID(fidInput) ? `${siteOrigin}/api/basebots/image/${fidInput}` : "";
 
   return (
     <main className="min-h-[100svh] bg-deep text-white pb-16 page-layer">
@@ -75,7 +85,8 @@ export default function MyBotClient() {
             Type your Farcaster FID to load your bot’s on-chain image and share it.
           </p>
           <ShareRow
-            url={shareUrl}
+            url={shareUrl}                 // link for X/Twitter
+            imageUrl={imagePngUrl}         // 👈 PNG embed for Farcaster
             className="mt-3"
             label={isValidFID(fidInput) ? "Share this bot" : "Share Basebots"}
           />
