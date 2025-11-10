@@ -15,7 +15,7 @@ import { base } from "viem/chains";
 import { BASEBOTS } from "@/lib/abi";
 import AudioToggle from "@/components/AudioToggle";
 import ShareRow from "@/components/ShareRow";
-import { detectedFIDString, rememberFID } from "@/lib/fid";
+import useFid from "@/hooks/useFid";
 
 type SignResp = {
   ok: boolean;
@@ -53,6 +53,7 @@ function getErrText(e: unknown): string {
 
 export default function HomeClient() {
   const { address } = useAccount();
+  const { fid, fidNum } = useFid(); // <- canonical FID
 
   const { data: price = 0n } = useReadContract({ ...BASEBOTS, functionName: "mintPrice" });
   const { data: maxSupply = 50000n } = useReadContract({ ...BASEBOTS, functionName: "MAX_SUPPLY" });
@@ -79,16 +80,10 @@ export default function HomeClient() {
   const cap = Number(maxSupply);
   const pct = Math.max(0, Math.min(100, Math.round((minted / Math.max(1, cap)) * 100)));
 
-  // Autofill
+  // Autofill from hook whenever it resolves/changes
   useEffect(() => {
-    const first = detectedFIDString();
-    if (first) setFidInput(first);
-  }, []);
-
-  // Remember valid FID
-  useEffect(() => {
-    if (isValidFID(fidInput)) rememberFID(fidInput);
-  }, [fidInput]);
+    if (isValidFID(fid)) setFidInput(String(fid));
+  }, [fid]);
 
   useEffect(() => { if (mined) refetchMinted(); }, [mined, refetchMinted]);
 
@@ -273,7 +268,7 @@ export default function HomeClient() {
               </div>
             ))}
             {!recent?.length && !recentErr && (
-              <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-5 text-white/70">No recent mints yet.</div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-5 text-white/70">No recent mints yet.</div>
             )}
           </div>
 
