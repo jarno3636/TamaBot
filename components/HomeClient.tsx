@@ -115,7 +115,13 @@ export default function HomeClient() {
     }
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_FC_MINIAPP_LINK || process.env.NEXT_PUBLIC_URL || "/";
+  // --- Twitter share fix: always use the WEB URL, never the mini-app deep link ---
+  const baseWeb =
+    (process.env.NEXT_PUBLIC_URL ||
+      (typeof window !== "undefined" ? window.location.origin : "") ||
+      "https://basebots.vercel.app").replace(/\/$/, "");
+  const siteUrl = `${baseWeb}/og`;
+  // ------------------------------------------------------------------------------
 
   return (
     <main className="min-h-[100svh] bg-deep text-white pb-16 page-layer">
