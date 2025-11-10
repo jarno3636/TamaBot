@@ -1,7 +1,8 @@
 /* eslint-disable @next/next/no-img-element */
 import { ImageResponse } from "next/og";
+import type { NextRequest } from "next/server";
 
-// Run on the Edge so it's fast and cachable
+// Run on the Edge so it's fast and cacheable
 export const runtime = "edge";
 
 // Canvas size (HD)
@@ -35,15 +36,11 @@ async function hashBytes(input: string): Promise<Uint8Array> {
   return new Uint8Array(digest);
 }
 function u32(bytes: Uint8Array, i: number) {
-  // make a repeatable uint32 from 4 consecutive bytes
   const a = bytes[i % bytes.length]!;
   const b = bytes[(i + 1) % bytes.length]!;
   const c = bytes[(i + 2) % bytes.length]!;
   const d = bytes[(i + 3) % bytes.length]!;
   return (a << 24) ^ (b << 16) ^ (c << 8) ^ d;
-}
-function pick<T>(arr: readonly T[], n: number) {
-  return arr[n % arr.length]!;
 }
 function rint(bytes: Uint8Array, i: number, maxExclusive: number) {
   const v = u32(bytes, i) >>> 0;
@@ -61,15 +58,16 @@ function radii(faceIdx: number): [number, number] {
   return [26, 26];
 }
 
+// ✅ Next 15-compliant handler signature
 export async function GET(
-  _req: Request,
-  ctx: { params: { id?: string } }
+  _req: NextRequest,
+  { params }: { params: { id?: string } }
 ) {
-  const idRaw = (ctx.params?.id || "").replace(/[^0-9]/g, "");
+  const idRaw = (params?.id || "").replace(/[^0-9]/g, "");
   if (!idRaw) return new Response("Missing id", { status: 400 });
 
   const seed = await hashBytes(idRaw);
-
+  
   // Deterministic trait selection (mirrors the spirit of the solidity logic)
   const paletteIdx = rint(seed, 0, PALETTES.length);
   const [body, stroke, chassis, eye, accent, bg] = PALETTES[paletteIdx];
