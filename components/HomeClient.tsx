@@ -45,7 +45,7 @@ function getErrText(e: unknown): string {
 
 export default function HomeClient() {
   const { address } = useAccount();
-  const { fid } = useFid(); // <- canonical FID
+  const { fid } = useFid();
 
   const { data: price = 0n } = useReadContract({ ...BASEBOTS, functionName: "mintPrice" });
   const { data: maxSupply = 50000n } = useReadContract({ ...BASEBOTS, functionName: "MAX_SUPPLY" });
@@ -68,7 +68,6 @@ export default function HomeClient() {
   const cap = Number(maxSupply);
   const pct = Math.max(0, Math.min(100, Math.round((minted / Math.max(1, cap)) * 100)));
 
-  // Autofill from hook whenever it resolves/changes
   useEffect(() => {
     if (isValidFID(fid)) setFidInput(String(fid));
   }, [fid]);
@@ -115,13 +114,11 @@ export default function HomeClient() {
     }
   }
 
-  // --- Twitter share fix: always use the WEB URL, never the mini-app deep link ---
-  const baseWeb =
+  // ✅ Use your normal web homepage for sharing
+  const siteUrl =
     (process.env.NEXT_PUBLIC_URL ||
       (typeof window !== "undefined" ? window.location.origin : "") ||
       "https://basebots.vercel.app").replace(/\/$/, "");
-  const siteUrl = `${baseWeb}/og`;
-  // ------------------------------------------------------------------------------
 
   return (
     <main className="min-h-[100svh] bg-deep text-white pb-16 page-layer">
@@ -178,7 +175,9 @@ export default function HomeClient() {
         <section className="glass glass-pad relative overflow-hidden bg-[#0b0f18]/70">
           <div aria-hidden className="pointer-events-none absolute -top-24 -right-24 h-64 w-64 rounded-full blur-3xl" style={{ background: "radial-gradient(circle, #79ffe155 0%, transparent 60%)" }} />
           <h2 className="text-xl md:text-2xl font-bold">Bring forth your Basebot</h2>
-          <p className="mt-1 text-white/85">Enter your Farcaster FID and HQ will sign your passage. One transaction, and your Basebot steps through.</p>
+          <p className="mt-1 text-white/85">
+            Enter your Farcaster FID and HQ will sign your passage. One transaction, and your Basebot steps through.
+          </p>
 
           <div className="mt-5 grid gap-3 md:grid-cols-[220px_auto_160px]">
             <label className="block">
@@ -210,7 +209,13 @@ export default function HomeClient() {
           {(err || writeErr) && <p className="mt-3 text-sm text-red-300">{err || getErrText(writeErr)}</p>}
           {txHash && !mined && (
             <p className="mt-3 text-sm text-white/80">
-              Tx sent: <Link href={`https://basescan.org/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="underline decoration-dotted underline-offset-4">
+              Tx sent:{" "}
+              <Link
+                href={`https://basescan.org/tx/${txHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline decoration-dotted underline-offset-4"
+              >
                 {txHash.slice(0, 10)}…{txHash.slice(-8)}
               </Link>
             </p>
@@ -228,8 +233,13 @@ export default function HomeClient() {
           <Link href="https://basescan.org/" target="_blank" rel="noopener noreferrer" className="pill-note pill-note--blue">
             Chain: Base ↗
           </Link>
-          <Link href={`https://base.blockscout.com/address/${BASEBOTS.address}`} target="_blank" rel="noopener noreferrer" className="pill-note pill-note--blue">
-            Contract: {BASEBOTS.address.slice(0,6)}…{BASEBOTS.address.slice(-4)} ↗
+          <Link
+            href={`https://base.blockscout.com/address/${BASEBOTS.address}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="pill-note pill-note--blue"
+          >
+            Contract: {BASEBOTS.address.slice(0, 6)}…{BASEBOTS.address.slice(-4)} ↗
           </Link>
         </section>
       </div>
