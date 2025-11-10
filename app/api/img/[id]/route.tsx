@@ -57,13 +57,13 @@ function radii(faceIdx: number): [number, number] {
   return [26, 26];
 }
 
-// ✅ Next 15-compliant handler signature: use web Request and a Record for params
+// ---- ROUTE HANDLER ---------------------------------------------------------
+// ✅ Next 15 wants: (req: Request, context: { params: { id: string } })
 export async function GET(
   _req: Request,
-  ctx: { params: Record<string, string | string[]> }
-) {
-  const rawParam = ctx?.params?.["id"];
-  const idStr = Array.isArray(rawParam) ? rawParam[0] ?? "" : (rawParam ?? "");
+  { params }: { params: { id: string } }
+): Promise<Response> {
+  const idStr = params.id ?? "";
   const idRaw = idStr.replace(/[^0-9]/g, "");
   if (!idRaw) return new Response("Missing id", { status: 400 });
 
