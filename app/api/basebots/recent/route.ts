@@ -1,6 +1,7 @@
 // app/api/basebots/recent/route.ts
-import { NextRequest, NextResponse } from "next/server";
-import { createPublicClient, http, parseAbiItem } from "viem";
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+import { createPublicClient, http, parseAbiItem, type PublicClient } from "viem";
 import { base } from "viem/chains";
 import { BASEBOTS } from "@/lib/abi";
 
@@ -22,7 +23,7 @@ async function getLogsChunked({
   toBlock,
   chunkSize = 5_000n,
 }: {
-  client: ReturnType<typeof createPublicClient>;
+  client: PublicClient;              // ✅ proper viem client type
   address: `0x${string}`;
   fromBlock: bigint;
   toBlock: bigint;
@@ -64,16 +65,16 @@ export async function GET(req: NextRequest) {
       "https://mainnet.base.org";
 
     const client = createPublicClient({ chain: base, transport: http(rpc) });
+
     const latest = await client.getBlockNumber();
 
-    // Default: ~200k blocks (~several hours on Base). You can override:
-    // ?sinceBlocks=50000  OR  ?hours=2
+    // Default: ~200k blocks. You can override: ?sinceBlocks=50000  OR  ?hours=2
     let lookback = 200_000n;
     if (sinceBlocksParam) {
       const sb = BigInt(Math.max(1, Number(sinceBlocksParam)));
       lookback = sb;
     } else if (hoursParam) {
-      // Base ~ 2s/block ≈ 1800 blocks/hour — be generous
+      // Base ~2s/block ≈ 1800 blocks/hour — be generous
       const hrs = Math.max(1, Number(hoursParam));
       lookback = BigInt(hrs * 2_200); // buffer
     }
@@ -87,7 +88,7 @@ export async function GET(req: NextRequest) {
       address: BASEBOTS.address as `0x${string}`,
       fromBlock,
       toBlock,
-      chunkSize: 5_000n, // safe default for Base RPCs
+      chunkSize: 5_000n,
     });
 
     // Sort newest first (blockNumber desc, then txIndex desc, then logIndex desc)
@@ -100,19 +101,19 @@ export async function GET(req: NextRequest) {
 
     const pick = logs.slice(0, limit);
 
-    // Optional: attach block timestamps (batch unique blocks)
-    const uniqueBlocks = Array.from(new Set(pick.map((l) => l.blockNumber.toString()))).map(
+    // Batch fetch block timestamps (hash-only tx list keeps types simple)
+    const uniqueBlocks = Array.from(new Set(pick.map((l: any) => l.blockNumber.toString()))).map(
       (s) => BigInt(s)
     );
     const blockMap = new Map<bigint, number>();
     await Promise.all(
       uniqueBlocks.map(async (bn) => {
-        const blk = await client.getBlock({ blockNumber: bn });
+        const blk = await client.getBlock({ blockNumber: bn, includeTransactions: false });
         blockMap.set(bn, Number(blk.timestamp) * 1000);
       })
     );
 
-    const items = pick.map((l) => ({
+    const items = pick.map((l: any) => ({
       tokenId: l.args.tokenId?.toString() || "",
       to: l.args.to as `0x${string}`,
       txHash: l.transactionHash as `0x${string}`,
@@ -122,15 +123,10 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(
       { ok: true, items, latestBlock: Number(latest) },
-      {
-        headers: {
-          "cache-control": "no-store, max-age=0",
-        },
-      }
+      { headers: { "cache-control": "no-store, max-age=0" } }
     );
   } catch (e: any) {
     const msg = String(e?.message || e || "failed");
-    // Friendlier error for upstream cluster hiccups
     if (/timeout|ECONN|ENOTFOUND|fetch failed|503/i.test(msg)) {
       return NextResponse.json(
         { ok: false, error: "Upstream RPC is busy. Try again shortly." },
