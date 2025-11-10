@@ -1,4 +1,3 @@
-// app/layout.tsx
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import Providers from "./providers";
@@ -52,7 +51,6 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-/** ---- Viewport ---- */
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -66,6 +64,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen bg-[#0a0b12] text-white antialiased">
         <BackgroundCubes className="-z-20" />
 
+        {/* ✅ Ping Mini hosts immediately on first paint */}
+        <AppReady />
+
         <a
           href="#main"
           className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:bg-white focus:text-black focus:px-3 focus:py-2 focus:rounded-lg"
@@ -74,7 +75,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </a>
 
         <Providers>
-          <AppReady />
           <header role="banner" className="nav-root z-[70]">
             <Nav />
           </header>
