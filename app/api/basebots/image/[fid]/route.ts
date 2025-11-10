@@ -1,8 +1,17 @@
+// app/api/basebots/image/[fid]/route.ts
+import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import sharp from "sharp";
 import { createPublicClient, http } from "viem";
 import { base } from "viem/chains";
 import { BASEBOTS } from "@/lib/abi";
+
+// Run on Node (sharp won't work on edge)
+export const runtime = "nodejs";
+
+// Cache at the CDN but compute dynamically per request
+export const revalidate = 300;          // 5 min
+export const dynamic = "force-dynamic"; // don't try to pre-render at build
 
 // Decode a tokenURI like: data:application/json;base64,<B64>
 function decodeTokenJSON(uri: string): any | null {
@@ -11,22 +20,21 @@ function decodeTokenJSON(uri: string): any | null {
     const b64 = uri.split(",")[1] || "";
     const jsonStr = Buffer.from(b64, "base64").toString("utf8");
     return JSON.parse(jsonStr);
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
-export const revalidate = 300;           // cache 5m at the edge
-export const dynamic = "force-static";   // good for CDN
-
 export async function GET(
-  _req: Request,
-  { params }: { params: { fid: string } }
+  _req: NextRequest,
+  context: { params: { fid: string } }
 ) {
-  const fidNum = Number(params.fid);
+  const fidStr = context?.params?.fid;
+  const fidNum = Number(fidStr);
   if (!Number.isInteger(fidNum) || fidNum <= 0) {
     return NextResponse.json({ error: "bad fid" }, { status: 400 });
   }
 
-  // Chain RPC (use your own if you have one)
   const rpcUrl = process.env.RPC_URL || "https://mainnet.base.org";
   const client = createPublicClient({ chain: base, transport: http(rpcUrl) });
 
@@ -46,13 +54,12 @@ export async function GET(
       return NextResponse.json({ error: "no image" }, { status: 404 });
     }
 
-    // Handle both SVG data URLs and absolute URLs
+    // If the contract returns an inline SVG (data URL), render to PNG
     if (imageField.startsWith("data:image/svg+xml")) {
-      // Strip headers and decode
-      const svgRaw = imageField.split(",")[1] ? Buffer.from(imageField.split(",")[1], "base64").toString("utf8") : "";
+      const base64 = imageField.split(",")[1] || "";
+      const svgRaw = Buffer.from(base64, "base64").toString("utf8");
       if (!svgRaw) throw new Error("bad svg");
 
-      // Render SVG -> PNG (transparent bg, 1024px square – tweak as you like)
       const png = await sharp(Buffer.from(svgRaw))
         .resize(1024, 1024, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
         .png({ compressionLevel: 9 })
@@ -67,7 +74,7 @@ export async function GET(
       });
     }
 
-    // If your contract ever returns an https image, just proxy it (optional)
+    // If the contract ever returns an https image, proxy it (optional)
     if (/^https?:\/\//i.test(imageField)) {
       const r = await fetch(imageField);
       if (!r.ok) throw new Error("fetch image failed");
