@@ -3,16 +3,15 @@
 
 type Props = {
   text?: string;
-  url?: string;        // page you want to embed
+  /** Absolute or relative URL to embed (prefer your bot PNG or OG page). */
+  url?: string;
   className?: string;
 };
 
 function toAbs(u?: string): string {
   if (!u) return "";
   try {
-    // If already absolute, keep it
     if (/^https?:\/\//i.test(u)) return u;
-    // Else build from current origin
     const base =
       (typeof window !== "undefined" && window.location?.origin) ||
       (process.env.NEXT_PUBLIC_URL || "").replace(/\/$/, "") ||
@@ -25,12 +24,15 @@ function toAbs(u?: string): string {
 
 export default function ShareToFarcaster({ text = "", url, className = "" }: Props) {
   const click = async () => {
+    // ✅ Prefer the passed-in url (image/page), THEN fall back to env/home
     const embed = toAbs(
-      // Prefer your configured miniapp link (good for in-app sharing)
-      process.env.NEXT_PUBLIC_FC_MINIAPP_LINK || url || "/"
+      url ||
+        process.env.NEXT_PUBLIC_FC_MINIAPP_LINK ||
+        process.env.NEXT_PUBLIC_URL ||
+        "/"
     );
 
-    // 1) Base App MiniKit (Coinbase / Base wallet app)
+    // 1) Coinbase/Base MiniKit (if present)
     try {
       const w = globalThis as any;
       const mk = w?.miniKit || w?.coinbase?.miniKit || w?.MiniKit || null;
@@ -38,30 +40,24 @@ export default function ShareToFarcaster({ text = "", url, className = "" }: Pro
         await Promise.resolve(mk.composeCast({ text, embeds: embed ? [embed] : [] }));
         return;
       }
-    } catch {
-      /* ignore */
-    }
+    } catch {}
 
-    // 2) Farcaster Mini App SDK (Warpcast)
+    // 2) Farcaster MiniApp SDK (Warpcast)
     try {
       const mod: any = await import("@farcaster/miniapp-sdk").catch(() => null);
       const sdk: any = mod?.sdk ?? mod?.default ?? null;
 
       if (sdk?.actions?.composeCast) {
-        // nudge host first so composer opens reliably
         try {
           await Promise.race([
             Promise.resolve(sdk.actions.ready?.()),
-            new Promise((r) => setTimeout(r, 600)),
+            new Promise((r) => setTimeout(r, 500)),
           ]);
         } catch {}
-        await Promise.resolve(
-          sdk.actions.composeCast({ text, embeds: embed ? [embed] : [] })
-        );
+        await Promise.resolve(sdk.actions.composeCast({ text, embeds: embed ? [embed] : [] }));
         return;
       }
 
-      // Some older shims only expose openUrl/openURL—fall back to web composer
       if (sdk?.actions?.openUrl || sdk?.actions?.openURL) {
         const u = new URL("https://warpcast.com/~/compose");
         if (text) u.searchParams.set("text", text);
@@ -73,15 +69,12 @@ export default function ShareToFarcaster({ text = "", url, className = "" }: Pro
         }
         return;
       }
-    } catch {
-      /* ignore */
-    }
+    } catch {}
 
-    // 3) Final fallback: open web composer
+    // 3) Web fallback
     const u = new URL("https://warpcast.com/~/compose");
     if (text) u.searchParams.set("text", text);
     if (embed) u.searchParams.append("embeds[]", embed);
-    // Use _top so in-app browsers don’t trap a blank tab
     window.open(u.toString(), "_top", "noopener,noreferrer");
   };
 
