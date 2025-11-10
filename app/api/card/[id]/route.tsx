@@ -1,36 +1,27 @@
-// app/api/card/[id]/route.ts
+// app/api/card/[id]/route.tsx
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
 
-// Environment: set NEXT_PUBLIC_URL to your public site origin (no trailing slash)
 const SITE =
-  process.env.NEXT_PUBLIC_URL?.replace(/\/$/, "") ||
+  (process.env.NEXT_PUBLIC_URL?.replace(/\/$/, "")) ||
   "https://your-domain.example";
 
-export async function GET(
-  _req: Request,
-  { params }: { params: { id: string } }
-) {
-  const id = (params.id || "").replace(/[^\d]/g, "");
-  if (!id) {
-    return new Response("Bad id", { status: 400 });
-  }
+export async function GET(_req: Request, context: { params: { id: string } }) {
+  const id = (context.params.id || "").replace(/[^\d]/g, "");
+  if (!id) return new Response("Bad id", { status: 400 });
 
-  // Prefer your HD renderer; fallback to on-chain SVG data (if you expose one)
-  const hdUrl = `${SITE}/api/img/${id}.png`; // <- you already have this
+  const hdUrl = `${SITE}/api/img/${id}.png`;
   const onchainSvgUrl = `${SITE}/api/svg/${id}`; // optional fallback if you add it
 
-  // Try HD first; if it 404s, switch to on-chain
   let botSrc = hdUrl;
   try {
-    const probe = await fetch(hdUrl, { method: "HEAD" });
+    const probe = await fetch(hdUrl, { method: "HEAD", cache: "no-store" });
     if (!probe.ok) botSrc = onchainSvgUrl;
   } catch {
     botSrc = onchainSvgUrl;
   }
 
-  // Simple, bold layout — safe web fonts (no custom font load required)
   return new ImageResponse(
     (
       <div
@@ -38,8 +29,7 @@ export async function GET(
           width: "1200px",
           height: "630px",
           display: "flex",
-          background:
-            "linear-gradient(135deg, #0b0f18 0%, #111a2b 50%, #0b0f18 100%)",
+          background: "linear-gradient(135deg, #0b0f18 0%, #111a2b 50%, #0b0f18 100%)",
           color: "white",
           padding: "48px",
           boxSizing: "border-box",
@@ -55,7 +45,8 @@ export async function GET(
             width: 380,
             height: 380,
             borderRadius: 999,
-            background: "radial-gradient(circle, rgba(121,255,225,.35), transparent 60%)",
+            background:
+              "radial-gradient(circle, rgba(121,255,225,.35), transparent 60%)",
             filter: "blur(40px)",
           }}
         />
@@ -73,17 +64,10 @@ export async function GET(
             justifyContent: "center",
           }}
         >
-          {/* @vercel/og supports <img src> with absolute URLs */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={botSrc}
             alt={`Basebot #${id}`}
-            style={{
-              width: 480,
-              height: 480,
-              objectFit: "contain",
-              borderRadius: 16,
-            }}
+            style={{ width: 480, height: 480, objectFit: "contain", borderRadius: 16 }}
           />
         </div>
 
@@ -129,13 +113,7 @@ export async function GET(
 
           <div style={{ height: 16 }} />
 
-          <div
-            style={{
-              fontSize: 26,
-              opacity: 0.9,
-              maxWidth: 520,
-            }}
-          >
+          <div style={{ fontSize: 26, opacity: 0.9, maxWidth: 520 }}>
             On-chain cube-bodied bot. Colors & traits from your Farcaster FID.
           </div>
 
@@ -173,7 +151,6 @@ export async function GET(
           </div>
         </div>
 
-        {/* Border frame */}
         <div
           style={{
             position: "absolute",
