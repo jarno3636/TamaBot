@@ -69,11 +69,15 @@ export default function MyBotClient() {
     (process.env.NEXT_PUBLIC_URL || "").replace(/\/$/, "") ||
     "https://basebots.vercel.app";
 
-  // Page to share (permalink to this bot)
-  const shareUrl = fidInput ? `${siteOrigin}/bot/${fidInput}` : (siteOrigin || "/");
+  // ✅ OG page to share (renders rich card w/ the PNG as og:image)
+  const shareUrl = isValidFID(fidInput)
+    ? `${siteOrigin}/og/bot/${fidInput}`
+    : (siteOrigin || "/");
 
-  // ✅ Public PNG for Farcaster embed (from your /api route)
-  const imagePngUrl = isValidFID(fidInput) ? `${siteOrigin}/api/basebots/image/${fidInput}` : "";
+  // Optional: direct PNG if you want to pass it through for Farcaster embeds
+  const imagePngUrl = isValidFID(fidInput)
+    ? `${siteOrigin}/api/basebots/image/${fidInput}`
+    : "";
 
   return (
     <main className="min-h-[100svh] bg-deep text-white pb-16 page-layer">
@@ -85,8 +89,8 @@ export default function MyBotClient() {
             Type your Farcaster FID to load your bot’s on-chain image and share it.
           </p>
           <ShareRow
-            url={shareUrl}                 // link for X/Twitter
-            imageUrl={imagePngUrl}         // 👈 PNG embed for Farcaster
+            url={shareUrl}                 // 👈 share the OG page
+            imageUrl={imagePngUrl}         // (optional) PNG embed for Farcaster
             className="mt-3"
             label={isValidFID(fidInput) ? "Share this bot" : "Share Basebots"}
           />
