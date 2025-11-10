@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAccount, useReadContract } from "wagmi";
 import { BASEBOTS } from "@/lib/abi";
 import ShareRow from "@/components/ShareRow";
-import { detectedFIDString, rememberFID } from "@/lib/fid";
+import useFid from "@/hooks/useFid";
 
 function isValidFID(v: string | number | undefined) {
   if (v === undefined || v === null) return false;
@@ -27,26 +27,20 @@ function b64ToUtf8(b64: string): string {
 }
 
 export default function MyBotClient() {
-  const { address } = useAccount(); // not displayed, but harmless
+  const { address } = useAccount();
+  const { fid } = useFid(); // <- canonical source
   const [fidInput, setFidInput] = useState<string>("");
 
-  // Prime input from env / URL / storage
+  // Populate when hook resolves/changes
   useEffect(() => {
-    const first = detectedFIDString();
-    if (first) setFidInput(first);
-  }, []);
-
-  // Persist valid FIDs locally
-  useEffect(() => {
-    if (isValidFID(fidInput)) rememberFID(fidInput);
-  }, [fidInput]);
+    if (isValidFID(fid)) setFidInput(String(fid));
+  }, [fid]);
 
   const fidBigInt = useMemo<bigint | null>(
     () => (isValidFID(fidInput) ? BigInt(fidInput) : null),
     [fidInput]
   );
 
-  // Pull the on-chain tokenURI (basic bot JSON with image data URL)
   const { data: tokenJsonUri, refetch: refetchToken } = useReadContract({
     ...BASEBOTS,
     functionName: "tokenURI",
@@ -54,7 +48,6 @@ export default function MyBotClient() {
     query: { enabled: fidBigInt !== null },
   });
 
-  // Decode image/name/description from tokenURI
   let imageSrc = "", name = "", description = "";
   try {
     if (typeof tokenJsonUri === "string" && tokenJsonUri.startsWith("data:application/json;base64,")) {
@@ -64,16 +57,12 @@ export default function MyBotClient() {
       name = json?.name || "";
       description = json?.description || "";
     }
-  } catch {
-    // ignore decode errors; UI will show "No image yet"
-  }
+  } catch { /* ignore */ }
 
-  // Determine site origin for share links
   const siteOrigin =
     (typeof window !== "undefined" && window.location?.origin) ||
     (process.env.NEXT_PUBLIC_FC_MINIAPP_LINK || process.env.NEXT_PUBLIC_URL || "").replace(/\/$/, "");
 
-  // Share target: /bot/<fid>
   const shareUrl = fidInput ? `${siteOrigin}/bot/${fidInput}` : (siteOrigin || "/");
 
   return (
@@ -124,7 +113,7 @@ export default function MyBotClient() {
           </p>
         </section>
 
-        {/* Result (basic bot image only) */}
+        {/* Result */}
         {fidBigInt !== null ? (
           <section className="glass glass-pad relative overflow-hidden bg-[#0b0f18]/70">
             <div className="flex flex-col md:flex-row md:items-start gap-6">
@@ -144,12 +133,8 @@ export default function MyBotClient() {
               </div>
 
               <div className="flex-1">
-                <h2 className="text-xl md:text-2xl font-bold">
-                  {name || `Basebot #${fidInput}`}
-                </h2>
-                {description ? (
-                  <p className="mt-2 text-white/85">{description}</p>
-                ) : null}
+                <h2 className="text-xl md:text-2xl font-bold">{name || `Basebot #${fidInput}`}</h2>
+                {description ? <p className="mt-2 text-white/85">{description}</p> : null}
               </div>
             </div>
           </section>
