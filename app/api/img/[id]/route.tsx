@@ -58,12 +58,12 @@ function radii(faceIdx: number): [number, number] {
   return [26, 26];
 }
 
-// ✅ Next 15-compliant handler signature
+// ✅ Next 15-compliant handler signature (id is required)
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id?: string } }
+  { params }: { params: { id: string } }
 ) {
-  const idRaw = (params?.id || "").replace(/[^0-9]/g, "");
+  const idRaw = (params.id || "").replace(/[^0-9]/g, "");
   if (!idRaw) return new Response("Missing id", { status: 400 });
 
   const seed = await hashBytes(idRaw);
