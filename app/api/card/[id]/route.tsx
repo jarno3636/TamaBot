@@ -1,5 +1,6 @@
 // app/api/card/[id]/route.tsx
 import { ImageResponse } from "next/og";
+import type { NextRequest } from "next/server";
 
 export const runtime = "edge";
 
@@ -7,12 +8,12 @@ const SITE =
   (process.env.NEXT_PUBLIC_URL?.replace(/\/$/, "")) ||
   "https://your-domain.example";
 
-export async function GET(_req: Request, context: { params: { id: string } }) {
-  const id = (context.params.id || "").replace(/[^\d]/g, "");
+export async function GET(_req: NextRequest, { params }: any) {
+  const id = (params?.id || "").replace(/[^\d]/g, "");
   if (!id) return new Response("Bad id", { status: 400 });
 
   const hdUrl = `${SITE}/api/img/${id}.png`;
-  const onchainSvgUrl = `${SITE}/api/svg/${id}`; // optional fallback if you add it
+  const onchainSvgUrl = `${SITE}/api/svg/${id}`; // optional; remove if you don't have it
 
   let botSrc = hdUrl;
   try {
@@ -45,8 +46,7 @@ export async function GET(_req: Request, context: { params: { id: string } }) {
             width: 380,
             height: 380,
             borderRadius: 999,
-            background:
-              "radial-gradient(circle, rgba(121,255,225,.35), transparent 60%)",
+            background: "radial-gradient(circle, rgba(121,255,225,.35), transparent 60%)",
             filter: "blur(40px)",
           }}
         />
