@@ -1,6 +1,5 @@
 /* eslint-disable @next/next/no-img-element */
 import { ImageResponse } from "next/og";
-import type { NextRequest } from "next/server";
 
 // Run on the Edge so it's fast and cacheable
 export const runtime = "edge";
@@ -58,12 +57,14 @@ function radii(faceIdx: number): [number, number] {
   return [26, 26];
 }
 
-// ✅ Next 15-compliant handler signature (id is required)
+// ✅ Next 15-compliant handler signature: use web Request and a Record for params
 export async function GET(
-  _req: NextRequest,
-  { params }: { params: { id: string } }
+  _req: Request,
+  ctx: { params: Record<string, string | string[]> }
 ) {
-  const idRaw = (params.id || "").replace(/[^0-9]/g, "");
+  const rawParam = ctx?.params?.["id"];
+  const idStr = Array.isArray(rawParam) ? rawParam[0] ?? "" : (rawParam ?? "");
+  const idRaw = idStr.replace(/[^0-9]/g, "");
   if (!idRaw) return new Response("Missing id", { status: 400 });
 
   const seed = await hashBytes(idRaw);
