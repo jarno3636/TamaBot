@@ -75,12 +75,13 @@ export default function MyBotClient() {
     }
   } catch {}
 
-  const siteUrl =
+  // Site origin (no trailing slash)
+  const siteOrigin =
     (process.env.NEXT_PUBLIC_FC_MINIAPP_LINK || process.env.NEXT_PUBLIC_URL || "").replace(/\/$/, "");
 
   // Share targets derived from FID
-  const shareUrl = fidInput ? `${siteUrl}/bot/${fidInput}` : siteUrl || "/";
-  const cardUrl  = fidInput ? `${siteUrl}/api/card/${fidInput}` : "";
+  const shareUrl = fidInput ? `${siteOrigin}/bot/${fidInput}` : (siteOrigin || "/");
+  const cardUrl  = fidInput ? `${siteOrigin}/api/card/${fidInput}` : "";
 
   async function copy(text: string) {
     try {
@@ -136,7 +137,12 @@ export default function MyBotClient() {
           <p className="mt-2 text-white/85">
             Every Basebot is a tiny guardian stamped with your Farcaster FID. Type your FID and we’ll pull your bot’s portrait.
           </p>
-          <ShareRow url={siteUrl || "/"} className="mt-3" />
+          {/* ✅ ShareRow now points at the per-bot page when FID is set */}
+          <ShareRow
+            url={shareUrl}
+            className="mt-3"
+            label={isValidFID(fidInput) ? "Share this bot" : "Share Basebots"}
+          />
         </section>
 
         {/* Finder */}
@@ -216,35 +222,18 @@ export default function MyBotClient() {
 
                 {/* Share & Card actions */}
                 <div className="mt-5 flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={nativeShare}
-                    className="btn-pill btn-pill--blue !font-bold"
-                  >
+                  <button type="button" onClick={nativeShare} className="btn-pill btn-pill--blue !font-bold">
                     Share
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => copy(shareUrl)}
-                    className="btn-ghost"
-                  >
+                  <button type="button" onClick={() => copy(shareUrl)} className="btn-ghost">
                     Copy link
                   </button>
                   {fidInput && (
                     <>
-                      <Link
-                        href={cardUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn-ghost"
-                      >
+                      <Link href={cardUrl} target="_blank" rel="noopener noreferrer" className="btn-ghost">
                         Open card
                       </Link>
-                      <button
-                        type="button"
-                        onClick={downloadCard}
-                        className="btn-ghost"
-                      >
+                      <button type="button" onClick={downloadCard} className="btn-ghost">
                         Download card
                       </button>
                     </>
