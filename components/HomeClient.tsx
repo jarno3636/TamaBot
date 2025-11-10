@@ -28,14 +28,6 @@ type SignResp = {
   error?: string;
 };
 
-type RecentMint = {
-  tokenId: string;
-  to: `0x${string}`;
-  txHash: `0x${string}`;
-  blockNumber?: number;
-  timestamp?: number;
-};
-
 function isValidFID(v: string | number | undefined) {
   if (v === undefined || v === null) return false;
   const n = typeof v === "string" ? Number(v) : v;
@@ -53,7 +45,7 @@ function getErrText(e: unknown): string {
 
 export default function HomeClient() {
   const { address } = useAccount();
-  const { fid, fidNum } = useFid(); // <- canonical FID
+  const { fid } = useFid(); // <- canonical FID
 
   const { data: price = 0n } = useReadContract({ ...BASEBOTS, functionName: "mintPrice" });
   const { data: maxSupply = 50000n } = useReadContract({ ...BASEBOTS, functionName: "MAX_SUPPLY" });
@@ -70,10 +62,6 @@ export default function HomeClient() {
   const { isLoading: pending, isSuccess: mined } = useWaitForTransactionReceipt({
     hash: txHash, chainId: base.id,
   });
-
-  const [recent, setRecent] = useState<RecentMint[] | null>(null);
-  const [recentErr, setRecentErr] = useState<string>("");
-  const [recentAt, setRecentAt] = useState<number | null>(null);
 
   const priceEth = useMemo(() => formatEther(price), [price]);
   const minted = Number(totalMinted);
@@ -126,30 +114,6 @@ export default function HomeClient() {
       setBusy(false);
     }
   }
-
-  async function fetchRecent() {
-    try {
-      setRecentErr("");
-      const r = await fetch("/api/basebots/recent?limit=3", { cache: "no-store" });
-      const j = await r.json();
-      if (!r.ok || !j?.ok) throw new Error(j?.error || "Failed to load recent mints");
-      setRecent(j.items as RecentMint[]);
-      setRecentAt(Date.now());
-    } catch (e) {
-      const msg = getErrText(e);
-      if (/503|no backend is currently healthy/i.test(msg)) {
-        setRecentErr("Network is busy on Base right now. Try again in a minute.");
-      } else {
-        setRecentErr("Couldn’t load recent activity. Tap refresh.");
-      }
-    }
-  }
-
-  useEffect(() => {
-    fetchRecent();
-    const id = setInterval(fetchRecent, 60 * 60 * 1000);
-    return () => clearInterval(id);
-  }, []);
 
   const siteUrl = process.env.NEXT_PUBLIC_FC_MINIAPP_LINK || process.env.NEXT_PUBLIC_URL || "/";
 
@@ -246,35 +210,6 @@ export default function HomeClient() {
             </p>
           )}
           {mined && <p className="mt-3 text-sm text-green-300">Arrival confirmed. Your Basebot awaits. ✨</p>}
-        </section>
-
-        {/* Recent */}
-        <section className="glass glass-pad bg-[#0b0f18]/70">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl md:text-2xl font-bold">Recent Basebots — leading us to the Blue Tomorrow</h2>
-            <button type="button" onClick={fetchRecent} className="btn-ghost" title="Refresh">Refresh</button>
-          </div>
-
-          {recentErr && <p className="mt-2 text-sm text-red-300">{recentErr}</p>}
-
-          <div className="mt-4 grid gap-3">
-            {(recent ?? []).map((m) => (
-              <div key={m.txHash} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <span className="pill-note pill-note--blue">FID #{m.tokenId}</span>
-                  <span className="text-white/80">to {m.to.slice(0, 6)}…{m.to.slice(-4)}</span>
-                </div>
-                <Link href={`https://basescan.org/tx/${m.txHash}`} target="_blank" rel="noopener noreferrer" className="btn-ghost">View tx ↗</Link>
-              </div>
-            ))}
-            {!recent?.length && !recentErr && (
-              <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-5 text-white/70">No recent mints yet.</div>
-            )}
-          </div>
-
-          <p className="mt-3 text-xs text-white/60">
-            Auto-updates hourly{recentAt ? ` · Last updated ${new Date(recentAt).toLocaleTimeString()}` : ""}.
-          </p>
         </section>
 
         {/* Footer quote */}
