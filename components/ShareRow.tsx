@@ -18,10 +18,7 @@ export default function ShareRow({ url, className = "", label }: ShareRowProps) 
 
   return (
     <div className={["flex flex-wrap gap-3", className].join(" ")}>
-      {/* Farcaster share button */}
       <ShareToFarcaster text={farcasterText} url={url} />
-
-      {/* X / Twitter share button */}
       <a
         href={tweetHref}
         target="_blank"
