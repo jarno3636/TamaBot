@@ -1,4 +1,3 @@
-// app/.well-known/farcaster.json/route.ts
 import { NextResponse, NextRequest } from "next/server";
 
 export const dynamic = "force-static";
@@ -13,10 +12,8 @@ const AA_BASEBOTS = {
     "sUIN0qNFJyUlOupMZ/2rK8ejXiJDcrCCudjs8DUG5Bth0npnt9EoYw7NIKOy5oYY4tVdw+wAgai235FlDit5ths=",
 };
 
-// ✅ Add Base Build ownership so you can import/preview in Base Build
-const BASE_BUILDER = {
-  ownerAddress: "0x7fd97A417F64d2706cF5C93c8fdf493EdA42D25c",
-};
+// ✅ Base Build ownership so you can import/preview in Base Build
+const BASE_BUILDER = { ownerAddress: "0x7fd97A417F64d2706cF5C93c8fdf493EdA42D25c" };
 
 export async function GET(req: NextRequest) {
   const host =
@@ -30,30 +27,58 @@ export async function GET(req: NextRequest) {
   const desc =
     "Summon your Farcaster-linked Basebot. A little bit lives on-chain, and on the network.";
 
-  // ⚠️ Mini App manifest (new schema). Most surfaces now expect `miniapp`.
+  const image = `${origin}/og.png`;
+  const icon = `${origin}/icon.png`;
+  const splash = `${origin}/splash.png`;
+
   const manifest = {
     accountAssociation: AA_BASEBOTS,
     baseBuilder: BASE_BUILDER,
+
+    // ✅ New schema used by modern Farcaster Mini surfaces
     miniapp: {
       version: "1",
-      name: brandName,                           // <= 32 chars
-      homeUrl: `${origin}/`,
-      iconUrl: `${origin}/icon.png`,
-      splashImageUrl: `${origin}/splash.png`,
+      name: brandName,
+      homeUrl: `${origin}/mini`,            // ⬅️ point Minis to the lightweight entry
+      iconUrl: icon,
+      splashImageUrl: splash,
       splashBackgroundColor: "#0a0b10",
       webhookUrl: `${origin}/api/webhook`,
 
-      // Optional but recommended metadata
+      // Optional metadata
       subtitle: "On-chain Bot Companion",
       description: desc,
       primaryCategory: "social",
       tags: ["miniapp", "basebots", "base"],
-      screenshotUrls: [`${origin}/og.png`],
-      heroImageUrl: `${origin}/og.png`,
+      screenshotUrls: [image],
+      heroImageUrl: image,
       tagline: "Bring forth your Basebot",
       ogTitle: shortName,
       ogDescription: desc,
-      ogImageUrl: `${origin}/og.png`,
+      ogImageUrl: image,
+      noindex: false,
+    },
+
+    // 🧰 Legacy/alt readers (some tools still peek here)
+    frame: {
+      version: "1",
+      name: brandName,
+      homeUrl: `${origin}/mini`,
+      iconUrl: icon,
+      imageUrl: image,
+      buttonTitle: "Launch Basebots",
+      splashImageUrl: splash,
+      splashBackgroundColor: "#0a0b10",
+      webhookUrl: `${origin}/api/webhook`,
+      subtitle: "On-chain Bot Companion",
+      description: desc,
+      primaryCategory: "social",
+      tags: ["miniapp", "basebots", "base"],
+      screenshotUrls: [image],
+      heroImageUrl: image,
+      ogTitle: shortName,
+      ogDescription: desc,
+      ogImageUrl: image,
       noindex: false,
     },
   };
