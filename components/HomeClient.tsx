@@ -115,7 +115,6 @@ export default function HomeClient() {
     }
   }
 
-  // Absolute site origin (no trailing slash)
   const siteUrl =
     (process.env.NEXT_PUBLIC_URL ||
       (typeof window !== "undefined" ? window.location.origin : "") ||
@@ -139,7 +138,14 @@ export default function HomeClient() {
           />
           <div className="flex flex-col items-center md:flex-row md:items-center md:gap-8">
             <div className="hero-logo-wrap">
-              <Image src="/logo.PNG" alt="Basebots" fill sizes="200px" priority className="rounded-2xl object-contain" />
+              <Image
+                src="/logo.PNG"
+                alt="Basebots"
+                fill
+                sizes="200px"
+                priority
+                className="rounded-2xl object-contain"
+              />
             </div>
             <div className="mt-6 md:mt-0">
               <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
@@ -148,12 +154,8 @@ export default function HomeClient() {
               <p className="mt-3 max-w-2xl text-white/90 leading-relaxed">
                 In a not-so-distant future, Base is the lifeblood of the open city—and the Basebots are its guides.
               </p>
-              {/* 👇 share.PNG is embedded on Farcaster; text includes siteUrl for click-through */}
-              <ShareRow
-                url={siteUrl}
-                imageUrl={`${siteUrl}/share.PNG`}
-                className="mt-4"
-              />
+              {/* Share uses OG/Twitter image from metadata */}
+              <ShareRow url={siteUrl} className="mt-4" />
             </div>
           </div>
         </section>
