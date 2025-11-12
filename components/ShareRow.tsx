@@ -1,8 +1,9 @@
 // components/ShareRow.tsx
 "use client";
 
+import type { MouseEvent } from "react";
 import ShareToFarcaster from "@/components/ShareToFarcaster";
-import { getRandomShareText } from "@/lib/share";
+import { getRandomShareText, buildTweetUrl } from "@/lib/share";
 
 type ShareRowProps = {
   /** Absolute page URL for X/Twitter (your OG page). */
@@ -13,33 +14,25 @@ type ShareRowProps = {
   label?: string;
 };
 
-// Build a robust X intent URL (x.com avoids some twitter.com redirects)
-function buildXUrl({ text, url }: { text: string; url: string }) {
-  const u = new URL("https://x.com/intent/tweet");
-  if (text) u.searchParams.set("text", text);
-  if (url) u.searchParams.set("url", url);
-  return u.toString();
-}
-
 export default function ShareRow({ url, imageUrl, className = "", label }: ShareRowProps) {
-  const farcasterText = getRandomShareText("farcaster");
+  // Include your site URL in the Farcaster text so the cast links back to the app.
+  const farcasterText = `${getRandomShareText("farcaster")} ${url}`;
   const twitterText = getRandomShareText("twitter");
 
-  const tweetHref = buildXUrl({ text: twitterText, url });
+  const tweetHref = buildTweetUrl({ text: twitterText, url });
   const farcasterEmbed = imageUrl || url;
 
-  const openTweet = (e: React.MouseEvent) => {
+  const openTweet = (e: MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
-    // Use _top to break out of in-app browsers that trap blank tabs
     window.open(tweetHref, "_top", "noopener,noreferrer");
   };
 
   return (
     <div className={["flex flex-wrap gap-3", className].join(" ")}>
-      {/* Farcaster gets the image (if provided), else the OG page */}
+      {/* Farcaster: casts with image embed (if provided), and text includes your app URL */}
       <ShareToFarcaster text={farcasterText} url={farcasterEmbed} />
 
-      {/* X/Twitter */}
+      {/* X / Twitter */}
       <a
         href={tweetHref}
         onClick={openTweet}
