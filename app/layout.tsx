@@ -7,23 +7,25 @@ import BackgroundCubes from "@/components/BackgroundCubes";
 
 /** ---- Dynamic metadata (absolute URLs + mini app embed) ---- */
 export async function generateMetadata(): Promise<Metadata> {
-  const url = process.env.NEXT_PUBLIC_URL || "https://basebots.vercel.app";
-  const image = `${url}/og.png`;
-  const splashImageUrl = `${url}/splash.png`;
+  const origin =
+    (process.env.NEXT_PUBLIC_URL || "https://basebots.vercel.app").replace(/\/$/, "");
+  const image = `${origin}/share.PNG`;        // ✅ use share.PNG
+  const splashImageUrl = `${origin}/splash.png`;
 
   return {
+    metadataBase: new URL(origin),
     title: "Basebots — On-Chain AI Companions",
     description:
       "Mint, evolve, and display your Farcaster-linked Basebot — fully on-chain from the neon future.",
     themeColor: "#0a0b12",
     icons: { icon: "/favicon.ico" },
     openGraph: {
+      type: "website",
+      url: origin,
       title: "Basebots — On-Chain AI Companions",
       description:
         "Mint, evolve, and display your Farcaster-linked Basebot — fully on-chain from the neon future.",
-      url,
-      images: [image],
-      type: "website",
+      images: [{ url: image, width: 1200, height: 630, alt: "BASEBOTS — Mint Yours Today" }],
     },
     twitter: {
       card: "summary_large_image",
@@ -33,6 +35,7 @@ export async function generateMetadata(): Promise<Metadata> {
       images: [image],
     },
     other: {
+      // Farcaster MiniApp embed
       "fc:miniapp": JSON.stringify({
         version: "next",
         imageUrl: image,
@@ -41,7 +44,7 @@ export async function generateMetadata(): Promise<Metadata> {
           action: {
             type: "launch_miniapp",
             name: "Basebots — Based Couriers",
-            url,
+            url: origin,
             splashImageUrl,
             splashBackgroundColor: "#0a0b12",
           },
@@ -63,8 +66,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <body className="min-h-screen bg-[#0a0b12] text-white antialiased">
         <BackgroundCubes className="-z-20" />
-
-        {/* ✅ Ping Mini hosts immediately on first paint */}
         <AppReady />
 
         <a
