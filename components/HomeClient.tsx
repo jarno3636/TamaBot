@@ -16,6 +16,8 @@ import { BASEBOTS } from "@/lib/abi";
 import AudioToggle from "@/components/AudioToggle";
 import ShareRow from "@/components/ShareRow";
 import useFid from "@/hooks/useFid";
+// 👇 NEW
+import CollectionPreview from "@/components/CollectionPreview";
 
 type SignResp = {
   ok: boolean;
@@ -114,7 +116,6 @@ export default function HomeClient() {
     }
   }
 
-  // ✅ Use your normal web homepage for sharing
   const siteUrl =
     (process.env.NEXT_PUBLIC_URL ||
       (typeof window !== "undefined" ? window.location.origin : "") ||
@@ -222,6 +223,9 @@ export default function HomeClient() {
           )}
           {mined && <p className="mt-3 text-sm text-green-300">Arrival confirmed. Your Basebot awaits. ✨</p>}
         </section>
+
+        {/* 👇 NEW: Collection Preview just below Mint */}
+        <CollectionPreview />
 
         {/* Footer quote */}
         <section className="text-center text-white/70">
