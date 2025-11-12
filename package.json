@@ -31,7 +31,8 @@
     "react-dom": "18.2.0",
     "swr": "2.3.3",
     "viem": "2.38.5",
-    "wagmi": "2.19.2"
+    "wagmi": "2.19.2",
+    "framer-motion": "11.3.16"
   },
   "devDependencies": {
     "@types/node": "20.11.30",
