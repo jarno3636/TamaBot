@@ -7,9 +7,8 @@ import BackgroundCubes from "@/components/BackgroundCubes";
 
 /** ---- Dynamic metadata (absolute URLs + mini app embed) ---- */
 export async function generateMetadata(): Promise<Metadata> {
-  const origin =
-    (process.env.NEXT_PUBLIC_URL || "https://basebots.vercel.app").replace(/\/$/, "");
-  const image = `${origin}/share.PNG`;        // ✅ use share.PNG
+  const origin = (process.env.NEXT_PUBLIC_URL || "https://basebots.vercel.app").replace(/\/$/, "");
+  const image = `${origin}/share.PNG?v=2`; // ⬅️ cache-buster for fresh embed
   const splashImageUrl = `${origin}/splash.png`;
 
   return {
