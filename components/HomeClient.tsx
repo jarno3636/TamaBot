@@ -16,7 +16,6 @@ import { BASEBOTS } from "@/lib/abi";
 import AudioToggle from "@/components/AudioToggle";
 import ShareRow from "@/components/ShareRow";
 import useFid from "@/hooks/useFid";
-// 👇 NEW
 import CollectionPreview from "@/components/CollectionPreview";
 
 type SignResp = {
@@ -116,6 +115,7 @@ export default function HomeClient() {
     }
   }
 
+  // Absolute site origin (no trailing slash)
   const siteUrl =
     (process.env.NEXT_PUBLIC_URL ||
       (typeof window !== "undefined" ? window.location.origin : "") ||
@@ -148,7 +148,12 @@ export default function HomeClient() {
               <p className="mt-3 max-w-2xl text-white/90 leading-relaxed">
                 In a not-so-distant future, Base is the lifeblood of the open city—and the Basebots are its guides.
               </p>
-              <ShareRow url={siteUrl} className="mt-4" />
+              {/* 👇 share.PNG is embedded on Farcaster; text includes siteUrl for click-through */}
+              <ShareRow
+                url={siteUrl}
+                imageUrl={`${siteUrl}/share.PNG`}
+                className="mt-4"
+              />
             </div>
           </div>
         </section>
@@ -224,7 +229,7 @@ export default function HomeClient() {
           {mined && <p className="mt-3 text-sm text-green-300">Arrival confirmed. Your Basebot awaits. ✨</p>}
         </section>
 
-        {/* 👇 NEW: Collection Preview just below Mint */}
+        {/* Collection preview */}
         <CollectionPreview />
 
         {/* Footer quote */}
