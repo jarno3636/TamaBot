@@ -16,7 +16,7 @@ export function toAbs(url: string): string {
 }
 
 export function buildTweetUrl({ text = "", url = "" }: { text?: string; url?: string }) {
-  const u = new URL("https://x.com/intent/post");  // works; twitter.com/intent/tweet also OK
+  const u = new URL("https://x.com/intent/post"); // (tweet is fine too)
   if (text) u.searchParams.set("text", text);
   if (url) u.searchParams.set("url", toAbs(url));
   return u.toString();
@@ -41,7 +41,6 @@ export function getRandomShareText(kind: "farcaster" | "twitter" = "twitter") {
   return src[Math.floor(Math.random() * src.length)];
 }
 
-// Handy: build a Farcaster web composer URL (fallback when not in MiniKit)
 export function buildWarpcastCompose({ text = "", embed = "" }: { text?: string; embed?: string }) {
   const u = new URL("https://warpcast.com/~/compose");
   if (text) u.searchParams.set("text", text);
