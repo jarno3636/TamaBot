@@ -3,7 +3,7 @@
 
 type Props = {
   text?: string;
-  /** Absolute or relative URL to embed (prefer your bot PNG or OG page). */
+  /** Absolute or relative URL to embed (image or page). */
   url?: string;
   className?: string;
 };
@@ -24,7 +24,7 @@ function toAbs(u?: string): string {
 
 export default function ShareToFarcaster({ text = "", url, className = "" }: Props) {
   const click = async () => {
-    // ✅ Prefer the passed-in url (image/page), THEN fall back to env/home
+    // Prefer provided URL (image/page), else env/home
     const embed = toAbs(
       url ||
         process.env.NEXT_PUBLIC_FC_MINIAPP_LINK ||
