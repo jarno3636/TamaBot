@@ -22,17 +22,38 @@ export default function ShareRow({ url, imageUrl, className = "", label }: Share
   const tweetHref = buildTweetUrl({ text: twitterText, url });
   const farcasterEmbed = imageUrl || url;
 
+  // Native app deep link (helps avoid the X login loop)
+  const deepLink = `twitter://post?message=${encodeURIComponent(`${twitterText} ${url}`)}`;
+
   const openTweet = (e: MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
-    window.open(tweetHref, "_top", "noopener,noreferrer");
+
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (isMobile) {
+      // Try to open the native app first
+      const t = setTimeout(() => {
+        // fallback to web if deep link fails
+        window.location.assign(tweetHref);
+      }, 700);
+
+      try {
+        window.location.assign(deepLink);
+      } catch {
+        clearTimeout(t);
+        window.location.assign(tweetHref);
+      }
+    } else {
+      // Desktop — open web compose directly
+      window.open(tweetHref, "_top", "noopener,noreferrer");
+    }
   };
 
   return (
     <div className={["flex flex-wrap gap-3", className].join(" ")}>
-      {/* Farcaster: casts with image embed (if provided), and text includes your app URL */}
+      {/* Farcaster share — uses image if provided */}
       <ShareToFarcaster text={farcasterText} url={farcasterEmbed} />
 
-      {/* X / Twitter */}
+      {/* X / Twitter share */}
       <a
         href={tweetHref}
         onClick={openTweet}
