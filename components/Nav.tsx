@@ -11,22 +11,22 @@ import useFid from "@/hooks/useFid";
 
 type MiniProfile = {
   pfp_url?: string | null;
-  pfpUrl?: string | null; // defensive alias
+  pfpUrl?: string | null;       // defensive alias
   display_name?: string | null;
-  displayName?: string | null; // defensive alias
+  displayName?: string | null;  // defensive alias
   username?: string | null;
 };
 
 export default function Nav() {
   const pathname = usePathname();
   const { address } = useAccount();
-  const { fid } = useFid(); // canonical FID
+  const { fid } = useFid(); // FID from mini app context
 
   const [open, setOpen] = useState(false);
   const [mp, setMp] = useState<MiniProfile | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Load Farcaster profile whenever we have an FID
+  // Try to load Farcaster profile WHEN we have a fid
   useEffect(() => {
     const ctrl = new AbortController();
 
@@ -38,26 +38,29 @@ export default function Nav() {
 
       try {
         setLoading(true);
+
         const r = await fetch(`/api/neynar/user/${fid}`, {
           cache: "no-store",
           signal: ctrl.signal,
           headers: { accept: "application/json" },
         });
 
-        const j: any = await r.json().catch(() => ({}));
+        const text = await r.text();
 
-        // Handle ALL likely shapes:
-        // - { user }
-        // - { result: { user } }
-        // - { users: [user] }
-        // - direct user object (pfp_url at top level)
+        // Handle Neynar "PaymentRequired" (paid-only endpoint)
+        if (!r.ok || text.includes('"PaymentRequired"')) {
+          console.warn(
+            "[Nav] Neynar user endpoint not available on current plan; skipping avatar.",
+          );
+          setMp(null);
+          return;
+        }
+
+        const j = JSON.parse(text);
+
+        // Support various Neynar shapes: {user}, {result:{user}}, {users:[0]}
         const user =
-          j?.user ??
-          j?.result?.user ??
-          (Array.isArray(j?.users) ? j.users[0] : undefined) ??
-          (j && (j.pfp_url || j.pfp?.url || j.username || j.profile)
-            ? j
-            : null);
+          (j && (j.user || j.result?.user || j.users?.[0])) || null;
 
         if (user) {
           setMp({
@@ -87,7 +90,7 @@ export default function Nav() {
       { href: "/", label: "Mint" },
       { href: "/my", label: "My Bot" },
     ],
-    []
+    [],
   );
 
   const hasProfile = Boolean(mp?.pfp_url || mp?.display_name || mp?.username);
@@ -104,7 +107,7 @@ export default function Nav() {
         <Link href="/" className="flex items-center gap-3">
           <div className="relative w-8 h-8 rounded-md overflow-hidden border border-white/10 bg-black/40">
             {pfp ? (
-              // Farcaster pfp when we have it
+              // Farcaster avatar when Neynar is available
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={pfp}
@@ -112,7 +115,7 @@ export default function Nav() {
                 className="w-full h-full object-cover"
               />
             ) : (
-              // Default Basebots logo
+              // Default Basebots logo (no paid Neynar / no pfp)
               <Image
                 src="/logo.PNG"
                 alt="Basebots"
@@ -158,7 +161,7 @@ export default function Nav() {
             <div className="container py-3 px-4 flex flex-col gap-3">
               {(loading || hasProfile || address) && (
                 <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-3">
-                  {/* Farcaster avatar */}
+                  {/* Farcaster avatar or fallback circle */}
                   <div className="relative w-10 h-10 rounded-full overflow-hidden border border-white/15 bg-white/10">
                     {pfp ? (
                       // eslint-disable-next-line @next/next/no-img-element
