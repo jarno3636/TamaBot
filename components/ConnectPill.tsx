@@ -36,21 +36,23 @@ export default function ConnectPill() {
           ? "bg-red-400"
           : !onBase
           ? "bg-amber-300"
-          : "bg-[#79ffe1]";
+          : "bg-emerald-300";
 
-        // Soft glow + outline variants
+        // No fancy /70 suffixes so Tailwind definitely picks them up
         const glowClass = !connected
-          ? "border border-red-400/70 shadow-[0_0_10px_rgba(248,113,113,0.28)] bg-white/5 text-red-100"
+          ? "border border-red-400 shadow-[0_0_10px_rgba(248,113,113,0.35)] bg-black/40 text-red-100"
           : !onBase
-          ? "border border-amber-300/70 shadow-[0_0_10px_rgba(252,211,77,0.32)] bg-white/5 text-amber-100"
-          : "border border-[#79ffe1]/70 shadow-[0_0_16px_rgba(121,255,225,0.55)] bg-white/5 text-[#e8fffb]";
+          ? "border border-amber-300 shadow-[0_0_10px_rgba(252,211,77,0.35)] bg-black/40 text-amber-100"
+          : "border border-cyan-300 shadow-[0_0_16px_rgba(121,255,225,0.55)] bg-black/40 text-cyan-50";
 
         return (
           <button
             type="button"
             onClick={handleClick}
             className={[
-              "pill inline-flex items-center gap-1.5 leading-none text-[11px] !px-3 !py-1.5 !h-7 !rounded-full transition-shadow transition-colors",
+              "inline-flex items-center gap-2 leading-none text-[11px]",
+              "!px-4 !py-1.5 !h-7 !rounded-full",
+              "transition-shadow transition-colors",
               glowClass,
             ].join(" ")}
             style={ready ? {} : { opacity: 0, pointerEvents: "none" }}
