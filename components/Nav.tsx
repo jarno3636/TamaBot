@@ -8,13 +8,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useAccount } from "wagmi";
 import ConnectPill from "@/components/ConnectPill";
 import { detectedFIDString } from "@/lib/fid";
-import { resolveDisplayName } from "@/lib/domains";
 
 type MiniProfile = {
   pfp_url?: string | null;
-  pfpUrl?: string | null;       // defensive alias
+  pfpUrl?: string | null; // defensive alias
   display_name?: string | null;
-  displayName?: string | null;  // defensive alias
+  displayName?: string | null; // defensive alias
   username?: string | null;
 };
 
@@ -29,29 +28,10 @@ export default function Nav() {
   const [mp, setMp] = useState<MiniProfile | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Compact wallet-friendly name (.base / ENS)
-  const [walletName, setWalletName] = useState<string>("");
-
   // Detect FID once
   useEffect(() => {
     setFid(detectedFIDString());
   }, []);
-
-  // Resolve wallet display name on connect
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!address) {
-        setWalletName("");
-        return;
-      }
-      const name = await resolveDisplayName(address);
-      if (!cancelled) setWalletName(name || "");
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [address]);
 
   // Load Farcaster profile when fid present
   useEffect(() => {
@@ -67,14 +47,18 @@ export default function Nav() {
           cache: "no-store",
           signal: ctrl.signal,
         });
-        const j = await r.json().catch(() => ({}));
-        const user = j?.user ?? null;
+        const j = await r.json().catch(() => ({} as any));
+
+        // Support various Neynar response shapes
+        const user =
+          (j && (j.user || j.result?.user || j.users?.[0])) || null;
+
         if (user) {
           setMp({
-            pfp_url: user?.pfp_url ?? user?.pfp?.url ?? null,
+            pfp_url: user.pfp_url ?? user.pfp?.url ?? null,
             display_name:
-              user?.display_name ?? user?.profile?.display_name ?? null,
-            username: user?.username ?? user?.profile?.username ?? null,
+              user.display_name ?? user.profile?.display_name ?? null,
+            username: user.username ?? user.profile?.username ?? null,
           });
         } else {
           setMp(null);
@@ -100,18 +84,11 @@ export default function Nav() {
   const pfp = (mp?.pfp_url ?? (mp as any)?.pfpUrl) || null;
   const name = (mp?.display_name ?? (mp as any)?.displayName) || null;
 
-  // Small wallet badge (md+ only to avoid crowding)
-  const walletBadge = address ? (
-    <span
-      title={address}
-      className="hidden md:inline-block text-xs px-2 py-1 rounded-full border border-white/15 bg-white/10 text-white/80 max-w-[180px] truncate"
-    >
-      {walletName || `${address.slice(0, 6)}…${address.slice(-4)}`}
-    </span>
-  ) : null;
-
   return (
-    <nav className="bg-[#0b0d12]/70 border-b border-white/10" aria-label="Primary">
+    <nav
+      className="bg-[#0b0d12]/70 border-b border-white/10"
+      aria-label="Primary"
+    >
       <div className="container flex items-center justify-between py-3 px-4">
         {/* Left: avatar (pfp if present) + brand */}
         <Link href="/" className="flex items-center gap-3">
@@ -140,9 +117,8 @@ export default function Nav() {
           </span>
         </Link>
 
-        {/* Right: wallet badge (md+), burger, connect */}
+        {/* Right: burger + connect pill */}
         <div className="flex items-center gap-2 md:gap-3">
-          {walletBadge}
           <button
             type="button"
             aria-label="Menu"
@@ -202,15 +178,11 @@ export default function Nav() {
                     </div>
                   </div>
 
-                  {/* Connected wallet (compact) */}
+                  {/* Connected wallet (no raw address) */}
                   {address && (
                     <div className="ml-auto text-right">
-                      <div className="text-xs text-white/80 max-w-[160px] truncate">
-                        {walletName ||
-                          `${address.slice(0, 6)}…${address.slice(-4)}`}
-                      </div>
                       <div className="text-[11px] text-emerald-300 flex items-center gap-1 justify-end">
-                        <span>✓</span>
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
                         <span>Connected</span>
                       </div>
                     </div>
