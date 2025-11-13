@@ -36,24 +36,24 @@ export default function ConnectPill() {
           ? "bg-red-400"
           : !onBase
           ? "bg-amber-300"
-          : "bg-emerald-300";
+          : "bg-[#79ffe1]";
 
-        // No fancy /70 suffixes so Tailwind definitely picks them up
-        const glowClass = !connected
-          ? "border border-red-400 shadow-[0_0_10px_rgba(248,113,113,0.35)] bg-black/40 text-red-100"
+        // VERY visible pill variants (no dependency on a `.pill` class)
+        const pillClass = !connected
+          ? "border-red-400/80 bg-[rgba(127,29,29,0.45)] text-red-100 shadow-[0_0_16px_rgba(248,113,113,0.7)]"
           : !onBase
-          ? "border border-amber-300 shadow-[0_0_10px_rgba(252,211,77,0.35)] bg-black/40 text-amber-100"
-          : "border border-cyan-300 shadow-[0_0_16px_rgba(121,255,225,0.55)] bg-black/40 text-cyan-50";
+          ? "border-amber-300/80 bg-[rgba(120,53,15,0.45)] text-amber-100 shadow-[0_0_16px_rgba(252,211,77,0.7)]"
+          : "border-[#79ffe1]/80 bg-[rgba(4,47,46,0.75)] text-[#e8fffb] shadow-[0_0_20px_rgba(121,255,225,0.9)]";
 
         return (
           <button
             type="button"
             onClick={handleClick}
             className={[
-              "inline-flex items-center gap-2 leading-none text-[11px]",
-              "!px-4 !py-1.5 !h-7 !rounded-full",
-              "transition-shadow transition-colors",
-              glowClass,
+              "inline-flex items-center gap-2 text-[11px] font-semibold",
+              "!px-3.5 !py-1.5 !h-7 !rounded-full",
+              "border transition-colors transition-shadow duration-150",
+              pillClass,
             ].join(" ")}
             style={ready ? {} : { opacity: 0, pointerEvents: "none" }}
             title="Wallet status"
