@@ -29,7 +29,7 @@ export default function Nav() {
       aria-label="Primary"
     >
       <div className="container flex items-center justify-between py-3 px-4">
-        {/* Left: logo avatar + brand */}
+        {/* Left: logo + brand */}
         <Link href="/" className="flex items-center gap-3">
           <div className="relative w-8 h-8 rounded-md overflow-hidden border border-white/10 bg-black/40">
             <Image
@@ -74,15 +74,9 @@ export default function Nav() {
         <>
           <div className="menu-panel z-[60]">
             <div className="container py-3 px-4 flex flex-col gap-3">
-              {/* Simple Farcaster mini-profile based only on FID */}
+              {/* Mini user info: FID + wallet status + profile link */}
               {(fid || address) && (
-                <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-3">
-                  <div className="relative w-10 h-10 rounded-full overflow-hidden border border-white/15 bg-white/10">
-                    <div className="w-full h-full grid place-items-center text-white/40 text-sm">
-                      ?
-                    </div>
-                  </div>
-
+                <div className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-3">
                   <div className="min-w-0">
                     <div className="text-sm text-white/80 truncate">
                       {fid ? "Farcaster user" : "Guest"}
@@ -92,7 +86,6 @@ export default function Nav() {
                     </div>
                   </div>
 
-                  {/* Connected wallet (no raw address) */}
                   {address && (
                     <div className="ml-auto text-right">
                       <div className="text-[11px] text-emerald-300 flex items-center gap-1 justify-end">
@@ -107,7 +100,7 @@ export default function Nav() {
                       href={`https://warpcast.com/~/profiles/${fid}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="ml-2 btn-ghost text-xs"
+                      className="btn-ghost text-xs ml-1"
                     >
                       Profile ↗
                     </Link>
