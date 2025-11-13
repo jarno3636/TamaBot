@@ -7,7 +7,7 @@ import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { useAccount } from "wagmi";
 import ConnectPill from "@/components/ConnectPill";
-import { detectedFIDString } from "@/lib/fid";
+import useFid from "@/hooks/useFid";
 
 type MiniProfile = {
   pfp_url?: string | null;
@@ -20,36 +20,34 @@ type MiniProfile = {
 export default function Nav() {
   const pathname = usePathname();
   const { address } = useAccount();
+  const { fid } = useFid(); // ✅ canonical FID source
 
   const [open, setOpen] = useState(false);
 
-  // Farcaster mini profile (from fid)
-  const [fid, setFid] = useState<string>("");
   const [mp, setMp] = useState<MiniProfile | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Detect FID once
-  useEffect(() => {
-    setFid(detectedFIDString());
-  }, []);
-
-  // Load Farcaster profile when fid present
+  // Load Farcaster profile whenever we have an FID
   useEffect(() => {
     const ctrl = new AbortController();
+
     (async () => {
       if (!fid) {
         setMp(null);
         return;
       }
+
       try {
         setLoading(true);
         const r = await fetch(`/api/neynar/user/${fid}`, {
           cache: "no-store",
           signal: ctrl.signal,
+          headers: { accept: "application/json" },
         });
+
         const j = await r.json().catch(() => ({} as any));
 
-        // Support various Neynar response shapes
+        // Neynar v2 has appeared as { user }, { result: { user } }, or { users: [...] }
         const user =
           (j && (j.user || j.result?.user || j.users?.[0])) || null;
 
@@ -63,12 +61,16 @@ export default function Nav() {
         } else {
           setMp(null);
         }
-      } catch {
-        if (!ctrl.signal.aborted) setMp(null);
+      } catch (err) {
+        if (!ctrl.signal.aborted) {
+          console.warn("[Nav] Neynar profile fetch failed", err);
+          setMp(null);
+        }
       } finally {
         if (!ctrl.signal.aborted) setLoading(false);
       }
     })();
+
     return () => ctrl.abort();
   }, [fid]);
 
