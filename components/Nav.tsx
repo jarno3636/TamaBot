@@ -4,86 +4,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
 import { useAccount } from "wagmi";
+import { useMemo, useState } from "react";
 import ConnectPill from "@/components/ConnectPill";
 import useFid from "@/hooks/useFid";
-
-type MiniProfile = {
-  pfp_url?: string | null;
-  pfpUrl?: string | null;       // defensive alias
-  display_name?: string | null;
-  displayName?: string | null;  // defensive alias
-  username?: string | null;
-};
 
 export default function Nav() {
   const pathname = usePathname();
   const { address } = useAccount();
-  const { fid } = useFid(); // FID from mini app context
-
+  const { fid } = useFid();       // FID from mini-app context
   const [open, setOpen] = useState(false);
-  const [mp, setMp] = useState<MiniProfile | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  // Try to load Farcaster profile WHEN we have a fid
-  useEffect(() => {
-    const ctrl = new AbortController();
-
-    (async () => {
-      if (!fid) {
-        setMp(null);
-        return;
-      }
-
-      try {
-        setLoading(true);
-
-        const r = await fetch(`/api/neynar/user/${fid}`, {
-          cache: "no-store",
-          signal: ctrl.signal,
-          headers: { accept: "application/json" },
-        });
-
-        const text = await r.text();
-
-        // Handle Neynar "PaymentRequired" (paid-only endpoint)
-        if (!r.ok || text.includes('"PaymentRequired"')) {
-          console.warn(
-            "[Nav] Neynar user endpoint not available on current plan; skipping avatar.",
-          );
-          setMp(null);
-          return;
-        }
-
-        const j = JSON.parse(text);
-
-        // Support various Neynar shapes: {user}, {result:{user}}, {users:[0]}
-        const user =
-          (j && (j.user || j.result?.user || j.users?.[0])) || null;
-
-        if (user) {
-          setMp({
-            pfp_url: user.pfp_url ?? user.pfp?.url ?? null,
-            display_name:
-              user.display_name ?? user.profile?.display_name ?? null,
-            username: user.username ?? user.profile?.username ?? null,
-          });
-        } else {
-          setMp(null);
-        }
-      } catch (err) {
-        if (!ctrl.signal.aborted) {
-          console.warn("[Nav] Neynar profile fetch failed", err);
-          setMp(null);
-        }
-      } finally {
-        if (!ctrl.signal.aborted) setLoading(false);
-      }
-    })();
-
-    return () => ctrl.abort();
-  }, [fid]);
 
   const links = useMemo(
     () => [
@@ -93,37 +23,22 @@ export default function Nav() {
     [],
   );
 
-  const hasProfile = Boolean(mp?.pfp_url || mp?.display_name || mp?.username);
-  const pfp = (mp?.pfp_url ?? (mp as any)?.pfpUrl) || null;
-  const name = (mp?.display_name ?? (mp as any)?.displayName) || null;
-
   return (
     <nav
       className="bg-[#0b0d12]/70 border-b border-white/10"
       aria-label="Primary"
     >
       <div className="container flex items-center justify-between py-3 px-4">
-        {/* Left: avatar (pfp if present) + brand */}
+        {/* Left: logo avatar + brand */}
         <Link href="/" className="flex items-center gap-3">
           <div className="relative w-8 h-8 rounded-md overflow-hidden border border-white/10 bg-black/40">
-            {pfp ? (
-              // Farcaster avatar when Neynar is available
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={pfp}
-                alt="Farcaster avatar"
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              // Default Basebots logo (no paid Neynar / no pfp)
-              <Image
-                src="/logo.PNG"
-                alt="Basebots"
-                fill
-                sizes="32px"
-                className="object-contain"
-              />
-            )}
+            <Image
+              src="/logo.PNG"
+              alt="Basebots"
+              fill
+              sizes="32px"
+              className="object-contain"
+            />
           </div>
           <span className="brand-steel text-lg sm:text-xl md:text-2xl">
             BASEBOTS
@@ -159,35 +74,21 @@ export default function Nav() {
         <>
           <div className="menu-panel z-[60]">
             <div className="container py-3 px-4 flex flex-col gap-3">
-              {(loading || hasProfile || address) && (
+              {/* Simple Farcaster mini-profile based only on FID */}
+              {(fid || address) && (
                 <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-3">
-                  {/* Farcaster avatar or fallback circle */}
                   <div className="relative w-10 h-10 rounded-full overflow-hidden border border-white/15 bg-white/10">
-                    {pfp ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={pfp}
-                        alt="pfp"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full grid place-items-center text-white/40 text-sm">
-                        {loading ? "…" : "?"}
-                      </div>
-                    )}
+                    <div className="w-full h-full grid place-items-center text-white/40 text-sm">
+                      ?
+                    </div>
                   </div>
 
-                  {/* Farcaster name / username / fid */}
                   <div className="min-w-0">
                     <div className="text-sm text-white/80 truncate">
-                      {name || (loading ? "Loading…" : "Farcaster user")}
+                      {fid ? "Farcaster user" : "Guest"}
                     </div>
                     <div className="text-xs text-white/60 truncate">
-                      {mp?.username
-                        ? `@${mp.username}`
-                        : fid
-                        ? `FID ${fid}`
-                        : "—"}
+                      {fid ? `FID ${fid}` : "No FID detected"}
                     </div>
                   </div>
 
@@ -203,11 +104,7 @@ export default function Nav() {
 
                   {fid && (
                     <Link
-                      href={
-                        mp?.username
-                          ? `https://warpcast.com/${mp.username}`
-                          : `https://warpcast.com/~/profiles/${fid}`
-                      }
+                      href={`https://warpcast.com/~/profiles/${fid}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="ml-2 btn-ghost text-xs"
