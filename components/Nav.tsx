@@ -41,27 +41,39 @@ export default function Nav() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (!address) { setWalletName(""); return; }
+      if (!address) {
+        setWalletName("");
+        return;
+      }
       const name = await resolveDisplayName(address);
       if (!cancelled) setWalletName(name || "");
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [address]);
 
   // Load Farcaster profile when fid present
   useEffect(() => {
     const ctrl = new AbortController();
     (async () => {
-      if (!fid) { setMp(null); return; }
+      if (!fid) {
+        setMp(null);
+        return;
+      }
       try {
         setLoading(true);
-        const r = await fetch(`/api/neynar/user/${fid}`, { cache: "no-store", signal: ctrl.signal });
+        const r = await fetch(`/api/neynar/user/${fid}`, {
+          cache: "no-store",
+          signal: ctrl.signal,
+        });
         const j = await r.json().catch(() => ({}));
         const user = j?.user ?? null;
         if (user) {
           setMp({
             pfp_url: user?.pfp_url ?? user?.pfp?.url ?? null,
-            display_name: user?.display_name ?? user?.profile?.display_name ?? null,
+            display_name:
+              user?.display_name ?? user?.profile?.display_name ?? null,
             username: user?.username ?? user?.profile?.username ?? null,
           });
         } else {
@@ -76,10 +88,13 @@ export default function Nav() {
     return () => ctrl.abort();
   }, [fid]);
 
-  const links = useMemo(() => ([
-    { href: "/", label: "Mint" },
-    { href: "/my", label: "My Bot" },
-  ]), []);
+  const links = useMemo(
+    () => [
+      { href: "/", label: "Mint" },
+      { href: "/my", label: "My Bot" },
+    ],
+    []
+  );
 
   const hasProfile = Boolean(mp?.pfp_url || mp?.display_name || mp?.username);
   const pfp = (mp?.pfp_url ?? (mp as any)?.pfpUrl) || null;
@@ -95,44 +110,54 @@ export default function Nav() {
     </span>
   ) : null;
 
-  // Tiny avatar next to burger on md+ only (keeps mobile clean)
-  const inlineAvatar = pfp ? (
-    <div className="hidden md:block relative w-7 h-7 rounded-full overflow-hidden border border-white/15 bg-white/10">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={pfp} alt="pfp" className="w-full h-full object-cover" />
-    </div>
-  ) : null;
-
   return (
     <nav className="bg-[#0b0d12]/70 border-b border-white/10" aria-label="Primary">
       <div className="container flex items-center justify-between py-3 px-4">
-        {/* Left: logo + brand */}
+        {/* Left: avatar (pfp if present) + brand */}
         <Link href="/" className="flex items-center gap-3">
-          <div className="relative w-8 h-8">
-            <Image
-              src="/logo.PNG"
-              alt="Basebots"
-              fill
-              sizes="32px"
-              className="object-contain rounded-md"
-            />
+          <div className="relative w-8 h-8 rounded-md overflow-hidden border border-white/10 bg-black/40">
+            {pfp ? (
+              // Farcaster pfp when we have it
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={pfp}
+                alt="Farcaster avatar"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              // Default Basebots logo
+              <Image
+                src="/logo.PNG"
+                alt="Basebots"
+                fill
+                sizes="32px"
+                className="object-contain"
+              />
+            )}
           </div>
-          <span className="brand-steel text-lg sm:text-xl md:text-2xl">BASEBOTS</span>
+          <span className="brand-steel text-lg sm:text-xl md:text-2xl">
+            BASEBOTS
+          </span>
         </Link>
 
-        {/* Right: wallet badge (md+), avatar (md+), burger, connect */}
+        {/* Right: wallet badge (md+), burger, connect */}
         <div className="flex items-center gap-2 md:gap-3">
           {walletBadge}
-          {inlineAvatar}
           <button
             type="button"
             aria-label="Menu"
             aria-expanded={open}
-            onClick={() => setOpen(v => !v)}
+            onClick={() => setOpen((v) => !v)}
             className="nav-burger text-white/90"
           >
-            <svg width="26" height="26" viewBox="0 0 24 24" role="img" aria-hidden>
-              <rect x="3" y="6"  width="18" height="2" rx="1" />
+            <svg
+              width="26"
+              height="26"
+              viewBox="0 0 24 24"
+              role="img"
+              aria-hidden
+            >
+              <rect x="3" y="6" width="18" height="2" rx="1" />
               <rect x="3" y="11" width="18" height="2" rx="1" />
               <rect x="3" y="16" width="18" height="2" rx="1" />
             </svg>
@@ -145,24 +170,35 @@ export default function Nav() {
         <>
           <div className="menu-panel z-[60]">
             <div className="container py-3 px-4 flex flex-col gap-3">
-              {(loading || hasProfile) && (
+              {(loading || hasProfile || address) && (
                 <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-3">
+                  {/* Farcaster avatar */}
                   <div className="relative w-10 h-10 rounded-full overflow-hidden border border-white/15 bg-white/10">
                     {pfp ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={pfp} alt="pfp" className="w-full h-full object-cover" />
+                      <img
+                        src={pfp}
+                        alt="pfp"
+                        className="w-full h-full object-cover"
+                      />
                     ) : (
                       <div className="w-full h-full grid place-items-center text-white/40 text-sm">
                         {loading ? "…" : "?"}
                       </div>
                     )}
                   </div>
+
+                  {/* Farcaster name / username / fid */}
                   <div className="min-w-0">
                     <div className="text-sm text-white/80 truncate">
                       {name || (loading ? "Loading…" : "Farcaster user")}
                     </div>
                     <div className="text-xs text-white/60 truncate">
-                      {mp?.username ? `@${mp.username}` : (fid ? `FID ${fid}` : "—")}
+                      {mp?.username
+                        ? `@${mp.username}`
+                        : fid
+                        ? `FID ${fid}`
+                        : "—"}
                     </div>
                   </div>
 
@@ -170,15 +206,23 @@ export default function Nav() {
                   {address && (
                     <div className="ml-auto text-right">
                       <div className="text-xs text-white/80 max-w-[160px] truncate">
-                        {walletName || `${address.slice(0, 6)}…${address.slice(-4)}`}
+                        {walletName ||
+                          `${address.slice(0, 6)}…${address.slice(-4)}`}
                       </div>
-                      <div className="text-[11px] text-white/40">connected</div>
+                      <div className="text-[11px] text-emerald-300 flex items-center gap-1 justify-end">
+                        <span>✓</span>
+                        <span>Connected</span>
+                      </div>
                     </div>
                   )}
 
                   {fid && (
                     <Link
-                      href={mp?.username ? `https://warpcast.com/${mp.username}` : `https://warpcast.com/~/profiles/${fid}`}
+                      href={
+                        mp?.username
+                          ? `https://warpcast.com/${mp.username}`
+                          : `https://warpcast.com/~/profiles/${fid}`
+                      }
                       target="_blank"
                       rel="noopener noreferrer"
                       className="ml-2 btn-ghost text-xs"
@@ -189,14 +233,16 @@ export default function Nav() {
                 </div>
               )}
 
-              {links.map(l => {
+              {links.map((l) => {
                 const active = pathname === l.href;
                 return (
                   <Link
                     key={l.href}
                     href={l.href}
                     onClick={() => setOpen(false)}
-                    className={`menu-link ${active ? "menu-link--active" : ""}`}
+                    className={`menu-link ${
+                      active ? "menu-link--active" : ""
+                    }`}
                   >
                     {l.label}
                   </Link>
