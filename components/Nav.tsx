@@ -20,10 +20,9 @@ type MiniProfile = {
 export default function Nav() {
   const pathname = usePathname();
   const { address } = useAccount();
-  const { fid } = useFid(); // ✅ canonical FID source
+  const { fid } = useFid(); // canonical FID
 
   const [open, setOpen] = useState(false);
-
   const [mp, setMp] = useState<MiniProfile | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -45,11 +44,20 @@ export default function Nav() {
           headers: { accept: "application/json" },
         });
 
-        const j = await r.json().catch(() => ({} as any));
+        const j: any = await r.json().catch(() => ({}));
 
-        // Neynar v2 has appeared as { user }, { result: { user } }, or { users: [...] }
+        // Handle ALL likely shapes:
+        // - { user }
+        // - { result: { user } }
+        // - { users: [user] }
+        // - direct user object (pfp_url at top level)
         const user =
-          (j && (j.user || j.result?.user || j.users?.[0])) || null;
+          j?.user ??
+          j?.result?.user ??
+          (Array.isArray(j?.users) ? j.users[0] : undefined) ??
+          (j && (j.pfp_url || j.pfp?.url || j.username || j.profile)
+            ? j
+            : null);
 
         if (user) {
           setMp({
