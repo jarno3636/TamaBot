@@ -22,23 +22,31 @@ function b64ToUtf8(b64: string): string {
         .join("")
     );
   } catch {
-    try { return atob(b64); } catch { return ""; }
+    try {
+      return atob(b64);
+    } catch {
+      return "";
+    }
   }
 }
 
 export default function MyBotClient() {
   const { address } = useAccount(); // harmless, may be unused
-  const { fid } = useFid();         // ✅ canonical FID source
+  const { fid } = useFid();         // canonical FID from mini app
+
   const [fidInput, setFidInput] = useState<string>("");
 
-  // Populate input when hook resolves/changes
+  // Populate from Farcaster
   useEffect(() => {
     if (isValidFID(fid)) setFidInput(String(fid));
   }, [fid]);
 
+  const fidLocked = isValidFID(fid); // as soon as we know the user's FID
+  const effectiveFid = fidLocked && isValidFID(fid) ? String(fid) : fidInput;
+
   const fidBigInt = useMemo<bigint | null>(
-    () => (isValidFID(fidInput) ? BigInt(fidInput) : null),
-    [fidInput]
+    () => (isValidFID(effectiveFid) ? BigInt(effectiveFid) : null),
+    [effectiveFid]
   );
 
   // Pull the on-chain tokenURI (basic bot JSON with image data URL)
@@ -50,9 +58,14 @@ export default function MyBotClient() {
   });
 
   // Decode image/name/description from tokenURI
-  let imageSrc = "", name = "", description = "";
+  let imageSrc = "",
+    name = "",
+    description = "";
   try {
-    if (typeof tokenJsonUri === "string" && tokenJsonUri.startsWith("data:application/json;base64,")) {
+    if (
+      typeof tokenJsonUri === "string" &&
+      tokenJsonUri.startsWith("data:application/json;base64,")
+    ) {
       const b64 = tokenJsonUri.split(",")[1] || "";
       const json = JSON.parse(b64ToUtf8(b64));
       imageSrc = json?.image || "";
@@ -60,7 +73,7 @@ export default function MyBotClient() {
       description = json?.description || "";
     }
   } catch {
-    /* ignore decode errors; UI will show "No image yet" */
+    /* ignore decode errors */
   }
 
   // Determine absolute origin (works in web and mini)
@@ -69,14 +82,14 @@ export default function MyBotClient() {
     (process.env.NEXT_PUBLIC_URL || "").replace(/\/$/, "") ||
     "https://basebots.vercel.app";
 
-  // ✅ OG page to share (renders rich card w/ the PNG as og:image)
-  const shareUrl = isValidFID(fidInput)
-    ? `${siteOrigin}/og/bot/${fidInput}`
-    : (siteOrigin || "/");
+  // OG page to share (renders rich card w/ the PNG as og:image)
+  const shareUrl = isValidFID(effectiveFid)
+    ? `${siteOrigin}/og/bot/${effectiveFid}`
+    : siteOrigin || "/";
 
   // Optional: direct PNG if you want to pass it through for Farcaster embeds
-  const imagePngUrl = isValidFID(fidInput)
-    ? `${siteOrigin}/api/basebots/image/${fidInput}`
+  const imagePngUrl = isValidFID(effectiveFid)
+    ? `${siteOrigin}/api/basebots/image/${effectiveFid}`
     : "";
 
   return (
@@ -84,15 +97,19 @@ export default function MyBotClient() {
       <div className="container pt-6 px-5 stack">
         {/* Header + Share */}
         <section className="glass glass-pad relative">
-          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Meet Your Basebot</h1>
+          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">
+            Meet Your Basebot
+          </h1>
           <p className="mt-2 text-white/85">
-            Type your Farcaster FID to load your bot’s on-chain image and share it.
+            Load your Farcaster-linked Basebot and share it with the city.
           </p>
           <ShareRow
-            url={shareUrl}                 // 👈 share the OG page
-            imageUrl={imagePngUrl}         // (optional) PNG embed for Farcaster
+            url={shareUrl}
+            imageUrl={imagePngUrl}
             className="mt-3"
-            label={isValidFID(fidInput) ? "Share this bot" : "Share Basebots"}
+            label={
+              isValidFID(effectiveFid) ? "Share this bot" : "Share Basebots"
+            }
           />
         </section>
 
@@ -100,36 +117,63 @@ export default function MyBotClient() {
         <section className="glass glass-pad bg-[#0f1320]/50 border border-white/10">
           <div className="grid gap-3 md:grid-cols-[220px_auto_160px]">
             <label className="block">
-              <span className="text-xs uppercase tracking-wide text-white/60">Farcaster FID</span>
+              <span className="text-xs uppercase tracking-wide text-white/60 flex items-center gap-2">
+                Farcaster FID
+                {fidLocked && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-[2px] text-[11px] text-emerald-300 border border-emerald-400/40">
+                    ✓ Loaded from your profile
+                  </span>
+                )}
+              </span>
               <input
                 inputMode="numeric"
                 pattern="[0-9]*"
-                value={fidInput}
-                onChange={(e) => setFidInput(e.target.value.replace(/[^\d]/g, ""))}
+                value={effectiveFid}
+                onChange={(e) =>
+                  fidLocked
+                    ? null
+                    : setFidInput(e.target.value.replace(/[^\d]/g, ""))
+                }
                 placeholder="e.g. 12345"
-                className="mt-1 w-full rounded-xl bg-white/10 border border-white/20 px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60"
+                disabled={fidLocked}
+                className={`mt-1 w-full rounded-xl border px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 ${
+                  fidLocked
+                    ? "bg-white/5 border-emerald-400/40 cursor-not-allowed text-white/80"
+                    : "bg-white/10 border-white/20 focus:ring-[#79ffe1]/60"
+                }`}
               />
+              {fidLocked ? (
+                <p className="mt-1 text-[11px] text-emerald-300">
+                  This FID comes from the Farcaster mini app session and can’t
+                  be edited here. To view a different FID, open Basebots from
+                  that profile.
+                </p>
+              ) : (
+                <p className="mt-1 text-[11px] text-white/60">
+                  Tip: Your FID is the numeric ID on your Farcaster profile.
+                </p>
+              )}
             </label>
 
             <div className="flex items-end gap-3">
               <button
                 type="button"
-                onClick={() => { if (fidBigInt !== null) refetchToken(); }}
+                onClick={() => {
+                  if (fidBigInt !== null) refetchToken();
+                }}
                 className="btn-pill btn-pill--blue !font-bold"
               >
                 Load bot
               </button>
-              <Link href="/" className="btn-ghost">Mint</Link>
+              <Link href="/" className="btn-ghost">
+                Mint
+              </Link>
             </div>
           </div>
-
-          <p className="mt-3 text-sm text-white/70">
-            Tip: Your FID is the numeric ID on your Farcaster profile.
-          </p>
         </section>
 
         {/* Result */}
-        {fidBigInt !== null ? (
+        {fidBigInt !== null && (
           <section className="glass glass-pad relative overflow-hidden bg-[#0b0f18]/70">
             <div className="flex flex-col md:flex-row md:items-start gap-6">
               <div className="w-full md:max-w-[360px]">
@@ -137,7 +181,7 @@ export default function MyBotClient() {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={imageSrc}
-                    alt={name || `Basebot #${fidInput}`}
+                    alt={name || `Basebot #${effectiveFid}`}
                     className="w-full rounded-2xl border border-white/10 shadow-xl"
                   />
                 ) : (
@@ -148,12 +192,16 @@ export default function MyBotClient() {
               </div>
 
               <div className="flex-1">
-                <h2 className="text-xl md:text-2xl font-bold">{name || `Basebot #${fidInput}`}</h2>
-                {description ? <p className="mt-2 text-white/85">{description}</p> : null}
+                <h2 className="text-xl md:text-2xl font-bold">
+                  {name || `Basebot #${effectiveFid}`}
+                </h2>
+                {description ? (
+                  <p className="mt-2 text-white/85">{description}</p>
+                ) : null}
               </div>
             </div>
           </section>
-        ) : null}
+        )}
       </div>
     </main>
   );
