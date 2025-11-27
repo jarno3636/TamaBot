@@ -19,21 +19,26 @@ import { OnchainKitProvider } from "@coinbase/onchainkit";
 import { MiniKitProvider } from "@coinbase/onchainkit/minikit";
 import { MiniContextProvider } from "@/lib/useMiniContext";
 
-/* ---------------- BigInt JSON polyfill (SAFE) ---------------- */
+/* ---------------- BigInt JSON polyfill (SUPER SAFE) ---------------- */
 declare global {
   interface BigInt {
     toJSON(): string;
   }
 }
 
-// Only run this if BigInt exists in the runtime
-if (
-  typeof BigInt !== "undefined" &&
-  typeof (BigInt.prototype as any).toJSON !== "function"
-) {
-  (BigInt.prototype as any).toJSON = function () {
-    return this.toString();
-  };
+if (typeof window !== "undefined") {
+  try {
+    if (
+      typeof BigInt !== "undefined" &&
+      typeof (BigInt.prototype as any).toJSON !== "function"
+    ) {
+      (BigInt.prototype as any).toJSON = function () {
+        return this.toString();
+      };
+    }
+  } catch {
+    // If the environment doesn't like BigInt at all, do nothing.
+  }
 }
 
 /* ---------------- React Query setup ------------------- */
@@ -53,11 +58,7 @@ function AutoReconnect() {
   return null;
 }
 
-/* ---------- Neynar providers (lazy, safe load) ---------
-   - MiniAppProvider gives you the Farcaster mini-app context (FID, etc.) when opened in Warpcast/Merkle.
-   - NeynarProvider (optional) enables client SDK features if you provide NEXT_PUBLIC_NEYNAR_CLIENT_ID.
-   Both are loaded via require() to avoid breaking builds if the package isn’t installed server-side.
--------------------------------------------------------- */
+/* ---------- Neynar providers (lazy, safe load) --------- */
 function NeynarProviders({ children }: { children: ReactNode }) {
   const clientId =
     (typeof window !== "undefined" && process.env.NEXT_PUBLIC_NEYNAR_CLIENT_ID) ||
@@ -72,12 +73,11 @@ function NeynarProviders({ children }: { children: ReactNode }) {
     MiniAppProvider = mod?.MiniAppProvider ?? null;
     NeynarProvider = mod?.NeynarProvider ?? mod?.default ?? null;
   } catch {
-    // package not present at runtime — just render children
+    // package not present — ignore, render bare children
   }
 
   if (!MiniAppProvider && !NeynarProvider) return <>{children}</>;
 
-  // Always wrap with MiniAppProvider if available (no props needed)
   if (MiniAppProvider) {
     return (
       <MiniAppProvider>
@@ -90,7 +90,6 @@ function NeynarProviders({ children }: { children: ReactNode }) {
     );
   }
 
-  // If we only have NeynarProvider (rare), still wrap it when clientId exists
   if (clientId && NeynarProvider) {
     return <NeynarProvider clientId={clientId}>{children}</NeynarProvider>;
   }
@@ -113,7 +112,6 @@ export default function Providers({ children }: { children: React.ReactNode }) {
 
   const dehydratedState = dehydrate(queryClient, { serializeData });
 
-  // CDP/OnchainKit API key (fallback keeps old var working)
   const onchainkitApiKey =
     (process.env.NEXT_PUBLIC_ONCHAINKIT_API_KEY ||
       process.env.NEXT_PUBLIC_MINIKIT_PROJECT_ID ||
@@ -131,11 +129,8 @@ export default function Providers({ children }: { children: React.ReactNode }) {
               modalSize="compact"
               appInfo={{ appName: "Basebots" }}
             >
-              {/* MiniKitProvider: no apiKey prop */}
               <MiniKitProvider chain={base} notificationProxyUrl="/api/notification">
-                {/* Global Farcaster identity (fid/user) available everywhere */}
                 <MiniContextProvider>
-                  {/* Neynar MiniAppProvider + (optional) NeynarProvider */}
                   <NeynarProviders>{children}</NeynarProviders>
                 </MiniContextProvider>
               </MiniKitProvider>
