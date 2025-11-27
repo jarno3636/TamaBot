@@ -34,6 +34,7 @@ function isValidFID(v: string | number | undefined) {
   const n = typeof v === "string" ? Number(v) : v;
   return Number.isFinite(n) && n > 0 && Number.isInteger(n);
 }
+
 function getErrText(e: unknown): string {
   if (e && typeof e === "object") {
     const anyE = e as any;
@@ -99,7 +100,7 @@ export default function HomeClient() {
     if (mined) refetchMinted();
   }, [mined, refetchMinted]);
 
-  const fidLocked = !!address && isValidFID(fid); // wallet + valid Farcaster FID
+  const fidLocked = !!address && isValidFID(fid);
   const effectiveFid = fidLocked && isValidFID(fid) ? String(fid) : fidInput;
 
   async function handleMint() {
@@ -158,7 +159,7 @@ export default function HomeClient() {
     ).replace(/\/$/, "");
 
   return (
-    <main className="min-h-[100svh] bg-deep text-white pb-16 page-layer">
+    <section className="min-h-[100svh] bg-deep text-white pb-16">
       <div className="container pt-6 px-5 stack">
         <AudioToggle src="/audio/basebots-loop.mp3" />
 
@@ -364,6 +365,6 @@ export default function HomeClient() {
           </Link>
         </section>
       </div>
-    </main>
+    </section>
   );
 }
