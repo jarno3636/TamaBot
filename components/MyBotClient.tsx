@@ -19,7 +19,7 @@ function b64ToUtf8(b64: string): string {
     return decodeURIComponent(
       Array.prototype.map
         .call(atob(b64), (c: string) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-        .join(""),
+        .join("")
     );
   } catch {
     try {
@@ -44,22 +44,23 @@ export default function MyBotClient() {
   const fidLocked = isValidFID(fid); // as soon as we know the user's FID
   const effectiveFid = fidLocked && isValidFID(fid) ? String(fid) : fidInput;
 
-  // 🔒 BigInt-safe FID (won't throw on older WebViews)
-  const fidBigInt = useMemo<bigint | null>(() => {
-    try {
-      if (typeof BigInt !== "function") return null;
-      return isValidFID(effectiveFid) ? BigInt(effectiveFid) : null;
-    } catch {
-      return null;
-    }
-  }, [effectiveFid]);
+  // Use a plain number at runtime so JSON.stringify is happy
+  const fidNum = useMemo<number | null>(
+    () => (isValidFID(effectiveFid) ? Number(effectiveFid) : null),
+    [effectiveFid],
+  );
 
   // Pull the on-chain tokenURI (basic bot JSON with image data URL)
   const { data: tokenJsonUri, refetch: refetchToken } = useReadContract({
     ...BASEBOTS,
     functionName: "tokenURI",
-    args: fidBigInt !== null ? [fidBigInt] : undefined,
-    query: { enabled: fidBigInt !== null },
+    // IMPORTANT: runtime value is a Number; cast only for TypeScript
+    args:
+      fidNum !== null
+        ? ([fidNum] as unknown as [bigint]) // TS-only cast; actual value is number
+        : undefined,
+    // Only run when we actually have a FID
+    query: { enabled: fidNum !== null },
   });
 
   // Decode image/name/description from tokenURI
@@ -164,7 +165,7 @@ export default function MyBotClient() {
               <button
                 type="button"
                 onClick={() => {
-                  if (fidBigInt !== null) refetchToken();
+                  if (fidNum !== null) refetchToken();
                 }}
                 className="btn-pill btn-pill--blue !font-bold"
               >
@@ -178,7 +179,7 @@ export default function MyBotClient() {
         </section>
 
         {/* Result */}
-        {fidBigInt !== null && (
+        {fidNum !== null && (
           <section className="glass glass-pad relative overflow-hidden bg-[#0b0f18]/70">
             <div className="flex flex-col md:flex-row md:items-start gap-6">
               <div className="w-full md:max-w-[360px]">
