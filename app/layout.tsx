@@ -4,6 +4,7 @@ import "./globals.css";
 import Providers from "./providers";
 import Nav from "@/components/Nav";
 import AppReady from "@/components/AppReady";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 /** ---- Dynamic metadata (absolute URLs + mini app embed) ---- */
 export async function generateMetadata(): Promise<Metadata> {
@@ -84,19 +85,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </a>
 
         <Providers>
-          {/* Safe-area wrapper so Base's top overlay doesn't fight the nav */}
-          <div
-            className="min-h-screen flex flex-col"
-            style={{ paddingTop: "env(safe-area-inset-top)" }}
-          >
-            <header role="banner" className="nav-root z-[70]">
-              <Nav />
-            </header>
+          <ErrorBoundary>
+            {/* Safe-area wrapper so Base's top overlay doesn't fight the nav */}
+            <div
+              className="min-h-screen flex flex-col"
+              style={{ paddingTop: "env(safe-area-inset-top)" }}
+            >
+              <header role="banner" className="nav-root z-[70]">
+                <Nav />
+              </header>
 
-            <main id="main" role="main" className="flex-1">
-              {children}
-            </main>
-          </div>
+              <main id="main" role="main" className="flex-1">
+                {children}
+              </main>
+            </div>
+          </ErrorBoundary>
         </Providers>
       </body>
     </html>
