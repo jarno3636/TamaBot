@@ -38,13 +38,11 @@ export async function GET() {
   const COMMON = {
     version: "1",
     name: brandName,
-    // if your entry is "/", leave as origin – if it's "/mini", change both here and in fc:miniapp
+    // Entry point: root of the app ("/")
     homeUrl: origin,
     iconUrl: icon,
     splashImageUrl: splash,
     splashBackgroundColor: "#0a0b12",
-    // only keep if /api/webhook exists:
-    // webhookUrl: `${origin}/api/webhook`,
 
     subtitle: "On-chain Bot Companion",
     description: desc,
