@@ -19,7 +19,7 @@ function b64ToUtf8(b64: string): string {
     return decodeURIComponent(
       Array.prototype.map
         .call(atob(b64), (c: string) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-        .join("")
+        .join(""),
     );
   } catch {
     try {
@@ -44,10 +44,15 @@ export default function MyBotClient() {
   const fidLocked = isValidFID(fid); // as soon as we know the user's FID
   const effectiveFid = fidLocked && isValidFID(fid) ? String(fid) : fidInput;
 
-  const fidBigInt = useMemo<bigint | null>(
-    () => (isValidFID(effectiveFid) ? BigInt(effectiveFid) : null),
-    [effectiveFid]
-  );
+  // 🔒 BigInt-safe FID (won't throw on older WebViews)
+  const fidBigInt = useMemo<bigint | null>(() => {
+    try {
+      if (typeof BigInt !== "function") return null;
+      return isValidFID(effectiveFid) ? BigInt(effectiveFid) : null;
+    } catch {
+      return null;
+    }
+  }, [effectiveFid]);
 
   // Pull the on-chain tokenURI (basic bot JSON with image data URL)
   const { data: tokenJsonUri, refetch: refetchToken } = useReadContract({
