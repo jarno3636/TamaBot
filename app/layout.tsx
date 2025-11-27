@@ -1,5 +1,6 @@
 // app/layout.tsx
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import "./globals.css";
 import Providers from "./providers";
 import Nav from "@/components/Nav";
@@ -74,6 +75,27 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="min-h-screen bg-[#0a0b12] text-white antialiased">
+        {/* Small legacy shim so weird in-app browsers don’t crash before React */}
+        <Script id="legacy-env-shim" strategy="beforeInteractive">
+          {`(function () {
+            try {
+              // globalThis shim
+              if (typeof globalThis === 'undefined' && typeof window !== 'undefined') {
+                window.globalThis = window;
+              }
+            } catch (_) {}
+
+            if (typeof window !== 'undefined') {
+              // process.env shim (some libs expect this to exist)
+              if (typeof window.process === 'undefined') {
+                window.process = { env: {} };
+              } else if (typeof window.process.env === 'undefined') {
+                window.process.env = {};
+              }
+            }
+          })();`}
+        </Script>
+
         <AppReady />
 
         <a
