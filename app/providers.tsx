@@ -19,10 +19,21 @@ import { OnchainKitProvider } from "@coinbase/onchainkit";
 import { MiniKitProvider } from "@coinbase/onchainkit/minikit";
 import { MiniContextProvider } from "@/lib/useMiniContext";
 
-/* ---------------- BigInt JSON polyfill ---------------- */
-declare global { interface BigInt { toJSON(): string } }
-if (typeof (BigInt.prototype as any).toJSON !== "function") {
-  (BigInt.prototype as any).toJSON = function () { return this.toString(); };
+/* ---------------- BigInt JSON polyfill (SAFE) ---------------- */
+declare global {
+  interface BigInt {
+    toJSON(): string;
+  }
+}
+
+// Only run this if BigInt exists in the runtime
+if (
+  typeof BigInt !== "undefined" &&
+  typeof (BigInt.prototype as any).toJSON !== "function"
+) {
+  (BigInt.prototype as any).toJSON = function () {
+    return this.toString();
+  };
 }
 
 /* ---------------- React Query setup ------------------- */
@@ -36,7 +47,9 @@ function serializeData(data: unknown) {
 /* --------------- Auto-reconnect wallet ---------------- */
 function AutoReconnect() {
   const { reconnect } = useReconnect();
-  useEffect(() => { reconnect(); }, [reconnect]);
+  useEffect(() => {
+    reconnect();
+  }, [reconnect]);
   return null;
 }
 
@@ -95,7 +108,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
         borderRadius: "large",
         overlayBlur: "small",
       }),
-    []
+    [],
   );
 
   const dehydratedState = dehydrate(queryClient, { serializeData });
