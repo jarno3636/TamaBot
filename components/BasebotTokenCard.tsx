@@ -1,19 +1,25 @@
 // components/BasebotTokenCard.tsx
+"use client";
+
 import Link from "next/link";
+import Image from "next/image";
 
 export default function BasebotTokenCard() {
   return (
     <section className="glass glass-pad bg-[#020617]/80 border border-white/10">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+
+        {/* --- Left side text --- */}
+        <div className="flex-1 min-w-0">
           <h2 className="text-xl md:text-2xl font-bold flex items-center gap-2">
             Basebot Token
             <span className="inline-flex items-center rounded-full bg-white/10 px-2 py-[2px] text-[11px] font-semibold tracking-wide text-[#79ffe1] border border-white/20">
               $BOTS
             </span>
           </h2>
+
           <p className="mt-2 text-sm md:text-base text-white/80 max-w-xl">
-            The Basebots’ native token on Base. Launched fair and live on Mint.club —
+            The Basebots&apos; native token on Base. Launched live on Mint.club —
             no presale, no nonsense, just on-chain bots doing on-chain things.
           </p>
 
@@ -33,25 +39,33 @@ export default function BasebotTokenCard() {
           </div>
         </div>
 
-        <div className="flex flex-col items-stretch md:items-end gap-2 min-w-[220px]">
+        {/* --- Right side token image --- */}
+        <div className="flex flex-col items-center md:items-end gap-3 md:min-w-[260px]">
+          <div className="relative w-40 h-40 md:w-48 md:h-48 rounded-2xl overflow-hidden border border-white/10 shadow-lg">
+            <Image
+              src="/token.PNG"
+              alt="Basebot Token"
+              fill
+              sizes="200px"
+              className="object-cover"
+            />
+          </div>
+
           <Link
             href="https://mint.club/token/base/BOTS"
             target="_blank"
             rel="noopener noreferrer"
             className="btn-pill btn-pill--blue !w-full md:!w-auto !justify-center"
           >
-            Launch Mint.club page ↗
+            Mint / trade on Mint.club ↗
           </Link>
 
           <div className="flex flex-wrap gap-2 text-[11px] text-white/60 md:justify-end">
-            <span className="pill-note pill-note--blue">
-              Chain: Base
-            </span>
-            <span className="pill-note pill-note--cyan">
-              Live on Mint.club
-            </span>
+            <span className="pill-note pill-note--blue">Chain: Base</span>
+            <span className="pill-note pill-note--cyan">Live on Mint.club</span>
           </div>
         </div>
+
       </div>
     </section>
   );
