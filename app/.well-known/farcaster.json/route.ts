@@ -13,12 +13,12 @@ const AA_BASEBOTS = {
     "sUIN0qNFJyUlOupMZ/2rK8ejXiJDcrCCudjs8DUG5Bth0npnt9EoYw7NIKOy5oYY4tVdw+wAgai235FlDit5ths=",
 };
 
-// ✅ Base Build ownership so you can import/preview in Base Build
+// ✅ Base Build ownership – must use allowedAddresses[]
 const BASE_BUILDER = {
-  ownerAddress: "0x7fd97A417F64d2706cF5C93c8fdf493EdA42D25c",
+  allowedAddresses: ["0x7fd97A417F64d2706cF5C93c8fdf493EdA42D25c"],
 };
 
-// Use a static origin so this route can stay fully static
+// Static origin for this route
 const ORIGIN = (
   process.env.NEXT_PUBLIC_URL || "https://basebots.vercel.app"
 ).replace(/\/$/, "");
@@ -35,18 +35,17 @@ export async function GET() {
   const icon = `${origin}/icon.png`;
   const splash = `${origin}/splash.png`;
 
-  // Shared settings for both miniapp + frame
   const COMMON = {
     version: "1",
     name: brandName,
-    // If you use a dedicated /mini entry, change this to `${origin}/mini`
+    // if your entry is "/", leave as origin – if it's "/mini", change both here and in fc:miniapp
     homeUrl: origin,
     iconUrl: icon,
     splashImageUrl: splash,
     splashBackgroundColor: "#0a0b12",
-    webhookUrl: `${origin}/api/webhook`, // keep only if implemented
+    // only keep if /api/webhook exists:
+    // webhookUrl: `${origin}/api/webhook`,
 
-    // metadata
     subtitle: "On-chain Bot Companion",
     description: desc,
     primaryCategory: "social",
