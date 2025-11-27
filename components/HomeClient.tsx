@@ -36,17 +36,26 @@ function isValidFID(v: string | number | undefined) {
   return Number.isFinite(n) && n > 0 && Number.isInteger(n);
 }
 
+/**
+ * BigInt–safe error text helper.
+ * NO JSON.stringify here so BigInt in error objects can’t blow us up.
+ */
 function getErrText(e: unknown): string {
   if (e && typeof e === "object") {
     const anyE = e as any;
-    if (typeof anyE.shortMessage === "string" && anyE.shortMessage.length > 0)
+    if (typeof anyE.shortMessage === "string" && anyE.shortMessage.length > 0) {
       return anyE.shortMessage;
-    if (typeof anyE.message === "string" && anyE.message.length > 0)
+    }
+    if (typeof anyE.message === "string" && anyE.message.length > 0) {
       return anyE.message;
+    }
   }
+
   if (typeof e === "string") return e;
+
   try {
-    return JSON.stringify(e);
+    // Handles generic errors / unknowns without tripping on BigInt
+    return String(e);
   } catch {
     return "Unknown error";
   }
@@ -162,7 +171,7 @@ export default function HomeClient() {
         await writeContract({
           ...BASEBOTS,
           functionName: "mintWithSig",
-          // ✅ back to the original, correct tuple: [fid, deadline, sig]
+          // tuple: [fid, deadline, sig]
           args: [fidBig, BigInt(j.deadline), j.sig],
           value: BigInt(j.price),
           chainId: base.id,
