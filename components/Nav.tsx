@@ -12,7 +12,7 @@ import useFid from "@/hooks/useFid";
 export default function Nav() {
   const pathname = usePathname();
   const { address } = useAccount();
-  const { fid } = useFid();       // FID from mini-app context
+  const { fid } = useFid();
   const [open, setOpen] = useState(false);
 
   const links = useMemo(
@@ -25,13 +25,17 @@ export default function Nav() {
 
   return (
     <nav
-      className="bg-[#0b0d12]/70 border-b border-white/10"
       aria-label="Primary"
+      className="
+        bg-[#020617]                 /* fully opaque, very dark */
+        border-b border-white/10
+        shadow-[0_10px_40px_rgba(0,0,0,0.9)]
+      "
     >
-      <div className="container flex items-center justify-between py-3 px-4">
+      <div className="container mx-auto flex items-center justify-between py-3 px-4">
         {/* Left: logo + brand */}
         <Link href="/" className="flex items-center gap-3">
-          <div className="relative w-8 h-8 rounded-md overflow-hidden border border-white/10 bg-black/40">
+          <div className="relative w-8 h-8 rounded-md overflow-hidden border border-white/10 bg-black/60">
             <Image
               src="/logo.PNG"
               alt="Basebots"
@@ -52,20 +56,22 @@ export default function Nav() {
             aria-label="Menu"
             aria-expanded={open}
             onClick={() => setOpen((v) => !v)}
-            className="nav-burger text-white/90"
+            className="nav-burger text-white/90 hover:text-white"
           >
             <svg
               width="26"
               height="26"
               viewBox="0 0 24 24"
               role="img"
-              aria-hidden
+              aria-hidden="true"
             >
-              <rect x="3" y="6" width="18" height="2" rx="1" />
-              <rect x="3" y="11" width="18" height="2" rx="1" />
-              <rect x="3" y="16" width="18" height="2" rx="1" />
+              {/* use currentColor so it follows the button text color */}
+              <rect x="3" y="6" width="18" height="2" rx="1" fill="currentColor" />
+              <rect x="3" y="11" width="18" height="2" rx="1" fill="currentColor" />
+              <rect x="3" y="16" width="18" height="2" rx="1" fill="currentColor" />
             </svg>
           </button>
+
           <ConnectPill />
         </div>
       </div>
@@ -73,7 +79,7 @@ export default function Nav() {
       {open && (
         <>
           <div className="menu-panel z-[60]">
-            <div className="container py-3 px-4 flex flex-col gap-3">
+            <div className="container mx-auto py-3 px-4 flex flex-col gap-3">
               {/* Mini user info: FID + wallet status + profile link */}
               {(fid || address) && (
                 <div className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-3">
@@ -115,9 +121,7 @@ export default function Nav() {
                     key={l.href}
                     href={l.href}
                     onClick={() => setOpen(false)}
-                    className={`menu-link ${
-                      active ? "menu-link--active" : ""
-                    }`}
+                    className={`menu-link ${active ? "menu-link--active" : ""}`}
                   >
                     {l.label}
                   </Link>
