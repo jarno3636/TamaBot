@@ -1,34 +1,40 @@
-/** Dapp Browser Fix Sniper — copy/paste */
+// next.config.js
+/** @type {import('next').NextConfig} */
 const nextConfig = {
   async headers() {
     return [
       {
+        // Global headers (apply to everything)
         source: "/:path*",
         headers: [
-          // Allow dapp browsers (MetaMask, Coinbase, Base, Farcaster Mini Apps)
+          // ✅ Allow embedding in any frame (Warpcast, Base, Coinbase, in-app browsers, etc.)
           { key: "X-Frame-Options", value: "ALLOWALL" },
 
-          {
-            key: "Content-Security-Policy",
-            value: [
-              "default-src 'self' https: data: blob:",
-              "img-src 'self' https: data: blob:",
-              "style-src 'self' 'unsafe-inline' https:",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https:",
-              "connect-src 'self' https: wss:",
+          // (Optional) some mild, non-breaking security headers
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "interest-cohort=()" },
+        ],
+      },
 
-              // 🔥 The actual fix — REQUIRED
-              "frame-ancestors *",
-
-              // Allow iframe embed (Warpcast, CB Wallet, Base browser)
-              "frame-src https: https://warpcast.com https://*.warpcast.com https://*.farcaster.app https://base.app https://base.org https://*.coinbase.com https://*.cb-w.com",
-
-              "worker-src 'self' blob:",
-            ].join("; "),
-          },
+      // Ensure manifest is served with correct content type (no redirects)
+      {
+        source: "/.well-known/farcaster.json",
+        headers: [
+          { key: "Content-Type", value: "application/json; charset=utf-8" },
+          { key: "Cache-Control", value: "public, max-age=300, must-revalidate" },
         ],
       },
     ];
+  },
+
+  webpack: (config) => {
+    // Silence optional dependency warnings (harmless)
+    config.resolve = config.resolve || {};
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      "pino-pretty": false,
+    };
+    return config;
   },
 };
 
