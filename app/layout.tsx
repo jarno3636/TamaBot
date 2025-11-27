@@ -4,7 +4,6 @@ import "./globals.css";
 import Providers from "./providers";
 import Nav from "@/components/Nav";
 import AppReady from "@/components/AppReady";
-import ErrorBoundary from "@/components/ErrorBoundary";
 
 /** ---- Dynamic metadata (absolute URLs + mini app embed) ---- */
 export async function generateMetadata(): Promise<Metadata> {
@@ -12,8 +11,7 @@ export async function generateMetadata(): Promise<Metadata> {
     /\/$/,
     "",
   );
-
-  const ogImage = `${origin}/og.png`;
+  const image = `${origin}/share.PNG?v=2`; // cache-buster
   const splashImageUrl = `${origin}/splash.png`;
 
   return {
@@ -22,14 +20,7 @@ export async function generateMetadata(): Promise<Metadata> {
     description:
       "Mint, evolve, and display your Farcaster-linked Basebot — fully on-chain from the neon future.",
     themeColor: "#0a0b12",
-    icons: {
-      icon: [
-        { url: "/favicon.ico" },
-        { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
-        { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
-      ],
-      apple: "/icon-192.png",
-    },
+    icons: { icon: "/favicon.ico" },
     openGraph: {
       type: "website",
       url: origin,
@@ -38,7 +29,7 @@ export async function generateMetadata(): Promise<Metadata> {
         "Mint, evolve, and display your Farcaster-linked Basebot — fully on-chain from the neon future.",
       images: [
         {
-          url: ogImage,
+          url: image,
           width: 1200,
           height: 630,
           alt: "BASEBOTS — Mint Yours Today",
@@ -50,19 +41,19 @@ export async function generateMetadata(): Promise<Metadata> {
       title: "Basebots — On-Chain AI Companions",
       description:
         "Mint, evolve, and display your Farcaster-linked Basebot — fully on-chain from the neon future.",
-      images: [ogImage],
+      images: [image],
     },
     other: {
       // Farcaster MiniApp embed
       "fc:miniapp": JSON.stringify({
         version: "next",
-        imageUrl: ogImage,
+        imageUrl: image,
         button: {
           title: "Launch Basebots",
           action: {
             type: "launch_frame",
             name: "Basebots — Based Couriers",
-            url: origin, // or `${origin}/mini` if you add a /mini entry
+            url: origin,
             splashImageUrl,
             splashBackgroundColor: "#0a0b12",
           },
@@ -82,7 +73,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="min-h-screen text-white antialiased">
+      <body className="min-h-screen bg-[#0a0b12] text-white antialiased">
         <AppReady />
 
         <a
@@ -93,21 +84,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </a>
 
         <Providers>
-          <ErrorBoundary>
-            {/* Safe-area wrapper so Base's top overlay doesn't fight the nav */}
-            <div
-              className="min-h-screen flex flex-col"
-              style={{ paddingTop: "env(safe-area-inset-top)" }}
-            >
-              <header role="banner" className="nav-root z-[70]">
-                <Nav />
-              </header>
+          {/* Safe-area wrapper so Base's top overlay doesn't fight the nav */}
+          <div
+            className="min-h-screen flex flex-col"
+            style={{ paddingTop: "env(safe-area-inset-top)" }}
+          >
+            <header role="banner" className="nav-root z-[70]">
+              <Nav />
+            </header>
 
-              <main id="main" role="main" className="flex-1">
-                {children}
-              </main>
-            </div>
-          </ErrorBoundary>
+            <main id="main" role="main" className="flex-1">
+              {children}
+            </main>
+          </div>
         </Providers>
       </body>
     </html>
