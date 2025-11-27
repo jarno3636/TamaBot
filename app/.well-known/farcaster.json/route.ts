@@ -1,4 +1,5 @@
-import { NextResponse, NextRequest } from "next/server";
+// app/.well-known/farcaster.json/route.ts
+import { NextResponse } from "next/server";
 
 export const dynamic = "force-static";
 export const revalidate = 300;
@@ -13,14 +14,17 @@ const AA_BASEBOTS = {
 };
 
 // ✅ Base Build ownership so you can import/preview in Base Build
-const BASE_BUILDER = { ownerAddress: "0x7fd97A417F64d2706cF5C93c8fdf493EdA42D25c" };
+const BASE_BUILDER = {
+  ownerAddress: "0x7fd97A417F64d2706cF5C93c8fdf493EdA42D25c",
+};
 
-export async function GET(req: NextRequest) {
-  const host =
-    req.headers.get("x-forwarded-host") ||
-    req.headers.get("host") ||
-    "basebots.vercel.app";
-  const origin = `https://${host}`;
+// Use a static origin so this route can stay fully static
+const ORIGIN = (
+  process.env.NEXT_PUBLIC_URL || "https://basebots.vercel.app"
+).replace(/\/$/, "");
+
+export async function GET() {
+  const origin = ORIGIN;
 
   const brandName = "Basebots – Based Couriers";
   const shortName = "Basebots";
@@ -31,16 +35,18 @@ export async function GET(req: NextRequest) {
   const icon = `${origin}/icon.png`;
   const splash = `${origin}/splash.png`;
 
-  // Use a single object for BOTH miniapp and frame so they're identical
+  // Shared settings for both miniapp + frame
   const COMMON = {
     version: "1",
     name: brandName,
-    homeUrl: `${origin}/mini`,          // point to your lightweight /mini entry
+    // If you use a dedicated /mini entry, change this to `${origin}/mini`
+    homeUrl: origin,
     iconUrl: icon,
     splashImageUrl: splash,
-    splashBackgroundColor: "#0a0b10",
-    webhookUrl: `${origin}/api/webhook`,
-    // metadata (intersection that both accept)
+    splashBackgroundColor: "#0a0b12",
+    webhookUrl: `${origin}/api/webhook`, // keep only if implemented
+
+    // metadata
     subtitle: "On-chain Bot Companion",
     description: desc,
     primaryCategory: "social",
@@ -58,7 +64,7 @@ export async function GET(req: NextRequest) {
     accountAssociation: AA_BASEBOTS,
     baseBuilder: BASE_BUILDER,
     miniapp: COMMON,
-    frame: COMMON, // <- EXACTLY the same object
+    frame: COMMON,
   };
 
   return NextResponse.json(manifest, {
