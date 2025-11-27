@@ -1,3 +1,4 @@
+// app/layout.tsx
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import Providers from "./providers";
@@ -7,8 +8,11 @@ import BackgroundCubes from "@/components/BackgroundCubes";
 
 /** ---- Dynamic metadata (absolute URLs + mini app embed) ---- */
 export async function generateMetadata(): Promise<Metadata> {
-  const origin = (process.env.NEXT_PUBLIC_URL || "https://basebots.vercel.app").replace(/\/$/, "");
-  const image = `${origin}/share.PNG?v=2`; // ⬅️ cache-buster for fresh embed
+  const origin = (process.env.NEXT_PUBLIC_URL || "https://basebots.vercel.app").replace(
+    /\/$/,
+    "",
+  );
+  const image = `${origin}/share.PNG?v=2`; // cache-buster
   const splashImageUrl = `${origin}/splash.png`;
 
   return {
@@ -24,7 +28,14 @@ export async function generateMetadata(): Promise<Metadata> {
       title: "Basebots — On-Chain AI Companions",
       description:
         "Mint, evolve, and display your Farcaster-linked Basebot — fully on-chain from the neon future.",
-      images: [{ url: image, width: 1200, height: 630, alt: "BASEBOTS — Mint Yours Today" }],
+      images: [
+        {
+          url: image,
+          width: 1200,
+          height: 630,
+          alt: "BASEBOTS — Mint Yours Today",
+        },
+      ],
     },
     twitter: {
       card: "summary_large_image",
@@ -41,9 +52,9 @@ export async function generateMetadata(): Promise<Metadata> {
         button: {
           title: "Launch Basebots",
           action: {
-            type: "launch_miniapp",
+            type: "launch_frame", // ✅ current expected type
             name: "Basebots — Based Couriers",
-            url: origin,
+            url: origin,          // or `${origin}/mini` if that's your entry
             splashImageUrl,
             splashBackgroundColor: "#0a0b12",
           },
@@ -64,6 +75,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="min-h-screen bg-[#0a0b12] text-white antialiased">
+        {/* animated background, always behind content */}
         <BackgroundCubes className="-z-20" />
         <AppReady />
 
@@ -75,12 +87,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </a>
 
         <Providers>
-          <header role="banner" className="nav-root z-[70]">
-            <Nav />
-          </header>
-          <main id="main" role="main">
-            {children}
-          </main>
+          {/* Safe-area wrapper so Base's top overlay doesn't fight the nav */}
+          <div
+            className="min-h-screen flex flex-col"
+            style={{ paddingTop: "env(safe-area-inset-top)" }}
+          >
+            <header role="banner" className="nav-root z-[70]">
+              <Nav />
+            </header>
+
+            <main id="main" role="main" className="flex-1">
+              {children}
+            </main>
+          </div>
         </Providers>
       </body>
     </html>
