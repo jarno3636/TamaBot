@@ -4,7 +4,6 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-static";
 export const revalidate = 300;
 
-// --- AccountAssociation blob for basebots.vercel.app
 const AA_BASEBOTS = {
   header:
     "eyJmaWQiOjE0MzQxNzEsInR5cGUiOiJjdXN0b2R5Iiwia2V5IjoiMHhFNkMwQTQxMEI0QzcyMmI4NDdmNjE2Mjk4MTllM0Q2MjE1ODA2MENGIn0",
@@ -13,12 +12,10 @@ const AA_BASEBOTS = {
     "sUIN0qNFJyUlOupMZ/2rK8ejXiJDcrCCudjs8DUG5Bth0npnt9EoYw7NIKOy5oYY4tVdw+wAgai235FlDit5ths=",
 };
 
-// ✅ Base Build ownership – must use allowedAddresses[]
 const BASE_BUILDER = {
   allowedAddresses: ["0x7fd97A417F64d2706cF5C93c8fdf493EdA42D25c"],
 };
 
-// Static origin for this route
 const ORIGIN = (
   process.env.NEXT_PUBLIC_URL || "https://basebots.vercel.app"
 ).replace(/\/$/, "");
@@ -35,11 +32,13 @@ export async function GET() {
   const icon = `${origin}/icon.png`;
   const splash = `${origin}/splash.png`;
 
+  // 👇 versioned entry URL so Base sees a new page
+  const homeUrl = `${origin}/?entry=baseapp-v2`;
+
   const COMMON = {
     version: "1",
     name: brandName,
-    // Entry point: root of the app ("/")
-    homeUrl: origin,
+    homeUrl,
     iconUrl: icon,
     splashImageUrl: splash,
     splashBackgroundColor: "#0a0b12",
