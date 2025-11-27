@@ -36,17 +36,33 @@ function isValidFID(v: string | number | undefined) {
   return Number.isFinite(n) && n > 0 && Number.isInteger(n);
 }
 
+// 🔧 IMPORTANT: never JSON.stringify the error (BigInt / circular issues)
 function getErrText(e: unknown): string {
-  if (e && typeof e === "object") {
-    const anyE = e as any;
-    if (typeof anyE.shortMessage === "string" && anyE.shortMessage.length > 0)
-      return anyE.shortMessage;
-    if (typeof anyE.message === "string" && anyE.message.length > 0)
-      return anyE.message;
-  }
+  if (!e) return "Unknown error";
   if (typeof e === "string") return e;
+
+  if (typeof e === "object") {
+    const anyE = e as any;
+    if (typeof anyE.shortMessage === "string" && anyE.shortMessage.length > 0) {
+      return anyE.shortMessage;
+    }
+    if (typeof anyE.message === "string" && anyE.message.length > 0) {
+      return anyE.message;
+    }
+    // wagmi / viem sometimes put the cause under .cause
+    if (
+      anyE.cause &&
+      typeof anyE.cause.message === "string" &&
+      anyE.cause.message.length > 0
+    ) {
+      return anyE.cause.message;
+    }
+  }
+
+  // last resort: coerce to string, no JSON
   try {
-    return JSON.stringify(e);
+    // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+    return String(e);
   } catch {
     return "Unknown error";
   }
@@ -56,6 +72,7 @@ export default function HomeClient() {
   const { address } = useAccount();
   const { fid } = useFid();
 
+  // ---- BigInt-safe defaults (no 0n literal explosions in weird runtimes) ----
   const bigintSupported = typeof BigInt !== "undefined";
 
   const { data: rawPrice } = useReadContract({
@@ -81,7 +98,7 @@ export default function HomeClient() {
     functionName: "fidGatingEnabled",
   });
 
-  // Always have some value even if not loaded yet
+  // Ensure we always have *some* value even if readContract not ready
   const price = (rawPrice ??
     (bigintSupported ? (BigInt(0) as any) : (0 as any))) as bigint;
   const maxSupply = (rawMaxSupply ??
@@ -100,6 +117,7 @@ export default function HomeClient() {
       chainId: base.id,
     });
 
+  // If BigInt truly doesn’t exist (ancient WebView), bail with message
   const envBigIntMissing = !bigintSupported;
 
   const priceEth = useMemo(
@@ -158,11 +176,15 @@ export default function HomeClient() {
         if (!j.ok || !j.sig || !j.deadline || !j.price)
           throw new Error(j.error || "Signing failed");
 
+        const deadlineBig = BigInt(j.deadline);
+        const priceBig = BigInt(j.price);
+
+        // ✅ FIXED: pass all three args for mintWithSig
         await writeContract({
           ...BASEBOTS,
           functionName: "mintWithSig",
-          args: [fidBig, BigInt(j.deadline), j.sig],
-          value: BigInt(j.price),
+          args: [fidBig, deadlineBig, j.sig],
+          value: priceBig,
           chainId: base.id,
         });
       } else {
@@ -228,7 +250,7 @@ export default function HomeClient() {
           </div>
         </section>
 
-        {/* 🔥 Basebot token card just under hero */}
+        {/* Token card just under hero */}
         <BasebotTokenCard />
 
         {/* Stats */}
