@@ -6,12 +6,13 @@
   --nav-h: 68px;
 }
 
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
   min-height: 100%;
-  background-color: #0a0b12 !important; /* <-- hard lock dark background */
-  background-image: none !important;    /* <-- kill default Next gradient */
+  background-color: #0a0b12;   /* hard dark background */
+  background-image: none;      /* kill any default gradients */
   color: #eef3f8;
 }
 
@@ -46,7 +47,7 @@ html, body {
   --tam-yellow: var(--bb-warn);
 }
 
-/* ===== Backgrounds ===== */
+/* ===== Optional section backgrounds (only if you use these classes) ===== */
 .bg-deep {
   background:
     radial-gradient(1200px 600px at -10% -20%, rgba(58,166,216,0.20), transparent 60%),
@@ -61,22 +62,7 @@ html, body {
     linear-gradient(180deg, #0b0f18 0%, #0a0b12 35%, #0b0f18 100%);
 }
 
-/* ===== Animated cubes canvas ===== */
-.cubes-canvas {
-  position: fixed;
-  inset: 0;
-  z-index: -20;
-  pointer-events: none;
-  opacity: .6;
-  filter: saturate(1.1);
-}
-
-/* Remove cubes when motion-disabled */
-@media (prefers-reduced-motion: reduce) {
-  .cubes-canvas { display: none; }
-}
-
-.page-layer { position: relative; z-index: 10; }
+/* NOTE: cubes completely removed – no .cubes-canvas, no .page-layer */
 
 /* ===== Cards ===== */
 .glass {
@@ -174,7 +160,13 @@ img, svg, video, canvas { max-width:100%; height:auto; }
 /* ===== Nav ===== */
 .nav-root { height: var(--nav-h); }
 
-.nav-bar  { height: var(--nav-h); display:flex; align-items:center; justify-content:space-between; color:#fff; }
+.nav-bar {
+  height: var(--nav-h);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  color:#fff;
+}
 
 .nav-burger svg rect { fill: currentColor; }
 
