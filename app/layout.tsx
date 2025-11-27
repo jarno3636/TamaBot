@@ -4,7 +4,6 @@ import "./globals.css";
 import Providers from "./providers";
 import Nav from "@/components/Nav";
 import AppReady from "@/components/AppReady";
-import BackgroundCubes from "@/components/BackgroundCubes";
 
 /** ---- Dynamic metadata (absolute URLs + mini app embed) ---- */
 export async function generateMetadata(): Promise<Metadata> {
@@ -52,9 +51,9 @@ export async function generateMetadata(): Promise<Metadata> {
         button: {
           title: "Launch Basebots",
           action: {
-            type: "launch_frame", // ✅ current expected type
+            type: "launch_frame",
             name: "Basebots — Based Couriers",
-            url: origin,          // or `${origin}/mini` if that's your entry
+            url: origin, // change to `${origin}/mini` if you use a /mini entry
             splashImageUrl,
             splashBackgroundColor: "#0a0b12",
           },
@@ -75,8 +74,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="min-h-screen bg-[#0a0b12] text-white antialiased">
-        {/* animated background, always behind content */}
-        <BackgroundCubes className="-z-20" />
         <AppReady />
 
         <a
