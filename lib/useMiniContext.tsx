@@ -1,7 +1,13 @@
 "use client";
 
 import React, {
-  createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
 } from "react";
 import { useMiniKit } from "@coinbase/onchainkit/minikit";
 
@@ -22,6 +28,27 @@ type MiniState = {
 
 const Ctx = createContext<MiniState | null>(null);
 
+/** ---- SAFE storage helpers ---- */
+function safeStorageGet(key: string): string | null {
+  try {
+    if (typeof window === "undefined") return null;
+    if (!("localStorage" in window)) return null;
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeStorageSet(key: string, value: string) {
+  try {
+    if (typeof window === "undefined") return;
+    if (!("localStorage" in window)) return;
+    window.localStorage.setItem(key, value);
+  } catch {
+    // ignore – some in-app browsers block storage
+  }
+}
+
 export function MiniContextProvider({ children }: { children: React.ReactNode }) {
   const { context } = useMiniKit(); // present when inside Mini
   const [fid, setFid] = useState<number | null>(null);
@@ -31,10 +58,14 @@ export function MiniContextProvider({ children }: { children: React.ReactNode })
 
   const readQueryFid = useCallback(() => {
     if (typeof window === "undefined") return null;
-    const u = new URL(window.location.href);
-    const qfid = u.searchParams.get("fid");
-    const n = qfid ? Number(qfid) : NaN;
-    return Number.isFinite(n) && n > 0 ? n : null;
+    try {
+      const u = new URL(window.location.href);
+      const qfid = u.searchParams.get("fid");
+      const n = qfid ? Number(qfid) : NaN;
+      return Number.isFinite(n) && n > 0 ? n : null;
+    } catch {
+      return null;
+    }
   }, []);
 
   const refresh = useCallback(async () => {
@@ -44,23 +75,16 @@ export function MiniContextProvider({ children }: { children: React.ReactNode })
       const miniUser = (context as any)?.user;
       if (miniUser?.fid) {
         const f = Number(miniUser.fid);
-        setFid(f);
-        setUser({
+        const u: MiniUser = {
           fid: f,
           username: miniUser.username ?? null,
           displayName: miniUser.displayName ?? miniUser.display_name ?? null,
           pfpUrl: miniUser.pfpUrl ?? miniUser.pfp_url ?? null,
-        });
-        if (typeof localStorage !== "undefined") {
-          localStorage.setItem(
-            "fc:minUser",
-            JSON.stringify({
-              fid: f,
-              username: miniUser.username ?? null,
-              pfpUrl: miniUser.pfpUrl ?? miniUser.pfp_url ?? null,
-            }),
-          );
-        }
+        };
+
+        setFid(f);
+        setUser(u);
+        safeStorageSet("fc:minUser", JSON.stringify(u));
         return;
       }
 
@@ -72,16 +96,16 @@ export function MiniContextProvider({ children }: { children: React.ReactNode })
           const r = await fetch(`/api/neynar/user/${qfid}`);
           const j = await r.json();
           const p = j?.result?.user;
-          setUser(
-            p
-              ? {
-                  fid: qfid,
-                  username: p?.username ?? null,
-                  displayName: p?.display_name ?? null,
-                  pfpUrl: p?.pfp_url ?? null,
-                }
-              : { fid: qfid },
-          );
+          const u: MiniUser = p
+            ? {
+                fid: qfid,
+                username: p?.username ?? null,
+                displayName: p?.display_name ?? null,
+                pfpUrl: p?.pfp_url ?? null,
+              }
+            : { fid: qfid };
+          setUser(u);
+          safeStorageSet("fc:minUser", JSON.stringify(u));
         } catch {
           setUser({ fid: qfid });
         }
@@ -89,21 +113,23 @@ export function MiniContextProvider({ children }: { children: React.ReactNode })
       }
 
       // 3) Persisted from a previous Mini session
-      if (typeof localStorage !== "undefined") {
-        const raw = localStorage.getItem("fc:minUser");
-        if (raw) {
-          try {
-            const v = JSON.parse(raw);
-            if (v?.fid) {
-              setFid(Number(v.fid));
-              setUser({
-                fid: Number(v.fid),
-                username: v.username ?? null,
-                pfpUrl: v.pfpUrl ?? null,
-              });
-              return;
-            }
-          } catch {}
+      const raw = safeStorageGet("fc:minUser");
+      if (raw) {
+        try {
+          const v = JSON.parse(raw);
+          if (v?.fid) {
+            const f = Number(v.fid);
+            setFid(f);
+            setUser({
+              fid: f,
+              username: v.username ?? null,
+              displayName: v.displayName ?? null,
+              pfpUrl: v.pfpUrl ?? null,
+            });
+            return;
+          }
+        } catch {
+          // ignore bad JSON
         }
       }
 
@@ -117,12 +143,21 @@ export function MiniContextProvider({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     refresh();
-    const onShow = () => refresh();
+
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      return;
+    }
+
+    const onShow = () => {
+      refresh();
+    };
     const onVis = () => {
       if (!document.hidden) refresh();
     };
+
     window.addEventListener("pageshow", onShow);
     document.addEventListener("visibilitychange", onVis);
+
     return () => {
       window.removeEventListener("pageshow", onShow);
       document.removeEventListener("visibilitychange", onVis);
