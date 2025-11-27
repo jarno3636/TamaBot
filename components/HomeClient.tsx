@@ -56,7 +56,7 @@ export default function HomeClient() {
   const { address } = useAccount();
   const { fid } = useFid();
 
-  // ---- BigInt-safe defaults (no 0n / 50000n syntax) ----
+  // ---- BigInt-safe defaults ----
   const bigintSupported = typeof BigInt !== "undefined";
 
   const { data: rawPrice } = useReadContract({
@@ -101,7 +101,6 @@ export default function HomeClient() {
       chainId: base.id,
     });
 
-  // If BigInt truly doesn’t exist (ancient WebView), bail with message
   const envBigIntMissing = !bigintSupported;
 
   const priceEth = useMemo(
@@ -163,8 +162,8 @@ export default function HomeClient() {
         await writeContract({
           ...BASEBOTS,
           functionName: "mintWithSig",
-          // 🔧 FIX: include signature so args matches [bigint, bigint, `0x${string}`]
-          args: [fidBig, BigInt(j.deadline), BigInt(j.price) && j.sig],
+          // ✅ back to the original, correct tuple: [fid, deadline, sig]
+          args: [fidBig, BigInt(j.deadline), j.sig],
           value: BigInt(j.price),
           chainId: base.id,
         });
@@ -231,7 +230,7 @@ export default function HomeClient() {
           </div>
         </section>
 
-        {/* 🔥 NEW: Basebot token card just under hero */}
+        {/* 🔥 Basebot token card just under hero */}
         <BasebotTokenCard />
 
         {/* Stats */}
