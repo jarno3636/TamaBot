@@ -12,7 +12,8 @@ export async function generateMetadata(): Promise<Metadata> {
     /\/$/,
     "",
   );
-  const image = `${origin}/share.PNG?v=2`; // cache-buster
+
+  const ogImage = `${origin}/og.png`;
   const splashImageUrl = `${origin}/splash.png`;
 
   return {
@@ -21,7 +22,14 @@ export async function generateMetadata(): Promise<Metadata> {
     description:
       "Mint, evolve, and display your Farcaster-linked Basebot — fully on-chain from the neon future.",
     themeColor: "#0a0b12",
-    icons: { icon: "/favicon.ico" },
+    icons: {
+      icon: [
+        { url: "/favicon.ico" },
+        { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+        { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+      ],
+      apple: "/icon-192.png",
+    },
     openGraph: {
       type: "website",
       url: origin,
@@ -30,7 +38,7 @@ export async function generateMetadata(): Promise<Metadata> {
         "Mint, evolve, and display your Farcaster-linked Basebot — fully on-chain from the neon future.",
       images: [
         {
-          url: image,
+          url: ogImage,
           width: 1200,
           height: 630,
           alt: "BASEBOTS — Mint Yours Today",
@@ -42,19 +50,19 @@ export async function generateMetadata(): Promise<Metadata> {
       title: "Basebots — On-Chain AI Companions",
       description:
         "Mint, evolve, and display your Farcaster-linked Basebot — fully on-chain from the neon future.",
-      images: [image],
+      images: [ogImage],
     },
     other: {
       // Farcaster MiniApp embed
       "fc:miniapp": JSON.stringify({
         version: "next",
-        imageUrl: image,
+        imageUrl: ogImage,
         button: {
           title: "Launch Basebots",
           action: {
             type: "launch_frame",
             name: "Basebots — Based Couriers",
-            url: origin, // change to `${origin}/mini` if you use a /mini entry
+            url: origin, // or `${origin}/mini` if you add a /mini entry
             splashImageUrl,
             splashBackgroundColor: "#0a0b12",
           },
