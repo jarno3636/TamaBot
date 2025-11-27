@@ -163,7 +163,8 @@ export default function HomeClient() {
         await writeContract({
           ...BASEBOTS,
           functionName: "mintWithSig",
-          args: [fidBig, BigInt(j.deadline)],
+          // 🔧 FIX: include signature so args matches [bigint, bigint, `0x${string}`]
+          args: [fidBig, BigInt(j.deadline), BigInt(j.price) && j.sig],
           value: BigInt(j.price),
           chainId: base.id,
         });
