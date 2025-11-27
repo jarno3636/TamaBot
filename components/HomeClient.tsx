@@ -17,7 +17,6 @@ import AudioToggle from "@/components/AudioToggle";
 import ShareRow from "@/components/ShareRow";
 import useFid from "@/hooks/useFid";
 import CollectionPreview from "@/components/CollectionPreview";
-import BasebotTokenCard from "@/components/BasebotTokenCard";
 
 type SignResp = {
   ok: boolean;
@@ -36,26 +35,17 @@ function isValidFID(v: string | number | undefined) {
   return Number.isFinite(n) && n > 0 && Number.isInteger(n);
 }
 
-/**
- * BigInt–safe error text helper.
- * NO JSON.stringify here so BigInt in error objects can’t blow us up.
- */
 function getErrText(e: unknown): string {
   if (e && typeof e === "object") {
     const anyE = e as any;
-    if (typeof anyE.shortMessage === "string" && anyE.shortMessage.length > 0) {
+    if (typeof anyE.shortMessage === "string" && anyE.shortMessage.length > 0)
       return anyE.shortMessage;
-    }
-    if (typeof anyE.message === "string" && anyE.message.length > 0) {
+    if (typeof anyE.message === "string" && anyE.message.length > 0)
       return anyE.message;
-    }
   }
-
   if (typeof e === "string") return e;
-
   try {
-    // Handles generic errors / unknowns without tripping on BigInt
-    return String(e);
+    return JSON.stringify(e);
   } catch {
     return "Unknown error";
   }
@@ -65,39 +55,22 @@ export default function HomeClient() {
   const { address } = useAccount();
   const { fid } = useFid();
 
-  // ---- BigInt-safe defaults ----
-  const bigintSupported = typeof BigInt !== "undefined";
-
-  const { data: rawPrice } = useReadContract({
+  const { data: price = 0n } = useReadContract({
     ...BASEBOTS,
     functionName: "mintPrice",
   });
-
-  const { data: rawMaxSupply } = useReadContract({
+  const { data: maxSupply = 50000n } = useReadContract({
     ...BASEBOTS,
     functionName: "MAX_SUPPLY",
   });
-
-  const {
-    data: rawTotalMinted,
-    refetch: refetchMinted,
-  } = useReadContract({
+  const { data: totalMinted = 0n, refetch: refetchMinted } = useReadContract({
     ...BASEBOTS,
     functionName: "totalMinted",
   });
-
   const { data: gating = true } = useReadContract({
     ...BASEBOTS,
     functionName: "fidGatingEnabled",
   });
-
-  // Ensure we always have *some* value even if readContract not ready
-  const price = (rawPrice ??
-    (bigintSupported ? (BigInt(0) as any) : (0 as any))) as bigint;
-  const maxSupply = (rawMaxSupply ??
-    (bigintSupported ? (BigInt(50000) as any) : (50000 as any))) as bigint;
-  const totalMinted = (rawTotalMinted ??
-    (bigintSupported ? (BigInt(0) as any) : (0 as any))) as bigint;
 
   const [fidInput, setFidInput] = useState<string>("");
   const [busy, setBusy] = useState(false);
@@ -110,18 +83,13 @@ export default function HomeClient() {
       chainId: base.id,
     });
 
-  const envBigIntMissing = !bigintSupported;
-
-  const priceEth = useMemo(
-    () => (envBigIntMissing ? "0" : formatEther(price)),
-    [price, envBigIntMissing],
+  const priceEth = useMemo(() => formatEther(price), [price]);
+  const minted = Number(totalMinted);
+  const cap = Number(maxSupply);
+  const pct = Math.max(
+    0,
+    Math.min(100, Math.round((minted / Math.max(1, cap)) * 100))
   );
-
-  const minted = envBigIntMissing ? 0 : Number(totalMinted);
-  const cap = envBigIntMissing ? 0 : Number(maxSupply);
-  const pct = envBigIntMissing
-    ? 0
-    : Math.max(0, Math.min(100, Math.round((minted / Math.max(1, cap)) * 100)));
 
   // Autofill from Farcaster
   useEffect(() => {
@@ -139,13 +107,6 @@ export default function HomeClient() {
     try {
       setErr("");
       setBusy(true);
-
-      if (envBigIntMissing) {
-        setErr(
-          "Your in-app browser is too old for this dapp. Please open Basebots in a modern browser (Chrome, Safari, or Warpcast mini app).",
-        );
-        return;
-      }
 
       if (!address || !isAddress(address)) {
         setErr("Connect your wallet first.");
@@ -171,7 +132,6 @@ export default function HomeClient() {
         await writeContract({
           ...BASEBOTS,
           functionName: "mintWithSig",
-          // tuple: [fid, deadline, sig]
           args: [fidBig, BigInt(j.deadline), j.sig],
           value: BigInt(j.price),
           chainId: base.id,
@@ -239,9 +199,6 @@ export default function HomeClient() {
           </div>
         </section>
 
-        {/* 🔥 Basebot token card just under hero */}
-        <BasebotTokenCard />
-
         {/* Stats */}
         <section className="glass glass-pad bg-[#0f1320]/50 border border-white/10">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -258,15 +215,11 @@ export default function HomeClient() {
                   <span className="text-[#79ffe1] font-semibold">
                     Max supply:
                   </span>{" "}
-                  {envBigIntMissing
-                    ? "–"
-                    : Number(maxSupply).toLocaleString()}
+                  {Number(maxSupply).toLocaleString()}
                 </li>
                 <li>
                   <span className="text-[#79ffe1] font-semibold">Minted:</span>{" "}
-                  {envBigIntMissing
-                    ? "–"
-                    : `${Number(totalMinted).toLocaleString()} (${pct}%)`}
+                  {Number(totalMinted).toLocaleString()} ({pct}%)
                 </li>
               </ul>
             </div>
@@ -299,14 +252,6 @@ export default function HomeClient() {
             Enter your Farcaster FID and HQ will sign your passage. One
             transaction, and your Basebot steps through.
           </p>
-
-          {envBigIntMissing && (
-            <p className="mt-3 text-sm text-yellow-300">
-              Your in-app browser doesn&apos;t fully support the tech this dapp
-              needs. You can still mint from a regular browser (Chrome / Safari)
-              or via the Warpcast mini app.
-            </p>
-          )}
 
           <div className="mt-5 grid gap-3 md:grid-cols-[220px_auto_160px]">
             <label className="block">
@@ -352,9 +297,9 @@ export default function HomeClient() {
               <button
                 type="button"
                 onClick={handleMint}
-                disabled={busy || pending || envBigIntMissing}
+                disabled={busy || pending}
                 className="btn-pill btn-pill--blue !font-bold"
-                style={{ opacity: busy || pending || envBigIntMissing ? 0.7 : 1 }}
+                style={{ opacity: busy || pending ? 0.7 : 1 }}
               >
                 {busy || pending ? "Summoning…" : "Mint Basebot"}
               </button>
