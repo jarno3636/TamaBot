@@ -1,41 +1,35 @@
-// next.config.js
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   async headers() {
     return [
       {
-        // Global headers (apply to everything)
-        source: "/:path*",
+        source: "/(.*)",
         headers: [
-          // ✅ Allow embedding in any frame (Warpcast, Base, Coinbase, in-app browsers, etc.)
-          { key: "X-Frame-Options", value: "ALLOWALL" },
-
-          // (Optional) some mild, non-breaking security headers
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "Permissions-Policy", value: "interest-cohort=()" },
-        ],
-      },
-
-      // Ensure manifest is served with correct content type (no redirects)
-      {
-        source: "/.well-known/farcaster.json",
-        headers: [
-          { key: "Content-Type", value: "application/json; charset=utf-8" },
-          { key: "Cache-Control", value: "public, max-age=300, must-revalidate" },
+          {
+            key: "X-Frame-Options",
+            value: "ALLOWALL",
+          },
+          {
+            key: "Access-Control-Allow-Origin",
+            value: "*",
+          },
+          {
+            key: "Access-Control-Allow-Headers",
+            value: "*",
+          },
+          {
+            key: "Access-Control-Allow-Methods",
+            value: "GET,POST,OPTIONS",
+          },
+          {
+            key: "Content-Security-Policy",
+            value:
+              "frame-ancestors https://warpcast.com https://*.warpcast.com https://*.farcaster.xyz *",
+          },
         ],
       },
     ];
   },
-
-  webpack: (config) => {
-    // Silence optional dependency warnings (harmless)
-    config.resolve = config.resolve || {};
-    config.resolve.alias = {
-      ...(config.resolve.alias || {}),
-      "pino-pretty": false,
-    };
-    return config;
-  },
 };
 
-module.exports = nextConfig;
+export default nextConfig;
