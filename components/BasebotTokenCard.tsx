@@ -56,15 +56,15 @@ export default function BasebotTokenCard() {
               $BOTS
             </div>
 
-            {/* --- Copyable Contract Address --- */}
-            <div className="flex items-center justify-center gap-2 break-all">
-              <span className="font-semibold text-[#79ffe1]">Contract:</span>{" "}
-              <span>{contract}</span>
+            {/* --- Clean, truncated, copyable contract address --- */}
+            <div className="flex flex-col items-center justify-center gap-1 mt-2">
+              <span className="font-semibold text-[#79ffe1]">Contract:</span>
+
               <button
                 onClick={copyAddress}
-                className="ml-1 px-2 py-[2px] text-[10px] rounded bg-white/10 border border-white/20 hover:bg-white/20 transition"
+                className="px-3 py-1 bg-white/10 border border-white/20 rounded-lg text-[11px] text-white/80 hover:bg-white/20 transition"
               >
-                {copied ? "✓" : "Copy"}
+                {copied ? "✓ Copied!" : "0xc45d…3FFcf"}
               </button>
             </div>
           </div>
