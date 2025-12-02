@@ -1,7 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import {
+  useAccount,
+  useReadContract,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+} from "wagmi";
 import { base } from "viem/chains";
 import { formatUnits, parseUnits } from "viem";
 import Link from "next/link";
@@ -14,7 +19,8 @@ import {
 } from "@/lib/stakingContracts";
 
 // If you have this already somewhere, you can remove this local copy
-const BASEBOTS_NFT_ADDRESS = "0x92E29025fd6bAdD17c3005084fe8C43D928222B4" as `0x${string}`;
+const BASEBOTS_NFT_ADDRESS =
+  "0x92E29025fd6bAdD17c3005084fe8C43D928222B4" as `0x${string}`;
 
 type FilterTab = "all" | "live" | "closed" | "my-staked" | "my-pools";
 
@@ -117,7 +123,10 @@ export default function StakingPage() {
   const pendingGross = address ? ((pendingRaw ?? 0n) as bigint) : 0n;
 
   const isMyStaked = address && userStaked > 0n;
-  const isMyPool = address && creatorAddress && address.toLowerCase() === (creatorAddress as string).toLowerCase();
+  const isMyPool =
+    address &&
+    creatorAddress &&
+    address.toLowerCase() === (creatorAddress as string).toLowerCase();
 
   /* ──────────────────────────────────────────────────────────────
    * FEE PREVIEW (based on pending rewards)
@@ -159,11 +168,16 @@ export default function StakingPage() {
   const [stakeTokenId, setStakeTokenId] = useState("");
   const [unstakeTokenId, setUnstakeTokenId] = useState("");
 
-  const { writeContract: writePool, data: txHash, error: writeErr } = useWriteContract();
-  const { isLoading: txPending, isSuccess: txMined } = useWaitForTransactionReceipt({
-    hash: txHash,
-    chainId: base.id,
-  });
+  const {
+    writeContract: writePool,
+    data: txHash,
+    error: writeErr,
+  } = useWriteContract();
+  const { isLoading: txPending, isSuccess: txMined } =
+    useWaitForTransactionReceipt({
+      hash: txHash,
+      chainId: base.id,
+    });
 
   const [txMessage, setTxMessage] = useState<string>("");
 
@@ -255,22 +269,39 @@ export default function StakingPage() {
   /* ──────────────────────────────────────────────────────────────
    * CREATE POOL FORM (factory.createPool)
    * ──────────────────────────────────────────────────────────── */
-  const [createForm, setCreateForm] = useState({
+
+  type FeeMode = "claim" | "unstake" | "both";
+
+  const [createForm, setCreateForm] = useState<{
+    nftAddress: string;
+    rewardToken: string;
+    totalRewards: string;
+    durationDays: string;
+    startDelayHours: string;
+    maxStaked: string;
+    creatorFeeBps: string;
+    feeMode: FeeMode;
+  }>({
     nftAddress: "",
-    rewardToken: BOTS_TOKEN.address, // default to BOTS
+    rewardToken: BOTS_TOKEN.address as string, // default to BOTS (string)
     totalRewards: "1000", // 1000 tokens total
     durationDays: "30",
     startDelayHours: "0",
     maxStaked: "0",
     creatorFeeBps: "200", // 2% creator fee by default
-    feeMode: "claim", // "claim" | "unstake" | "both"
+    feeMode: "claim",
   });
 
-  const { writeContract: writeFactory, data: createTxHash, error: createErr } = useWriteContract();
-  const { isLoading: createPending, isSuccess: createMined } = useWaitForTransactionReceipt({
-    hash: createTxHash,
-    chainId: base.id,
-  });
+  const {
+    writeContract: writeFactory,
+    data: createTxHash,
+    error: createErr,
+  } = useWriteContract();
+  const { isLoading: createPending, isSuccess: createMined } =
+    useWaitForTransactionReceipt({
+      hash: createTxHash,
+      chainId: base.id,
+    });
   const [createMsg, setCreateMsg] = useState<string>("");
 
   async function handleCreatePool(e: React.FormEvent) {
@@ -299,7 +330,10 @@ export default function StakingPage() {
         return;
       }
 
-      const totalRewardsWei = parseUnits(totalRewards || "0", BOTS_TOKEN.decimals);
+      const totalRewardsWei = parseUnits(
+        totalRewards || "0",
+        BOTS_TOKEN.decimals,
+      );
       const durationSec = BigInt(Number(durationDays || "0") * 24 * 60 * 60);
       if (durationSec === 0n) {
         setCreateMsg("Duration must be greater than 0 days.");
@@ -390,7 +424,8 @@ export default function StakingPage() {
                   NFT Staking Pools
                 </h1>
                 <p className="mt-1 text-white/80 text-sm md:text-base">
-                  Stake NFTs, reward any ERC-20 on Base. Configurable timing, caps, and fees.
+                  Stake NFTs, reward any ERC-20 on Base. Configurable timing,
+                  caps, and fees.
                 </p>
               </div>
             </div>
@@ -400,7 +435,10 @@ export default function StakingPage() {
                 <li>• Choose an NFT collection and reward token.</li>
                 <li>• Set total rewards, duration, and max stakers.</li>
                 <li>• Add a creator fee on top of the protocol fee.</li>
-                <li>• Rewards are streamed over time and can be claimed or taken on unstake.</li>
+                <li>
+                  • Rewards are streamed over time and can be claimed or taken
+                  on unstake.
+                </li>
               </ul>
               <p className="mt-2 text-xs text-white/60">
                 Protocol fee is currently{" "}
@@ -417,14 +455,18 @@ export default function StakingPage() {
         <section className="glass glass-pad bg-[#0f1320]/70 border border-white/10">
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
             <div className="md:w-1/3">
-              <h2 className="text-xl md:text-2xl font-bold">Create your pool</h2>
+              <h2 className="text-xl md:text-2xl font-bold">
+                Create your pool
+              </h2>
               <p className="mt-2 text-sm text-white/80">
-                Launch a staking pool for any NFT collection on Base and reward stakers with
-                any ERC-20 (like BOTS). You choose rewards, timing, limits, and your fee.
+                Launch a staking pool for any NFT collection on Base and reward
+                stakers with any ERC-20 (like BOTS). You choose rewards,
+                timing, limits, and your fee.
               </p>
               <p className="mt-3 text-xs text-white/60">
-                Protocol fee: {protocolFeeBps / 100}% of rewards (taken on whichever
-                action you enable). Creator fee is on top and goes to you.
+                Protocol fee: {protocolFeeBps / 100}% of rewards (taken on
+                whichever action you enable). Creator fee is on top and goes to
+                you.
               </p>
             </div>
 
@@ -458,7 +500,10 @@ export default function StakingPage() {
                   type="text"
                   value={createForm.rewardToken}
                   onChange={(e) =>
-                    setCreateForm((f) => ({ ...f, rewardToken: e.target.value }))
+                    setCreateForm((f) => ({
+                      ...f,
+                      rewardToken: e.target.value,
+                    }))
                   }
                   placeholder="0x..."
                   className="mt-1 w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60"
@@ -478,7 +523,10 @@ export default function StakingPage() {
                   step="0.0001"
                   value={createForm.totalRewards}
                   onChange={(e) =>
-                    setCreateForm((f) => ({ ...f, totalRewards: e.target.value }))
+                    setCreateForm((f) => ({
+                      ...f,
+                      totalRewards: e.target.value,
+                    }))
                   }
                   className="mt-1 w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60"
                 />
@@ -497,7 +545,10 @@ export default function StakingPage() {
                   step="1"
                   value={createForm.durationDays}
                   onChange={(e) =>
-                    setCreateForm((f) => ({ ...f, durationDays: e.target.value }))
+                    setCreateForm((f) => ({
+                      ...f,
+                      durationDays: e.target.value,
+                    }))
                   }
                   className="mt-1 w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60"
                 />
@@ -513,7 +564,10 @@ export default function StakingPage() {
                   step="1"
                   value={createForm.startDelayHours}
                   onChange={(e) =>
-                    setCreateForm((f) => ({ ...f, startDelayHours: e.target.value }))
+                    setCreateForm((f) => ({
+                      ...f,
+                      startDelayHours: e.target.value,
+                    }))
                   }
                   className="mt-1 w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60"
                 />
@@ -532,7 +586,10 @@ export default function StakingPage() {
                   step="1"
                   value={createForm.maxStaked}
                   onChange={(e) =>
-                    setCreateForm((f) => ({ ...f, maxStaked: e.target.value }))
+                    setCreateForm((f) => ({
+                      ...f,
+                      maxStaked: e.target.value,
+                    }))
                   }
                   className="mt-1 w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60"
                 />
@@ -552,12 +609,16 @@ export default function StakingPage() {
                   step="10"
                   value={createForm.creatorFeeBps}
                   onChange={(e) =>
-                    setCreateForm((f) => ({ ...f, creatorFeeBps: e.target.value }))
+                    setCreateForm((f) => ({
+                      ...f,
+                      creatorFeeBps: e.target.value,
+                    }))
                   }
                   className="mt-1 w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60"
                 />
                 <p className="mt-1 text-[11px] text-white/50">
-                  Your cut on rewards (e.g. 200 = 2%) on top of the protocol fee.
+                  Your cut on rewards (e.g. 200 = 2%) on top of the protocol
+                  fee.
                 </p>
               </label>
 
@@ -575,7 +636,7 @@ export default function StakingPage() {
                       key={opt.key}
                       type="button"
                       onClick={() =>
-                        setCreateForm((f) => ({ ...f, feeMode: opt.key }))
+                        setCreateForm((f) => ({ ...f, feeMode: opt.key as FeeMode }))
                       }
                       className={[
                         "px-3 py-1.5 rounded-full border text-xs",
@@ -618,7 +679,8 @@ export default function StakingPage() {
               )}
               {createMined && (
                 <p className="col-span-2 mt-2 text-xs text-emerald-300">
-                  Pool created. Once indexed, you can surface it in the Pools list below.
+                  Pool created. Once indexed, you can surface it in the Pools
+                  list below.
                 </p>
               )}
             </form>
@@ -702,8 +764,9 @@ export default function StakingPage() {
                     )}
                   </div>
                   <p className="mt-1 text-xs text-white/70">
-                    Stake your Basebots and earn BOTS. Rewards stream over time;
-                    protocol fee {protocolFeeBps / 100}% + creator fee {creatorFeeBps / 100}%.
+                    Stake your Basebots and earn BOTS. Rewards stream over
+                    time; protocol fee {protocolFeeBps / 100}% + creator fee{" "}
+                    {creatorFeeBps / 100}%.
                   </p>
                 </div>
               </div>
@@ -728,7 +791,10 @@ export default function StakingPage() {
                   <span className="font-mono">
                     {rewardRate === 0n
                       ? "—"
-                      : `${formatUnits(rewardRate, BOTS_TOKEN.decimals)} BOTS/s`}
+                      : `${formatUnits(
+                          rewardRate,
+                          BOTS_TOKEN.decimals,
+                        )} BOTS/s`}
                   </span>
                 </div>
               </div>
@@ -758,7 +824,10 @@ export default function StakingPage() {
                   </div>
                   <div className="border-t border-white/10 pt-3 space-y-1 text-xs text-white/70">
                     <div className="flex justify-between">
-                      <span>Protocol fee ({protocolFeeBps / 100}%):</span>
+                      <span>
+                        Protocol fee ({protocolFeeBps / 100}
+                        %):
+                      </span>
                       <span className="font-mono">
                         {address
                           ? `${formatUnits(
@@ -769,7 +838,10 @@ export default function StakingPage() {
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span>Creator fee ({creatorFeeBps / 100}%):</span>
+                      <span>
+                        Creator fee ({creatorFeeBps / 100}
+                        %):
+                      </span>
                       <span className="font-mono">
                         {address
                           ? `${formatUnits(
@@ -826,7 +898,9 @@ export default function StakingPage() {
                   onClick={handleStake}
                   disabled={txPending || poolStatus === "closed"}
                   className="btn-pill btn-pill--blue w-full !font-bold"
-                  style={{ opacity: txPending || poolStatus === "closed" ? 0.7 : 1 }}
+                  style={{
+                    opacity: txPending || poolStatus === "closed" ? 0.7 : 1,
+                  }}
                 >
                   {txPending ? "Confirming…" : "Stake Basebot"}
                 </button>
@@ -859,7 +933,9 @@ export default function StakingPage() {
                   onClick={handleClaim}
                   disabled={txPending || feePreview.net === 0n}
                   className="btn-pill w-full border border-emerald-400/60 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20"
-                  style={{ opacity: txPending || feePreview.net === 0n ? 0.7 : 1 }}
+                  style={{
+                    opacity: txPending || feePreview.net === 0n ? 0.7 : 1,
+                  }}
                 >
                   Claim rewards
                 </button>
@@ -879,7 +955,9 @@ export default function StakingPage() {
                     </div>
                   )}
                   {txMined && (
-                    <div className="text-emerald-300">Transaction confirmed ✔</div>
+                    <div className="text-emerald-300">
+                      Transaction confirmed ✔
+                    </div>
                   )}
                   {(txMessage || writeErr) && (
                     <div className="text-rose-300">
@@ -892,8 +970,8 @@ export default function StakingPage() {
           </section>
         ) : (
           <section className="glass glass-pad text-sm text-white/70">
-            No pools match this filter yet. Once more pools are created and indexed,
-            they’ll show up here.
+            No pools match this filter yet. Once more pools are created and
+            indexed, they’ll show up here.
           </section>
         )}
       </div>
