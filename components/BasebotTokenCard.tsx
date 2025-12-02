@@ -1,18 +1,26 @@
 "use client";
 
 import Link from "next/link";
-// 🔹 We no longer need next/image here, so you can remove this import:
-// import Image from "next/image";
+import { useState } from "react";
 
 export default function BasebotTokenCard() {
+  const contract = "0xc45d7c40c9c65aF95d33da5921F787D5cFD3FFcf";
+  const [copied, setCopied] = useState(false);
+
+  const copyAddress = () => {
+    navigator.clipboard.writeText(contract);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1200);
+  };
+
   return (
     <section className="glass glass-pad bg-[#020617]/80 border border-white/10">
       <div className="flex flex-col items-center gap-6 text-center">
 
-        {/* --- Token image (top, spinning) --- */}
-        <div className="relative w-40 h-40 md:w-48 md:h-48 rounded-full overflow-hidden border border-white/10 shadow-lg bg-[#020617] flex items-center justify-center">
+        {/* --- Token image (top, spinning, slightly smaller) --- */}
+        <div className="relative w-32 h-32 md:w-40 md:h-40 rounded-full overflow-hidden border border-white/10 shadow-lg bg-[#020617] flex items-center justify-center">
           <img
-            src="/token_icon.png" // <- put token_icon_clean.png in /public as token_icon.png
+            src="/token_icon.png"
             alt="Basebot Token"
             className="token-spin"
             style={{
@@ -47,9 +55,17 @@ export default function BasebotTokenCard() {
               <span className="font-semibold text-[#79ffe1]">Ticker:</span>{" "}
               $BOTS
             </div>
-            <div className="break-all">
+
+            {/* --- Copyable Contract Address --- */}
+            <div className="flex items-center justify-center gap-2 break-all">
               <span className="font-semibold text-[#79ffe1]">Contract:</span>{" "}
-              0xc45d7c40c9c65aF95d33da5921F787D5cFD3FFcf
+              <span>{contract}</span>
+              <button
+                onClick={copyAddress}
+                className="ml-1 px-2 py-[2px] text-[10px] rounded bg-white/10 border border-white/20 hover:bg-white/20 transition"
+              >
+                {copied ? "✓" : "Copy"}
+              </button>
             </div>
           </div>
 
