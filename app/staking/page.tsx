@@ -1,5 +1,6 @@
 "use client";
 
+import type React from "react";
 import { useMemo, useState } from "react";
 import {
   useAccount,
@@ -92,6 +93,9 @@ export default function StakingPage() {
   const creatorFeeBps = Number(creatorFeeBpsRaw ?? 0);
   const takeFeeOnClaim = Boolean(takeFeeOnClaimRaw);
   const takeFeeOnUnstake = Boolean(takeFeeOnUnstakeRaw);
+
+  const protocolFeePercent = protocolFeeBps / 100;
+  const creatorFeePercentOnChain = creatorFeeBps / 100;
 
   const now = nowSeconds();
 
@@ -279,7 +283,7 @@ export default function StakingPage() {
     durationDays: string;
     startDelayHours: string;
     maxStaked: string;
-    creatorFeeBps: string;
+    creatorFeePercent: string; // whole-number percent in the UI
     feeMode: FeeMode;
   }>({
     nftAddress: "",
@@ -288,7 +292,7 @@ export default function StakingPage() {
     durationDays: "30",
     startDelayHours: "0",
     maxStaked: "0",
-    creatorFeeBps: "200", // 2% creator fee by default
+    creatorFeePercent: "2", // 2% creator fee by default
     feeMode: "claim",
   });
 
@@ -321,7 +325,7 @@ export default function StakingPage() {
         durationDays,
         startDelayHours,
         maxStaked,
-        creatorFeeBps,
+        creatorFeePercent,
         feeMode,
       } = createForm;
 
@@ -350,7 +354,14 @@ export default function StakingPage() {
       const startTime = BigInt(nowSeconds() + startOffset);
       const endTime = startTime + durationSec;
       const maxStakedBig = BigInt(maxStaked || "0");
-      const creatorFeeBpsNum = Number(creatorFeeBps || "0");
+
+      const creatorFeePercentNum = Number(creatorFeePercent || "0");
+      if (Number.isNaN(creatorFeePercentNum) || creatorFeePercentNum < 0) {
+        setCreateMsg("Creator fee must be a valid percentage.");
+        return;
+      }
+      // convert percent (e.g. 2) to bps (e.g. 200)
+      const creatorFeeBpsNum = Math.round(creatorFeePercentNum * 100);
 
       const takeFeeOnClaim = feeMode === "claim" || feeMode === "both";
       const takeFeeOnUnstake = feeMode === "unstake" || feeMode === "both";
@@ -395,7 +406,7 @@ export default function StakingPage() {
 
   return (
     <main className="min-h-[100svh] bg-deep text-white pb-16 page-layer">
-      <div className="container pt-6 px-5 stack">
+      <div className="container pt-6 px-5 stack space-y-6">
         {/* ───────────────── Introduction ───────────────── */}
         <section className="glass glass-pad relative overflow-hidden">
           <div
@@ -408,42 +419,44 @@ export default function StakingPage() {
                 "radial-gradient(120% 120% at 50% 0%, #000 55%, transparent 100%)",
             }}
           />
-          <div className="relative flex flex-col md:flex-row md:items-center md:gap-8">
-            <div className="flex items-center gap-3 mb-4 md:mb-0">
-              <div className="relative w-12 h-12 rounded-2xl overflow-hidden border border-white/10 bg-black/60">
-                <Image
-                  src="/icon.png"
-                  alt="BOTS token"
-                  fill
-                  sizes="48px"
-                  className="object-contain"
-                />
+          <div className="relative grid gap-6 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] items-center">
+            <div className="flex items-center gap-4">
+              <div className="relative w-14 h-14 md:w-16 md:h-16 rounded-3xl p-[1px] bg-gradient-to-tr from-[#79ffe1] via-sky-500 to-indigo-500 shadow-[0_0_30px_rgba(121,255,225,0.7)]">
+                <div className="w-full h-full rounded-3xl overflow-hidden bg-black/80 flex items-center justify-center">
+                  <Image
+                    src="/icon.png"
+                    alt="Basebots"
+                    fill
+                    sizes="64px"
+                    className="object-contain"
+                  />
+                </div>
               </div>
               <div>
                 <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">
                   NFT Staking Pools
                 </h1>
-                <p className="mt-1 text-white/80 text-sm md:text-base">
-                  Stake NFTs, reward any ERC-20 on Base. Configurable timing,
-                  caps, and fees.
+                <p className="mt-1 text-white/80 text-sm md:text-base max-w-md">
+                  Stake NFTs and stream rewards in any ERC-20 on Base. You
+                  configure timing, caps, and your creator fee.
                 </p>
               </div>
             </div>
 
-            <div className="mt-4 md:mt-0 md:ml-auto text-sm text-white/70 max-w-xl">
-              <ul className="space-y-1">
+            <div className="mt-2 md:mt-0 text-sm text-white/75 max-w-xl">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-white/60 mb-2">
+                How it works
+              </h3>
+              <ul className="space-y-1.5">
                 <li>• Choose an NFT collection and reward token.</li>
                 <li>• Set total rewards, duration, and max stakers.</li>
-                <li>• Add a creator fee on top of the protocol fee.</li>
-                <li>
-                  • Rewards are streamed over time and can be claimed or taken
-                  on unstake.
-                </li>
+                <li>• Add your creator fee on top of the protocol fee.</li>
+                <li>• Rewards stream over time and can be claimed or taken on unstake.</li>
               </ul>
-              <p className="mt-2 text-xs text-white/60">
+              <p className="mt-3 text-[11px] text-white/60">
                 Protocol fee is currently{" "}
                 <span className="font-semibold text-[#79ffe1]">
-                  {protocolFeeBps / 100}%
+                  {protocolFeePercent}%
                 </span>{" "}
                 of earned rewards and routes back to the BOTS rewards pot.
               </p>
@@ -453,26 +466,37 @@ export default function StakingPage() {
 
         {/* ───────────────── Create Pool ───────────────── */}
         <section className="glass glass-pad bg-[#0f1320]/70 border border-white/10">
-          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
-            <div className="md:w-1/3">
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-8">
+            <div className="md:w-[32%] space-y-3">
               <h2 className="text-xl md:text-2xl font-bold">
                 Create your pool
               </h2>
-              <p className="mt-2 text-sm text-white/80">
+              <p className="text-sm text-white/80">
                 Launch a staking pool for any NFT collection on Base and reward
-                stakers with any ERC-20 (like BOTS). You choose rewards,
-                timing, limits, and your fee.
+                stakers with any ERC-20 (like BOTS).
               </p>
-              <p className="mt-3 text-xs text-white/60">
-                Protocol fee: {protocolFeeBps / 100}% of rewards (taken on
-                whichever action you enable). Creator fee is on top and goes to
-                you.
-              </p>
+              <div className="rounded-2xl border border-white/10 bg-black/30 p-3 text-xs text-white/70 space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span>Protocol fee</span>
+                  <span className="font-semibold text-[#79ffe1]">
+                    {protocolFeePercent}%
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span>Your creator fee</span>
+                  <span className="font-semibold">
+                    {createForm.creatorFeePercent || "0"}%
+                  </span>
+                </div>
+                <p className="text-[11px] text-white/55 pt-1">
+                  Creator fee is charged on top of the protocol fee.
+                </p>
+              </div>
             </div>
 
             <form
               onSubmit={handleCreatePool}
-              className="md:w-2/3 grid gap-3 md:grid-cols-2 text-sm"
+              className="md:w-[68%] grid gap-4 md:grid-cols-2 text-sm"
             >
               <label className="block col-span-2">
                 <span className="text-xs uppercase tracking-wide text-white/60">
@@ -487,7 +511,7 @@ export default function StakingPage() {
                   placeholder="0x..."
                   className="mt-1 w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60"
                 />
-                <p className="mt-1 text-[11px] text-white/50">
+                <p className="mt-1 text-[11px] text-white/50 break-all font-mono">
                   For Basebots, use: {BASEBOTS_NFT_ADDRESS}
                 </p>
               </label>
@@ -508,7 +532,7 @@ export default function StakingPage() {
                   placeholder="0x..."
                   className="mt-1 w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60"
                 />
-                <p className="mt-1 text-[11px] text-white/50">
+                <p className="mt-1 text-[11px] text-white/50 break-all font-mono">
                   Default: BOTS ({BOTS_TOKEN.address})
                 </p>
               </label>
@@ -600,25 +624,24 @@ export default function StakingPage() {
 
               <label className="block">
                 <span className="text-xs uppercase tracking-wide text-white/60">
-                  Creator fee (bps)
+                  Creator fee (%)
                 </span>
                 <input
                   type="number"
                   min="0"
-                  max="1900"
-                  step="10"
-                  value={createForm.creatorFeeBps}
+                  max="19"
+                  step="0.25"
+                  value={createForm.creatorFeePercent}
                   onChange={(e) =>
                     setCreateForm((f) => ({
                       ...f,
-                      creatorFeeBps: e.target.value,
+                      creatorFeePercent: e.target.value,
                     }))
                   }
                   className="mt-1 w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60"
                 />
                 <p className="mt-1 text-[11px] text-white/50">
-                  Your cut on rewards (e.g. 200 = 2%) on top of the protocol
-                  fee.
+                  Your cut of rewards (e.g. 2 = 2%) on top of the protocol fee.
                 </p>
               </label>
 
@@ -636,7 +659,10 @@ export default function StakingPage() {
                       key={opt.key}
                       type="button"
                       onClick={() =>
-                        setCreateForm((f) => ({ ...f, feeMode: opt.key as FeeMode }))
+                        setCreateForm((f) => ({
+                          ...f,
+                          feeMode: opt.key as FeeMode,
+                        }))
                       }
                       className={[
                         "px-3 py-1.5 rounded-full border text-xs",
@@ -651,7 +677,7 @@ export default function StakingPage() {
                 </div>
               </div>
 
-              <div className="col-span-2 flex items-center justify-between gap-3 mt-3">
+              <div className="col-span-2 flex flex-wrap items-center justify-between gap-3 mt-3">
                 <button
                   type="submit"
                   disabled={createPending}
@@ -673,12 +699,12 @@ export default function StakingPage() {
               </div>
 
               {(createMsg || createErr) && (
-                <p className="col-span-2 mt-2 text-xs text-red-300">
+                <p className="col-span-2 mt-1 text-xs text-rose-300">
                   {createMsg || getErrText(createErr)}
                 </p>
               )}
               {createMined && (
-                <p className="col-span-2 mt-2 text-xs text-emerald-300">
+                <p className="col-span-2 mt-1 text-xs text-emerald-300">
                   Pool created. Once indexed, you can surface it in the Pools
                   list below.
                 </p>
@@ -727,17 +753,19 @@ export default function StakingPage() {
             />
             <div className="relative flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
               <div className="flex items-center gap-3">
-                <div className="relative w-10 h-10 rounded-2xl overflow-hidden border border-[#79ffe1]/40 bg-black/70">
-                  <Image
-                    src="/icon.png"
-                    alt="Basebots x BOTS"
-                    fill
-                    sizes="40px"
-                    className="object-contain"
-                  />
+                <div className="relative w-12 h-12 md:w-14 md:h-14 rounded-3xl p-[1px] bg-gradient-to-tr from-[#79ffe1] via-sky-500 to-indigo-500 border border-[#79ffe1]/40 shadow-[0_0_24px_rgba(121,255,225,0.7)]">
+                  <div className="w-full h-full rounded-3xl overflow-hidden bg-black/80 flex items-center justify-center">
+                    <Image
+                      src="/icon.png"
+                      alt="Basebots x BOTS"
+                      fill
+                      sizes="56px"
+                      className="object-contain"
+                    />
+                  </div>
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-lg md:text-xl font-bold">
                       Basebots x BOTS Staking
                     </h2>
@@ -763,16 +791,16 @@ export default function StakingPage() {
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 text-xs text-white/70">
+                  <p className="mt-1 text-xs text-white/70 max-w-xl">
                     Stake your Basebots and earn BOTS. Rewards stream over
-                    time; protocol fee {protocolFeeBps / 100}% + creator fee{" "}
-                    {creatorFeeBps / 100}%.
+                    time; protocol fee {protocolFeePercent}% + creator fee{" "}
+                    {creatorFeePercentOnChain}%.
                   </p>
                 </div>
               </div>
 
               <div className="grid gap-2 text-xs md:text-sm md:text-right">
-                <div className="inline-flex items-center justify-end gap-2">
+                <div className="inline-flex flex-wrap items-center justify-end gap-2">
                   <span className="pill-note pill-note--blue">
                     APR approx:{" "}
                     <span className="font-semibold">
@@ -801,7 +829,7 @@ export default function StakingPage() {
             </div>
 
             {/* Your position + fee preview + actions */}
-            <div className="mt-5 grid gap-4 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+            <div className="mt-5 grid gap-4 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
               <div className="rounded-2xl border border-white/10 bg-black/40 p-4">
                 <h3 className="text-sm font-semibold">Your position</h3>
                 <div className="mt-3 grid gap-3 text-sm">
@@ -824,10 +852,7 @@ export default function StakingPage() {
                   </div>
                   <div className="border-t border-white/10 pt-3 space-y-1 text-xs text-white/70">
                     <div className="flex justify-between">
-                      <span>
-                        Protocol fee ({protocolFeeBps / 100}
-                        %):
-                      </span>
+                      <span>Protocol fee ({protocolFeePercent}%):</span>
                       <span className="font-mono">
                         {address
                           ? `${formatUnits(
@@ -838,10 +863,7 @@ export default function StakingPage() {
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span>
-                        Creator fee ({creatorFeeBps / 100}
-                        %):
-                      </span>
+                      <span>Creator fee ({creatorFeePercentOnChain}%):</span>
                       <span className="font-mono">
                         {address
                           ? `${formatUnits(
@@ -940,7 +962,7 @@ export default function StakingPage() {
                   Claim rewards
                 </button>
 
-                <div className="mt-2 text-[11px] text-white/60 space-y-1">
+                <div className="mt-2 text-[11px] text-white/60 space-y-1 break-words">
                   {txHash && (
                     <div>
                       Latest action:{" "}
