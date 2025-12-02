@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
+// 🔹 We no longer need next/image here, so you can remove this import:
+// import Image from "next/image";
 
 export default function BasebotTokenCard() {
   return (
@@ -9,13 +10,17 @@ export default function BasebotTokenCard() {
       <div className="flex flex-col items-center gap-6 text-center">
 
         {/* --- Token image (top, spinning) --- */}
-        <div className="relative w-40 h-40 md:w-48 md:h-48 rounded-full overflow-hidden border border-white/10 shadow-lg bg-[#020617]">
-          <Image
-            src="/token_icon.png"      // ← use the cleaned PNG you downloaded
+        <div className="relative w-40 h-40 md:w-48 md:h-48 rounded-full overflow-hidden border border-white/10 shadow-lg bg-[#020617] flex items-center justify-center">
+          <img
+            src="/token_icon.png" // <- put token_icon_clean.png in /public as token_icon.png
             alt="Basebot Token"
-            fill
-            sizes="200px"
-            className="token-spin object-contain"
+            className="token-spin"
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "contain",
+              display: "block",
+            }}
           />
         </div>
 
