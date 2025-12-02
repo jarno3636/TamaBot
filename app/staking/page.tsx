@@ -152,18 +152,17 @@ export default function StakingPage() {
   }, [pendingGross, protocolFeeBps, creatorFeeBps]);
 
   /* ──────────────────────────────────────────────────────────────
-   * APR ESTIMATE (assume each Basebot has some notional value)
-   * APR = (rewardRate * 365d) / (totalStaked * assumedStakeValue) * 100%
+   * APR ESTIMATE
    * ──────────────────────────────────────────────────────────── */
-  const assumedStakeValuePerNft = parseUnits("0.01", BOTS_TOKEN.decimals); // example: 0.01 BOTS per NFT value proxy
+  const assumedStakeValuePerNft = parseUnits("0.01", BOTS_TOKEN.decimals); // example value
 
   const aprPercent = useMemo(() => {
     if (totalStaked === 0n || rewardRate === 0n) return 0;
-    const yearlyReward = rewardRate * BigInt(365 * 24 * 60 * 60); // rewards per year
+    const yearlyReward = rewardRate * BigInt(365 * 24 * 60 * 60);
     const tvl = totalStaked * assumedStakeValuePerNft;
     if (tvl === 0n) return 0;
     const aprBps = (yearlyReward * 10000n) / tvl;
-    return Number(aprBps) / 100; // as %
+    return Number(aprBps) / 100;
   }, [totalStaked, rewardRate, assumedStakeValuePerNft]);
 
   /* ──────────────────────────────────────────────────────────────
@@ -287,12 +286,12 @@ export default function StakingPage() {
     feeMode: FeeMode;
   }>({
     nftAddress: "",
-    rewardToken: BOTS_TOKEN.address as string, // default to BOTS (string)
-    totalRewards: "1000", // 1000 tokens total
+    rewardToken: BOTS_TOKEN.address as string,
+    totalRewards: "1000",
     durationDays: "30",
     startDelayHours: "0",
     maxStaked: "0",
-    creatorFeePercent: "2", // 2% creator fee by default
+    creatorFeePercent: "2",
     feeMode: "claim",
   });
 
@@ -360,7 +359,6 @@ export default function StakingPage() {
         setCreateMsg("Creator fee must be a valid percentage.");
         return;
       }
-      // convert percent (e.g. 2) to bps (e.g. 200)
       const creatorFeeBpsNum = Math.round(creatorFeePercentNum * 100);
 
       const takeFeeOnClaim = feeMode === "claim" || feeMode === "both";
@@ -392,8 +390,7 @@ export default function StakingPage() {
   }
 
   /* ──────────────────────────────────────────────────────────────
-   * FILTER LOGIC (for when you add more pools later)
-   * Right now we only have the Basebots pool, but filters are wired.
+   * FILTER LOGIC
    * ──────────────────────────────────────────────────────────── */
   const poolVisible = useMemo(() => {
     if (activeFilter === "all") return true;
@@ -404,11 +401,21 @@ export default function StakingPage() {
     return true;
   }, [activeFilter, poolStatus, isMyStaked, isMyPool]);
 
+  /* ──────────────────────────────────────────────────────────────
+   * BUTTON STYLES
+   * ──────────────────────────────────────────────────────────── */
+  const primaryBtn =
+    "w-full inline-flex items-center justify-center rounded-full bg-[#79ffe1] text-slate-950 text-sm font-semibold py-2.5 shadow-[0_10px_30px_rgba(121,255,225,0.45)] hover:bg-[#a5fff0] transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
+  const secondaryBtn =
+    "w-full inline-flex items-center justify-center rounded-full bg-white/5 text-white text-sm font-semibold py-2.5 border border-white/30 hover:bg-white/10 transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
+  const successBtn =
+    "w-full inline-flex items-center justify-center rounded-full bg-emerald-500/15 text-emerald-200 text-sm font-semibold py-2.5 border border-emerald-400/60 hover:bg-emerald-500/25 transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
+
   return (
     <main className="min-h-[100svh] bg-deep text-white pb-16 page-layer">
       <div className="container pt-6 px-5 stack space-y-6">
         {/* ───────────────── Introduction ───────────────── */}
-        <section className="glass glass-pad relative overflow-hidden">
+        <section className="glass glass-pad relative overflow-hidden rounded-3xl">
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0"
@@ -421,13 +428,13 @@ export default function StakingPage() {
           />
           <div className="relative grid gap-6 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] items-center">
             <div className="flex items-center gap-4">
-              <div className="relative w-14 h-14 md:w-16 md:h-16 rounded-3xl p-[1px] bg-gradient-to-tr from-[#79ffe1] via-sky-500 to-indigo-500 shadow-[0_0_30px_rgba(121,255,225,0.7)]">
-                <div className="w-full h-full rounded-3xl overflow-hidden bg-black/80 flex items-center justify-center">
+              <div className="relative flex h-14 w-14 md:h-16 md:w-16 items-center justify-center rounded-3xl bg-gradient-to-tr from-[#79ffe1] via-sky-500 to-indigo-500 shadow-[0_0_26px_rgba(121,255,225,0.7)]">
+                <div className="flex h-[85%] w-[85%] items-center justify-center rounded-3xl bg-black/85">
                   <Image
                     src="/icon.png"
                     alt="Basebots"
-                    fill
-                    sizes="64px"
+                    width={40}
+                    height={40}
                     className="object-contain"
                   />
                 </div>
@@ -465,7 +472,7 @@ export default function StakingPage() {
         </section>
 
         {/* ───────────────── Create Pool ───────────────── */}
-        <section className="glass glass-pad bg-[#0f1320]/70 border border-white/10">
+        <section className="glass glass-pad bg-[#0f1320]/70 border border-white/10 rounded-3xl overflow-hidden">
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-8">
             <div className="md:w-[32%] space-y-3">
               <h2 className="text-xl md:text-2xl font-bold">
@@ -475,7 +482,7 @@ export default function StakingPage() {
                 Launch a staking pool for any NFT collection on Base and reward
                 stakers with any ERC-20 (like BOTS).
               </p>
-              <div className="rounded-2xl border border-white/10 bg-black/30 p-3 text-xs text-white/70 space-y-1">
+              <div className="rounded-2xl border border-white/15 bg-black/40 p-3 text-xs text-white/70 space-y-1">
                 <div className="flex items-center justify-between gap-2">
                   <span>Protocol fee</span>
                   <span className="font-semibold text-[#79ffe1]">
@@ -681,8 +688,7 @@ export default function StakingPage() {
                 <button
                   type="submit"
                   disabled={createPending}
-                  className="btn-pill btn-pill--blue !font-bold"
-                  style={{ opacity: createPending ? 0.7 : 1 }}
+                  className={primaryBtn}
                 >
                   {createPending ? "Creating pool…" : "Create pool"}
                 </button>
@@ -742,7 +748,7 @@ export default function StakingPage() {
 
         {/* ───────────────── Featured Basebots Pool ───────────────── */}
         {poolVisible ? (
-          <section className="glass glass-pad relative overflow-hidden bg-[#050714]/80">
+          <section className="glass glass-pad relative overflow-hidden bg-[#050714]/80 rounded-3xl">
             <div
               aria-hidden
               className="pointer-events-none absolute -top-28 -right-40 h-72 w-72 rounded-full blur-3xl"
@@ -753,13 +759,13 @@ export default function StakingPage() {
             />
             <div className="relative flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
               <div className="flex items-center gap-3">
-                <div className="relative w-12 h-12 md:w-14 md:h-14 rounded-3xl p-[1px] bg-gradient-to-tr from-[#79ffe1] via-sky-500 to-indigo-500 border border-[#79ffe1]/40 shadow-[0_0_24px_rgba(121,255,225,0.7)]">
-                  <div className="w-full h-full rounded-3xl overflow-hidden bg-black/80 flex items-center justify-center">
+                <div className="relative flex h-12 w-12 md:h-14 md:w-14 items-center justify-center rounded-3xl bg-gradient-to-tr from-[#79ffe1] via-sky-500 to-indigo-500 border border-[#79ffe1]/50 shadow-[0_0_24px_rgba(121,255,225,0.7)]">
+                  <div className="flex h-[85%] w-[85%] items-center justify-center rounded-3xl bg-black/85">
                     <Image
                       src="/icon.png"
                       alt="Basebots x BOTS"
-                      fill
-                      sizes="56px"
+                      width={40}
+                      height={40}
                       className="object-contain"
                     />
                   </div>
@@ -801,13 +807,13 @@ export default function StakingPage() {
 
               <div className="grid gap-2 text-xs md:text-sm md:text-right">
                 <div className="inline-flex flex-wrap items-center justify-end gap-2">
-                  <span className="pill-note pill-note--blue">
+                  <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-medium text-emerald-200">
                     APR approx:{" "}
                     <span className="font-semibold">
                       {aprPercent ? `${aprPercent.toFixed(1)}%` : "—"}
                     </span>
                   </span>
-                  <span className="pill-note">
+                  <span className="rounded-full border border-white/20 bg-white/5 px-3 py-1 text-[11px] font-medium text-white/80">
                     Total staked:{" "}
                     <span className="font-semibold">
                       {totalStaked.toString()} NFTs
@@ -850,7 +856,7 @@ export default function StakingPage() {
                         : "—"}
                     </span>
                   </div>
-                  <div className="border-t border-white/10 pt-3 space-y-1 text-xs text-white/70">
+                  <div className="border-top border-white/10 pt-3 space-y-1 text-xs text-white/70 border-t">
                     <div className="flex justify-between">
                       <span>Protocol fee ({protocolFeePercent}%):</span>
                       <span className="font-mono">
@@ -919,10 +925,7 @@ export default function StakingPage() {
                   type="button"
                   onClick={handleStake}
                   disabled={txPending || poolStatus === "closed"}
-                  className="btn-pill btn-pill--blue w-full !font-bold"
-                  style={{
-                    opacity: txPending || poolStatus === "closed" ? 0.7 : 1,
-                  }}
+                  className={primaryBtn}
                 >
                   {txPending ? "Confirming…" : "Stake Basebot"}
                 </button>
@@ -944,8 +947,7 @@ export default function StakingPage() {
                   type="button"
                   onClick={handleUnstake}
                   disabled={txPending}
-                  className="btn-pill w-full border border-white/30 bg-white/5 text-white hover:bg-white/10"
-                  style={{ opacity: txPending ? 0.7 : 1 }}
+                  className={secondaryBtn}
                 >
                   Unstake Basebot
                 </button>
@@ -954,10 +956,7 @@ export default function StakingPage() {
                   type="button"
                   onClick={handleClaim}
                   disabled={txPending || feePreview.net === 0n}
-                  className="btn-pill w-full border border-emerald-400/60 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20"
-                  style={{
-                    opacity: txPending || feePreview.net === 0n ? 0.7 : 1,
-                  }}
+                  className={successBtn}
                 >
                   Claim rewards
                 </button>
@@ -991,7 +990,7 @@ export default function StakingPage() {
             </div>
           </section>
         ) : (
-          <section className="glass glass-pad text-sm text-white/70">
+          <section className="glass glass-pad text-sm text-white/70 rounded-3xl">
             No pools match this filter yet. Once more pools are created and
             indexed, they’ll show up here.
           </section>
