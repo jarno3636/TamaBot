@@ -9,13 +9,14 @@ export default function BasebotTokenCard() {
       <div className="flex flex-col items-center gap-6 text-center">
 
         {/* --- Token image (top, spinning) --- */}
-        <div className="relative w-40 h-40 md:w-48 md:h-48 rounded-2xl overflow-hidden border border-white/10 shadow-lg">
+        <div className="relative w-40 h-40 md:w-48 md:h-48 rounded-2xl overflow-hidden border border-white/10 shadow-lg bg-[#0a0b12]">
           <Image
-            src="/token_icon.PNG"
+            src="/token_icon.PNG"   // ← EXACT .PNG you confirmed
             alt="Basebot Token"
             fill
             sizes="200px"
-            className="object-contain token-spin"
+            className="token-spin object-cover"  // ← FIXED scaling
+            onError={() => console.log("❌ token_icon.PNG not found in /public")}
           />
         </div>
 
@@ -65,7 +66,7 @@ export default function BasebotTokenCard() {
                 disabled
                 className="btn-pill !w-full md:!w-auto !justify-center opacity-40 cursor-not-allowed"
               >
-                Stake your bot
+                Stake Your Basebot
               </button>
               <span className="mt-1 text-[11px] text-white/50 italic">
                 Staking coming soon
