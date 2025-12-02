@@ -2,10 +2,18 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useAccount } from "wagmi";
+
+const OWNER_ADDRESS = "0xB37c91305F50e3CdB0D7a048a18d7536c9524f58" as `0x${string}`;
 
 export default function BasebotTokenCard() {
   const contract = "0xc45d7c40c9c65aF95d33da5921F787D5cFD3FFcf";
   const [copied, setCopied] = useState(false);
+  const { address } = useAccount();
+
+  const isOwner =
+    address &&
+    address.toLowerCase() === OWNER_ADDRESS.toLowerCase();
 
   const copyAddress = () => {
     navigator.clipboard.writeText(contract);
@@ -81,15 +89,27 @@ export default function BasebotTokenCard() {
             </Link>
 
             <div className="flex flex-col items-center">
-              <button
-                type="button"
-                disabled
-                className="btn-pill !w-full md:!w-auto !justify-center opacity-40 cursor-not-allowed"
-              >
-                Stake Your Basebot
-              </button>
+              {isOwner ? (
+                <Link
+                  href="/staking"
+                  className="btn-pill btn-pill--blue !w-full md:!w-auto !justify-center"
+                >
+                  Stake Your Basebot
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="btn-pill !w-full md:!w-auto !justify-center opacity-40 cursor-not-allowed"
+                >
+                  Stake Your Basebot
+                </button>
+              )}
+
               <span className="mt-1 text-[11px] text-white/50 italic">
-                Staking coming soon
+                {isOwner
+                  ? "Owner-only: configure staking pools"
+                  : "Connect owner wallet to manage staking"}
               </span>
             </div>
           </div>
