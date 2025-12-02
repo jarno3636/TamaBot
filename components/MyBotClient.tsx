@@ -19,7 +19,7 @@ function b64ToUtf8(b64: string): string {
     return decodeURIComponent(
       Array.prototype.map
         .call(atob(b64), (c: string) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-        .join("")
+        .join(""),
     );
   } catch {
     try {
@@ -54,12 +54,11 @@ export default function MyBotClient() {
   const { data: tokenJsonUri, refetch: refetchToken } = useReadContract({
     ...BASEBOTS,
     functionName: "tokenURI",
-    // IMPORTANT: runtime value is a Number; cast only for TypeScript
+    // runtime value is a Number; cast only for TypeScript
     args:
       fidNum !== null
-        ? ([fidNum] as unknown as [bigint]) // TS-only cast; actual value is number
+        ? ([fidNum] as unknown as [bigint])
         : undefined,
-    // Only run when we actually have a FID
     query: { enabled: fidNum !== null },
   });
 
@@ -88,15 +87,14 @@ export default function MyBotClient() {
     (process.env.NEXT_PUBLIC_URL || "").replace(/\/$/, "") ||
     "https://basebots.vercel.app";
 
-  // OG page to share (renders rich card w/ the PNG as og:image)
-  const shareUrl = isValidFID(effectiveFid)
-    ? `${siteOrigin}/og/bot/${effectiveFid}`
-    : siteOrigin || "/";
-
-  // Optional: direct PNG if you want to pass it through for Farcaster embeds
+  // 🔥 For Farcaster-style image embeds, share the PNG directly
   const imagePngUrl = isValidFID(effectiveFid)
     ? `${siteOrigin}/api/basebots/image/${effectiveFid}`
     : "";
+
+  const shareUrl = isValidFID(effectiveFid)
+    ? imagePngUrl              // clicking the cast opens the image itself
+    : siteOrigin || "/";
 
   return (
     <main className="min-h-[100svh] bg-deep text-white pb-16 page-layer">
