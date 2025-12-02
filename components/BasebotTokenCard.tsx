@@ -9,14 +9,13 @@ export default function BasebotTokenCard() {
       <div className="flex flex-col items-center gap-6 text-center">
 
         {/* --- Token image (top, spinning) --- */}
-        <div className="relative w-40 h-40 md:w-48 md:h-48 rounded-2xl overflow-hidden border border-white/10 shadow-lg bg-[#0a0b12]">
+        <div className="relative w-40 h-40 md:w-48 md:h-48 rounded-full overflow-hidden border border-white/10 shadow-lg bg-[#020617]">
           <Image
-            src="/token_icon.PNG"   // ← EXACT .PNG you confirmed
+            src="/token_icon.png"      // ← use the cleaned PNG you downloaded
             alt="Basebot Token"
             fill
             sizes="200px"
-            className="token-spin object-cover"  // ← FIXED scaling
-            onError={() => console.log("❌ token_icon.PNG not found in /public")}
+            className="token-spin object-contain"
           />
         </div>
 
