@@ -59,27 +59,6 @@ body {
     linear-gradient(180deg, #0b0f18 0%, #0a0b12 35%, #0b0f18 100%);
 }
 
-/* ===== Animated cubes canvas (fixed behind everything) ===== */
-.cubes-canvas {
-  position: fixed;
-  inset: 0;
-  z-index: -20;
-  pointer-events: none;
-  opacity: 0.6;
-  filter: saturate(1.1);
-}
-@media (prefers-reduced-motion: reduce) {
-  .cubes-canvas {
-    display: none;
-  }
-}
-
-/* Keep content above cubes */
-.page-layer {
-  position: relative;
-  z-index: 10;
-}
-
 /* ===== Cards ===== */
 .glass {
   position: relative;
@@ -296,6 +275,21 @@ canvas {
   user-select: none;
 }
 
+/* ===== Spinning Basebot token ===== */
+.token-spin {
+  animation: token-spin 16s linear infinite;
+  transform-origin: center center;
+}
+
+@keyframes token-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* ===== Nav pills ===== */
 .nav-pill {
   display: inline-block;
@@ -462,8 +456,12 @@ canvas {
   right: auto;
 }
 
+/* ===== Motion preferences ===== */
 @media (prefers-reduced-motion: reduce) {
   .brand-steel {
     text-shadow: none;
+  }
+  .token-spin {
+    animation: none;
   }
 }
