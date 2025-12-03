@@ -24,11 +24,8 @@ import {
   CONFIG_STAKING_FACTORY,
   BASEBOTS_STAKING_POOL,
   BOTS_TOKEN,
+  BASEBOTS_NFT,
 } from "@/lib/stakingContracts";
-
-// If you have this already somewhere, you can remove this local copy
-const BASEBOTS_NFT_ADDRESS =
-  "0x92E29025fd6bAdD17c3005084fe8C43D928222B4" as `0x${string}`;
 
 type FilterTab = "all" | "live" | "closed" | "my-staked" | "my-pools";
 type FeeMode = "claim" | "unstake" | "both";
@@ -60,7 +57,7 @@ type FundTarget = {
   rewardToken: `0x${string}`;
 };
 
-// Minimal ERC-20 metadata ABI
+// Minimal ERC-20 metadata ABI (used by modal on-chain)
 const ERC20_METADATA_ABI = [
   {
     name: "name",
@@ -201,6 +198,7 @@ export default function StakingPage() {
     functionName: "takeFeeOnUnstake",
   });
 
+  // NOTE: make sure CONFIG_STAKING_POOL_ABI includes a `creator() view returns (address)`
   const { data: creatorAddress } = useReadContract({
     ...BASEBOTS_STAKING_POOL,
     functionName: "creator",
@@ -250,6 +248,7 @@ export default function StakingPage() {
     creatorAddress &&
     address.toLowerCase() === (creatorAddress as string).toLowerCase()
   );
+
   /* ──────────────────────────────────────────────────────────────
    * FEE PREVIEW (Basebots pool)
    * ──────────────────────────────────────────────────────────── */
@@ -723,13 +722,12 @@ export default function StakingPage() {
   }, [factoryPools, address]);
 
   /* ──────────────────────────────────────────────────────────────
-   * TOKEN METADATA (reward token in list)
+   * TOKEN METADATA (reward token in list, via /api/token-info)
    * ──────────────────────────────────────────────────────────── */
   const [tokenMeta, setTokenMeta] = useState<Record<string, TokenMeta>>({});
 
   useEffect(() => {
-    if (!publicClient || factoryPoolDetails.length === 0) return;
-    const client = publicClient as NonNullable<PublicClientType>;
+    if (factoryPoolDetails.length === 0) return;
     let cancelled = false;
 
     const uniqueRewards = Array.from(
@@ -737,7 +735,6 @@ export default function StakingPage() {
     );
 
     const missing = uniqueRewards.filter((addr) => !tokenMeta[addr]);
-
     if (missing.length === 0) return;
 
     async function loadMeta() {
@@ -746,28 +743,20 @@ export default function StakingPage() {
 
         for (const addr of missing) {
           try {
-            const [symbol, name, decimals] = await Promise.all([
-              client.readContract({
-                address: addr as `0x${string}`,
-                abi: ERC20_METADATA_ABI,
-                functionName: "symbol",
-              }),
-              client.readContract({
-                address: addr as `0x${string}`,
-                abi: ERC20_METADATA_ABI,
-                functionName: "name",
-              }),
-              client.readContract({
-                address: addr as `0x${string}`,
-                abi: ERC20_METADATA_ABI,
-                functionName: "decimals",
-              }),
-            ]);
+            const url = getAppUrl(`/api/token-info?address=${addr}`);
+            const res = await fetch(url);
+            if (!res.ok) throw new Error("Token info request failed");
+            const json = await res.json();
+
+            if (!json.ok) throw new Error(json.error ?? "Token lookup failed");
 
             updates[addr] = {
-              symbol: (symbol as string) || shortenAddress(addr, 4),
-              name: (name as string) || shortenAddress(addr, 4),
-              decimals: Number(decimals ?? 18),
+              symbol: json.symbol || shortenAddress(addr, 4),
+              name: json.name || shortenAddress(addr, 4),
+              decimals:
+                typeof json.decimals === "number" && Number.isFinite(json.decimals)
+                  ? json.decimals
+                  : 18,
             };
           } catch {
             // ignore failures; just fallback to short address
@@ -787,7 +776,7 @@ export default function StakingPage() {
     return () => {
       cancelled = true;
     };
-  }, [publicClient, factoryPoolDetails, tokenMeta]);
+  }, [factoryPoolDetails, tokenMeta]);
 
   /* ──────────────────────────────────────────────────────────────
    * FILTER LOGIC (for featured Basebots pool)
@@ -869,7 +858,10 @@ export default function StakingPage() {
   const [fundTarget, setFundTarget] = useState<FundTarget | null>(null);
   const [fundModalOpen, setFundModalOpen] = useState(false);
 
-  function openFundModalForPool(pool: { pool: `0x${string}`; rewardToken: `0x${string}` }) {
+  function openFundModalForPool(pool: {
+    pool: `0x${string}`;
+    rewardToken: `0x${string}`;
+  }) {
     setFundTarget({ pool: pool.pool, rewardToken: pool.rewardToken });
     setFundModalOpen(true);
   }
@@ -1022,7 +1014,8 @@ export default function StakingPage() {
                   className={inputBase}
                 />
                 <p className="mt-1 text-[11px] text-white/50 font-mono">
-                  For Basebots, use: {shortenAddress(BASEBOTS_NFT_ADDRESS, 4)}
+                  For Basebots, use:{" "}
+                  {shortenAddress(BASEBOTS_NFT.address, 4)}
                 </p>
               </label>
 
@@ -1858,7 +1851,7 @@ function FundPoolModal({
     }
   }, [open, suggestedAmount]);
 
-  // Load token metadata for reward token
+  // Load token metadata for reward token (on-chain here for exact decimals)
   useEffect(() => {
     if (!open || !target || !publicClient) return;
     const client = publicClient as NonNullable<PublicClientType>;
