@@ -244,12 +244,12 @@ export default function StakingPage() {
   const userStaked = address ? ((userInfoRaw as any)?.amount ?? 0n) as bigint : 0n;
   const pendingGross = address ? ((pendingRaw ?? 0n) as bigint) : 0n;
 
-  const isMyStaked = address && userStaked > 0n;
-  const isMyPool =
+  const isMyStaked = !!(address && userStaked > 0n);
+  const isMyPool = !!(
     address &&
     creatorAddress &&
-    address.toLowerCase() === (creatorAddress as string).toLowerCase();
-
+    address.toLowerCase() === (creatorAddress as string).toLowerCase()
+  );
   /* ──────────────────────────────────────────────────────────────
    * FEE PREVIEW (Basebots pool)
    * ──────────────────────────────────────────────────────────── */
