@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 import { useAccount } from "wagmi";
 
-const OWNER_ADDRESS = "0xB37c91305F50e3CdB0D7a048a18d7536c9524f58" as `0x${string}`;
+const OWNER_ADDRESS =
+  "0xB37c91305F50e3CdB0D7a048a18d7536c9524f58" as `0x${string}`;
 
 export default function BasebotTokenCard() {
   const contract = "0xc45d7c40c9c65aF95d33da5921F787D5cFD3FFcf";
@@ -112,26 +113,36 @@ export default function BasebotTokenCard() {
             </div>
           </div>
 
-          {/* --- Creator / pool promo --- */}
-          <div className="mt-4 max-w-xl mx-auto rounded-2xl border border-dashed border-white/20 bg-white/5 px-4 py-3 text-xs md:text-sm text-white/75 flex flex-col gap-2">
-            <p>
-              Got your own NFT collection? Plug it into{" "}
-              <span className="font-semibold text-[#79ffe1]">Basebots Staking</span>{" "}
-              and stream rewards in your token. Set your duration, caps, and
-              creator fee — your pool, your rules.
-            </p>
-            <div className="flex flex-col sm:flex-row items-center gap-2 sm:justify-center">
-              <span className="text-[11px] uppercase tracking-wide text-white/60">
-                Introducing customizable staking pools.
-              </span>
-              <Link
-                href="/staking"
-                className="btn-pill !w-full sm:!w-auto !justify-center text-[12px]"
-              >
-                Start a staking pool ↗
-              </Link>
+          {/* --- Creator / pool promo (also owner-gated) --- */}
+          {isOwner ? (
+            <div className="mt-4 max-w-xl mx-auto rounded-2xl border border-dashed border-white/20 bg-white/5 px-4 py-3 text-xs md:text-sm text-white/75 flex flex-col gap-2">
+              <p>
+                Have your own NFT collection? Plug it into{" "}
+                <span className="font-semibold text-[#79ffe1]">
+                  Basebots Staking
+                </span>{" "}
+                and stream rewards in your token. Pick your duration, caps, and
+                creator fee — your pool, your rules.
+              </p>
+              <div className="flex flex-col sm:flex-row items-center gap-2 sm:justify-center">
+                <span className="text-[11px] uppercase tracking-wide text-white/60">
+                  Customizable staking pools are live.
+                </span>
+                <Link
+                  href="/staking"
+                  className="btn-pill !w-full sm:!w-auto !justify-center text-[12px]"
+                >
+                  Start a staking pool ↗
+                </Link>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="mt-4 max-w-xl mx-auto rounded-2xl border border-dashed border-white/10 bg-white/5/40 px-4 py-3 text-[11px] text-white/65">
+              Basebots staking pools and creator controls are managed from the
+              owner wallet. Connect the owner address to unlock pool
+              configuration.
+            </div>
+          )}
 
           {/* --- Pills --- */}
           <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-white/60 justify-center">
