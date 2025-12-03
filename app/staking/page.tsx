@@ -29,6 +29,12 @@ function nowSeconds() {
   return Math.floor(Date.now() / 1000);
 }
 
+function shortenAddress(addr?: string, chars = 4): string {
+  if (!addr) return "";
+  if (addr.length <= 2 + chars * 2) return addr;
+  return `${addr.slice(0, 2 + chars)}…${addr.slice(-chars)}`;
+}
+
 export default function StakingPage() {
   const { address } = useAccount();
   const [activeFilter, setActiveFilter] = useState<FilterTab>("all");
@@ -411,8 +417,11 @@ export default function StakingPage() {
   const successBtn =
     "w-full inline-flex items-center justify-center rounded-full bg-emerald-500/15 text-emerald-200 text-sm font-semibold py-2.5 border border-emerald-400/60 hover:bg-emerald-500/25 transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
 
+  const inputBase =
+    "mt-1 w-full max-w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-[13px] md:text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60";
+
   return (
-    <main className="min-h-[100svh] bg-deep text-white pb-16 page-layer">
+    <main className="min-h-[100svh] bg-deep text-white pb-16 page-layer overflow-x-hidden">
       <div className="container pt-6 px-5 stack space-y-6">
         {/* ───────────────── Introduction ───────────────── */}
         <section className="glass glass-pad relative overflow-hidden rounded-3xl">
@@ -429,13 +438,13 @@ export default function StakingPage() {
           <div className="relative grid gap-6 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] items-center">
             <div className="flex items-center gap-4">
               {/* BIGGER INTRO ICON */}
-              <div className="relative flex h-20 w-20 md:h-24 md:w-24 items-center justify-center rounded-[28px] bg-gradient-to-tr from-[#79ffe1] via-sky-500 to-indigo-500 shadow-[0_0_30px_rgba(121,255,225,0.7)]">
+              <div className="relative flex h-24 w-24 md:h-28 md:w-28 items-center justify-center rounded-[28px] bg-gradient-to-tr from-[#79ffe1] via-sky-500 to-indigo-500 shadow-[0_0_36px_rgba(121,255,225,0.8)]">
                 <div className="flex h-[86%] w-[86%] items-center justify-center rounded-[24px] bg-black/85">
                   <Image
                     src="/icon.png"
                     alt="Basebots"
-                    width={72}
-                    height={72}
+                    width={96}
+                    height={96}
                     className="object-contain"
                   />
                 </div>
@@ -473,7 +482,6 @@ export default function StakingPage() {
         </section>
 
         {/* ───────────────── Create Pool ───────────────── */}
-        {/* NOTE: removed overflow-hidden so inputs/focus rings are not clipped */}
         <section className="glass glass-pad bg-[#0f1320]/70 border border-white/10 rounded-3xl">
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-8">
             <div className="md:w-[32%] space-y-3">
@@ -518,10 +526,10 @@ export default function StakingPage() {
                     setCreateForm((f) => ({ ...f, nftAddress: e.target.value }))
                   }
                   placeholder="0x..."
-                  className="mt-1 w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60"
+                  className={inputBase}
                 />
-                <p className="mt-1 text-[11px] text-white/50 break-all font-mono">
-                  For Basebots, use: {BASEBOTS_NFT_ADDRESS}
+                <p className="mt-1 text-[11px] text-white/50 font-mono">
+                  For Basebots, use: {shortenAddress(BASEBOTS_NFT_ADDRESS, 4)}
                 </p>
               </label>
 
@@ -539,10 +547,10 @@ export default function StakingPage() {
                     }))
                   }
                   placeholder="0x..."
-                  className="mt-1 w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60"
+                  className={inputBase}
                 />
-                <p className="mt-1 text-[11px] text-white/50 break-all font-mono">
-                  Default: BOTS ({BOTS_TOKEN.address})
+                <p className="mt-1 text-[11px] text-white/50 font-mono">
+                  Default: BOTS ({shortenAddress(BOTS_TOKEN.address, 4)})
                 </p>
               </label>
 
@@ -561,7 +569,7 @@ export default function StakingPage() {
                       totalRewards: e.target.value,
                     }))
                   }
-                  className="mt-1 w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60"
+                  className={inputBase}
                 />
                 <p className="mt-1 text-[11px] text-white/50">
                   Total amount streamed to stakers over the pool duration.
@@ -583,7 +591,7 @@ export default function StakingPage() {
                       durationDays: e.target.value,
                     }))
                   }
-                  className="mt-1 w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60"
+                  className={inputBase}
                 />
               </label>
 
@@ -602,7 +610,7 @@ export default function StakingPage() {
                       startDelayHours: e.target.value,
                     }))
                   }
-                  className="mt-1 w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60"
+                  className={inputBase}
                 />
                 <p className="mt-1 text-[11px] text-white/50">
                   0 = start as soon as the transaction confirms.
@@ -624,7 +632,7 @@ export default function StakingPage() {
                       maxStaked: e.target.value,
                     }))
                   }
-                  className="mt-1 w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60"
+                  className={inputBase}
                 />
                 <p className="mt-1 text-[11px] text-white/50">
                   0 = unlimited participants.
@@ -647,7 +655,7 @@ export default function StakingPage() {
                       creatorFeePercent: e.target.value,
                     }))
                   }
-                  className="mt-1 w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60"
+                  className={inputBase}
                 />
                 <p className="mt-1 text-[11px] text-white/50">
                   Your cut of rewards (e.g. 2 = 2%) on top of the protocol fee.
@@ -762,13 +770,13 @@ export default function StakingPage() {
             <div className="relative flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
               <div className="flex items-center gap-3">
                 {/* BIGGER POOL ICON */}
-                <div className="relative flex h-16 w-16 md:h-20 md:w-20 items-center justify-center rounded-[26px] bg-gradient-to-tr from-[#79ffe1] via-sky-500 to-indigo-500 border border-[#79ffe1]/50 shadow-[0_0_28px_rgba(121,255,225,0.7)]">
+                <div className="relative flex h-20 w-20 md:h-24 md:w-24 items-center justify-center rounded-[26px] bg-gradient-to-tr from-[#79ffe1] via-sky-500 to-indigo-500 border border-[#79ffe1]/50 shadow-[0_0_32px_rgba(121,255,225,0.8)]">
                   <div className="flex h-[86%] w-[86%] items-center justify-center rounded-[22px] bg-black/85">
                     <Image
                       src="/icon.png"
                       alt="Basebots x BOTS"
-                      width={64}
-                      height={64}
+                      width={80}
+                      height={80}
                       className="object-contain"
                     />
                   </div>
@@ -859,7 +867,7 @@ export default function StakingPage() {
                         : "—"}
                     </span>
                   </div>
-                  <div className="border-top border-white/10 pt-3 space-y-1 text-xs text-white/70 border-t">
+                  <div className="border-t border-white/10 pt-3 space-y-1 text-xs text-white/70">
                     <div className="flex justify-between">
                       <span>Protocol fee ({protocolFeePercent}%):</span>
                       <span className="font-mono">
@@ -921,7 +929,7 @@ export default function StakingPage() {
                     value={stakeTokenId}
                     onChange={(e) => setStakeTokenId(e.target.value)}
                     placeholder="e.g. 123"
-                    className="mt-1 w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60"
+                    className={inputBase}
                   />
                 </label>
                 <button
@@ -943,7 +951,7 @@ export default function StakingPage() {
                     value={unstakeTokenId}
                     onChange={(e) => setUnstakeTokenId(e.target.value)}
                     placeholder="e.g. 123"
-                    className="mt-1 w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60"
+                    className={inputBase}
                   />
                 </label>
                 <button
