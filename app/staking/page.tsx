@@ -53,6 +53,13 @@ type TokenMeta = {
   decimals: number;
 };
 
+type PublicClientType = ReturnType<typeof usePublicClient>;
+
+type FundTarget = {
+  pool: `0x${string}`;
+  rewardToken: `0x${string}`;
+};
+
 // Minimal ERC-20 metadata ABI
 const ERC20_METADATA_ABI = [
   {
@@ -78,6 +85,20 @@ const ERC20_METADATA_ABI = [
   },
 ] as const;
 
+// Minimal ERC-20 transfer ABI
+const ERC20_TRANSFER_ABI = [
+  {
+    name: "transfer",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "to", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+  },
+] as const;
+
 function nowSeconds() {
   return Math.floor(Date.now() / 1000);
 }
@@ -98,11 +119,38 @@ function getAppUrl(path: string) {
   return `${origin}${path}`;
 }
 
+function getErrText(e: unknown): string {
+  if (e && typeof e === "object") {
+    const anyE = e as any;
+    if (typeof anyE.shortMessage === "string" && anyE.shortMessage.length > 0)
+      return anyE.shortMessage;
+    if (typeof anyE.message === "string" && anyE.message.length > 0)
+      return anyE.message;
+  }
+  if (typeof e === "string") return e;
+  try {
+    return JSON.stringify(e);
+  } catch {
+    return "Unknown error";
+  }
+}
+
+const primaryBtn =
+  "w-full inline-flex items-center justify-center rounded-full bg-[#79ffe1] text-slate-950 text-sm font-semibold py-2.5 shadow-[0_10px_30px_rgba(121,255,225,0.45)] hover:bg-[#a5fff0] transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
+const secondaryBtn =
+  "w-full inline-flex items-center justify-center rounded-full bg-white/5 text-white text-sm font-semibold py-2.5 border border-white/30 hover:bg-white/10 transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
+const successBtn =
+  "w-full inline-flex items-center justify-center rounded-full bg-emerald-500/15 text-emerald-200 text-sm font-semibold py-2.5 border border-emerald-400/60 hover:bg-emerald-500/25 transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
+
+const inputBase =
+  "mt-1 w-full max-w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-[13px] md:text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60";
+
 export default function StakingPage() {
   const { address } = useAccount();
   const publicClient = usePublicClient({ chainId: base.id });
 
   const [activeFilter, setActiveFilter] = useState<FilterTab>("all");
+  const [poolSearch, setPoolSearch] = useState("");
 
   /* ──────────────────────────────────────────────────────────────
    * READ FACTORY PROTOCOL FEE
@@ -177,7 +225,7 @@ export default function StakingPage() {
   }, [startTime, endTime, now]);
 
   /* ──────────────────────────────────────────────────────────────
-   * READ USER POSITION
+   * READ USER POSITION (Basebots featured pool)
    * ──────────────────────────────────────────────────────────── */
   const { data: userInfoRaw } = useReadContract({
     ...BASEBOTS_STAKING_POOL,
@@ -203,7 +251,7 @@ export default function StakingPage() {
     address.toLowerCase() === (creatorAddress as string).toLowerCase();
 
   /* ──────────────────────────────────────────────────────────────
-   * FEE PREVIEW
+   * FEE PREVIEW (Basebots pool)
    * ──────────────────────────────────────────────────────────── */
   const feePreview = useMemo(() => {
     if (pendingGross === 0n) {
@@ -236,7 +284,7 @@ export default function StakingPage() {
   }, [totalStaked, rewardRate, assumedStakeValuePerNft]);
 
   /* ──────────────────────────────────────────────────────────────
-   * STAKE / UNSTAKE / CLAIM
+   * STAKE / UNSTAKE / CLAIM (Basebots pool)
    * ──────────────────────────────────────────────────────────── */
   const [stakeTokenId, setStakeTokenId] = useState("");
   const [unstakeTokenId, setUnstakeTokenId] = useState("");
@@ -253,22 +301,6 @@ export default function StakingPage() {
     });
 
   const [txMessage, setTxMessage] = useState<string>("");
-
-  function getErrText(e: unknown): string {
-    if (e && typeof e === "object") {
-      const anyE = e as any;
-      if (typeof anyE.shortMessage === "string" && anyE.shortMessage.length > 0)
-        return anyE.shortMessage;
-      if (typeof anyE.message === "string" && anyE.message.length > 0)
-        return anyE.message;
-    }
-    if (typeof e === "string") return e;
-    try {
-      return JSON.stringify(e);
-    } catch {
-      return "Unknown error";
-    }
-  }
 
   async function handleStake() {
     try {
@@ -374,14 +406,19 @@ export default function StakingPage() {
     });
   const [createMsg, setCreateMsg] = useState<string>("");
 
-  // Track the last created pool address + config so UX can show “fund this pool”
-  const [lastCreatedPoolAddr, setLastCreatedPoolAddr] = useState<`0x${string}` | null>(null);
-  const [lastCreatedTotalRewards, setLastCreatedTotalRewards] = useState<string>("");
+  const [lastCreatedPoolAddr, setLastCreatedPoolAddr] =
+    useState<`0x${string}` | null>(null);
+  const [lastCreatedTotalRewards, setLastCreatedTotalRewards] =
+    useState<string>("");
+  const [lastCreatedRewardToken, setLastCreatedRewardToken] =
+    useState<`0x${string}` | null>(null);
 
   async function handleCreatePool(e: React.FormEvent) {
     e.preventDefault();
     try {
       setCreateMsg("");
+      setLastCreatedPoolAddr(null);
+      setLastCreatedRewardToken(null);
 
       if (!address) {
         setCreateMsg("Connect your wallet to create a pool.");
@@ -435,8 +472,8 @@ export default function StakingPage() {
       const takeFeeOnClaim = feeMode === "claim" || feeMode === "both";
       const takeFeeOnUnstake = feeMode === "unstake" || feeMode === "both";
 
-      // stash for UX text once mined
       setLastCreatedTotalRewards(totalRewards || "");
+      setLastCreatedRewardToken(rewardToken as `0x${string}`);
 
       await writeFactory({
         ...CONFIG_STAKING_FACTORY,
@@ -457,7 +494,9 @@ export default function StakingPage() {
         chainId: base.id,
       });
 
-      setCreateMsg("Pool creation transaction submitted. It will appear below once confirmed.");
+      setCreateMsg(
+        "Pool creation transaction submitted. It will appear below once confirmed.",
+      );
     } catch (err) {
       setCreateMsg(getErrText(err));
     }
@@ -469,9 +508,8 @@ export default function StakingPage() {
    * ──────────────────────────────────────────────────────────── */
   useEffect(() => {
     if (!publicClient || !createMined || !createTxHash) return;
+    const client = publicClient as NonNullable<PublicClientType>;
     let cancelled = false;
-
-    const client = publicClient as NonNullable<typeof publicClient>;
 
     async function run() {
       try {
@@ -507,7 +545,6 @@ export default function StakingPage() {
           }
         }
       } catch (e) {
-        // best-effort; if this fails, user can still see pool in list after refresh
         console.error("Failed to decode PoolCreated from tx receipt", e);
       }
     }
@@ -532,7 +569,7 @@ export default function StakingPage() {
 
   useEffect(() => {
     if (!publicClient) return;
-    const client = publicClient as NonNullable<typeof publicClient>;
+    const client = publicClient as NonNullable<PublicClientType>;
     let cancelled = false;
 
     async function loadPools() {
@@ -600,7 +637,7 @@ export default function StakingPage() {
       return;
     }
 
-    const client = publicClient as NonNullable<typeof publicClient>;
+    const client = publicClient as NonNullable<PublicClientType>;
     let cancelled = false;
 
     async function loadDetails() {
@@ -692,13 +729,11 @@ export default function StakingPage() {
 
   useEffect(() => {
     if (!publicClient || factoryPoolDetails.length === 0) return;
-    const client = publicClient as NonNullable<typeof publicClient>;
+    const client = publicClient as NonNullable<PublicClientType>;
     let cancelled = false;
 
     const uniqueRewards = Array.from(
-      new Set(
-        factoryPoolDetails.map((p) => p.rewardToken.toLowerCase()),
-      ),
+      new Set(factoryPoolDetails.map((p) => p.rewardToken.toLowerCase())),
     );
 
     const missing = uniqueRewards.filter((addr) => !tokenMeta[addr]);
@@ -768,12 +803,13 @@ export default function StakingPage() {
   }, [activeFilter, poolStatus, isMyStaked, isMyPool, myCreatedPools.length]);
 
   /* ──────────────────────────────────────────────────────────────
-   * FILTER LOGIC (for factory pool list) + keep Basebots at top
+   * FILTER + SEARCH LOGIC (for factory pool list)
+   * Keep Basebots at top
    * ──────────────────────────────────────────────────────────── */
   const filteredFactoryPools = useMemo(() => {
     if (factoryPoolDetails.length === 0) return [];
 
-    const filtered = factoryPoolDetails.filter((p) => {
+    const filteredByTab = factoryPoolDetails.filter((p) => {
       const status: "upcoming" | "live" | "closed" = (() => {
         if (p.startTime === 0) return "upcoming";
         if (now < p.startTime) return "upcoming";
@@ -796,7 +832,20 @@ export default function StakingPage() {
       return true;
     });
 
-    // Keep Basebots pool (by pool address) at top in list
+    const term = poolSearch.trim().toLowerCase();
+    const filtered = term
+      ? filteredByTab.filter((p) => {
+          const poolAddr = p.pool.toLowerCase();
+          const nftAddr = p.nft.toLowerCase();
+          const rewardAddr = p.rewardToken.toLowerCase();
+          return (
+            poolAddr.includes(term) ||
+            nftAddr.includes(term) ||
+            rewardAddr.includes(term)
+          );
+        })
+      : filteredByTab;
+
     const basebotsAddr = BASEBOTS_STAKING_POOL.address.toLowerCase();
     const basebots = filtered.filter(
       (p) => p.pool.toLowerCase() === basebotsAddr,
@@ -806,59 +855,33 @@ export default function StakingPage() {
     );
 
     return [...basebots, ...others];
-  }, [factoryPoolDetails, activeFilter, now, address]);
+  }, [
+    factoryPoolDetails,
+    activeFilter,
+    now,
+    address,
+    poolSearch,
+  ]);
 
   /* ──────────────────────────────────────────────────────────────
-   * SHARE HANDLERS (Farcaster / X) FOR CREATED POOLS
+   * FUND POOL MODAL STATE (frontend funding UX)
    * ──────────────────────────────────────────────────────────── */
-  function buildPoolShareText(pool: FactoryPoolDetails) {
-    const poolShort = shortenAddress(pool.pool, 4);
-    const nftShort = shortenAddress(pool.nft, 4);
-    const rewardShort = shortenAddress(pool.rewardToken, 4);
+  const [fundTarget, setFundTarget] = useState<FundTarget | null>(null);
+  const [fundModalOpen, setFundModalOpen] = useState(false);
 
-    return (
-      `I just launched an NFT staking pool on Base 🚀\n\n` +
-      `Pool: ${poolShort}\n` +
-      `NFT: ${nftShort}\n` +
-      `Reward token: ${rewardShort}\n\n` +
-      `Stake, earn rewards, and join the Basebots ecosystem.`
-    );
+  function openFundModalForPool(pool: { pool: `0x${string}`; rewardToken: `0x${string}` }) {
+    setFundTarget({ pool: pool.pool, rewardToken: pool.rewardToken });
+    setFundModalOpen(true);
   }
 
-  function handleShareX(pool: FactoryPoolDetails) {
-    const url = getAppUrl(`/staking?pool=${pool.pool}`);
-    const text = buildPoolShareText(pool);
-    const shareUrl = `https://x.com/intent/tweet?text=${encodeURIComponent(
-      text,
-    )}&url=${encodeURIComponent(url)}`;
-    if (typeof window !== "undefined") {
-      window.open(shareUrl, "_blank", "noopener,noreferrer");
-    }
+  function openFundModalForLastCreated() {
+    if (!lastCreatedPoolAddr || !lastCreatedRewardToken) return;
+    setFundTarget({
+      pool: lastCreatedPoolAddr,
+      rewardToken: lastCreatedRewardToken,
+    });
+    setFundModalOpen(true);
   }
-
-  function handleShareFarcaster(pool: FactoryPoolDetails) {
-    const url = getAppUrl(`/staking?pool=${pool.pool}`);
-    const text = buildPoolShareText(pool);
-    const shareUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(
-      text,
-    )}&embeds[]=${encodeURIComponent(url)}`;
-    if (typeof window !== "undefined") {
-      window.open(shareUrl, "_blank", "noopener,noreferrer");
-    }
-  }
-
-  /* ──────────────────────────────────────────────────────────────
-   * BUTTON + INPUT STYLES
-   * ──────────────────────────────────────────────────────────── */
-  const primaryBtn =
-    "w-full inline-flex items-center justify-center rounded-full bg-[#79ffe1] text-slate-950 text-sm font-semibold py-2.5 shadow-[0_10px_30px_rgba(121,255,225,0.45)] hover:bg-[#a5fff0] transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
-  const secondaryBtn =
-    "w-full inline-flex items-center justify-center rounded-full bg-white/5 text-white text-sm font-semibold py-2.5 border border-white/30 hover:bg-white/10 transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
-  const successBtn =
-    "w-full inline-flex items-center justify-center rounded-full bg-emerald-500/15 text-emerald-200 text-sm font-semibold py-2.5 border border-emerald-400/60 hover:bg-emerald-500/25 transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
-
-  const inputBase =
-    "mt-1 w-full max-w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-[13px] md:text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60";
 
   /* ──────────────────────────────────────────────────────────────
    * RENDER
@@ -1220,7 +1243,8 @@ export default function StakingPage() {
                       <p>
                         Next, send{" "}
                         <span className="font-semibold">
-                          {lastCreatedTotalRewards || createForm.totalRewards}{" "}
+                          {lastCreatedTotalRewards ||
+                            createForm.totalRewards}{" "}
                           tokens
                         </span>{" "}
                         of the selected reward token to this pool address on
@@ -1235,6 +1259,15 @@ export default function StakingPage() {
                         >
                           View pool on Basescan ↗
                         </Link>
+                        {lastCreatedRewardToken && (
+                          <button
+                            type="button"
+                            onClick={openFundModalForLastCreated}
+                            className="rounded-full border border-emerald-300/70 bg-emerald-500/20 px-3 py-1 text-[11px] font-semibold text-emerald-50 hover:bg-emerald-500/30"
+                          >
+                            Fund this pool now
+                          </button>
+                        )}
                       </div>
                     </>
                   ) : (
@@ -1251,7 +1284,7 @@ export default function StakingPage() {
         </section>
 
         {/* ───────────────── Filters ───────────────── */}
-        <section className="flex flex-wrap gap-2 justify-between items-center text-xs">
+        <section className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-xs">
           <div className="flex flex-wrap gap-2">
             {[
               { key: "all", label: "All pools" },
@@ -1274,6 +1307,15 @@ export default function StakingPage() {
                 {t.label}
               </button>
             ))}
+          </div>
+          <div className="w-full md:w-auto">
+            <input
+              type="text"
+              value={poolSearch}
+              onChange={(e) => setPoolSearch(e.target.value)}
+              placeholder="Search by pool / NFT / token address…"
+              className={inputBase + " text-xs md:text-[13px]"}
+            />
           </div>
         </section>
 
@@ -1554,9 +1596,7 @@ export default function StakingPage() {
           </div>
 
           {poolsError && (
-            <p className="text-xs text-rose-300 break-words">
-              {poolsError}
-            </p>
+            <p className="text-xs text-rose-300 break-words">{poolsError}</p>
           )}
 
           {factoryPools.length === 0 && !poolsLoading && !poolsError && (
@@ -1571,7 +1611,7 @@ export default function StakingPage() {
             !poolsLoading &&
             !poolsError && (
               <p className="text-xs text-white/60">
-                No pools match this filter yet.
+                No pools match this filter/search yet.
               </p>
             )}
 
@@ -1595,7 +1635,10 @@ export default function StakingPage() {
                 const rewardLower = pool.rewardToken.toLowerCase();
                 const meta = tokenMeta[rewardLower];
                 const rewardLabel = meta
-                  ? `${meta.symbol} (${shortenAddress(pool.rewardToken, 4)})`
+                  ? `${meta.symbol} (${shortenAddress(
+                      pool.rewardToken,
+                      4,
+                    )})`
                   : shortenAddress(pool.rewardToken, 4);
 
                 return (
@@ -1665,19 +1708,79 @@ export default function StakingPage() {
                         </Link>
                       )}
 
+                      {/* Fund button only for the creator */}
+                      {isCreator && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            openFundModalForPool({
+                              pool: pool.pool,
+                              rewardToken: pool.rewardToken,
+                            })
+                          }
+                          className="rounded-full border border-emerald-400/70 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-100 hover:bg-emerald-500/20"
+                        >
+                          Fund pool
+                        </button>
+                      )}
+
                       {/* Share buttons only for the creator */}
                       {isCreator && (
                         <>
                           <button
                             type="button"
-                            onClick={() => handleShareFarcaster(pool)}
+                            onClick={() => {
+                              const url = getAppUrl(`/staking?pool=${pool.pool}`);
+                              const text =
+                                `I just launched an NFT staking pool on Base 🚀\n\n` +
+                                `Pool: ${shortenAddress(pool.pool, 4)}\n` +
+                                `NFT: ${shortenAddress(pool.nft, 4)}\n` +
+                                `Reward token: ${shortenAddress(
+                                  pool.rewardToken,
+                                  4,
+                                )}\n\n` +
+                                `Stake, earn rewards, and join the Basebots ecosystem.`;
+                              const shareUrl =
+                                `https://warpcast.com/~/compose?text=${encodeURIComponent(
+                                  text,
+                                )}&embeds[]=${encodeURIComponent(url)}`;
+                              if (typeof window !== "undefined") {
+                                window.open(
+                                  shareUrl,
+                                  "_blank",
+                                  "noopener,noreferrer",
+                                );
+                              }
+                            }}
                             className="rounded-full border border-purple-400/60 bg-purple-500/10 px-3 py-1 text-[11px] font-semibold text-purple-100 hover:bg-purple-500/20"
                           >
                             Share on Farcaster
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleShareX(pool)}
+                            onClick={() => {
+                              const url = getAppUrl(`/staking?pool=${pool.pool}`);
+                              const text =
+                                `I just launched an NFT staking pool on Base 🚀\n\n` +
+                                `Pool: ${shortenAddress(pool.pool, 4)}\n` +
+                                `NFT: ${shortenAddress(pool.nft, 4)}\n` +
+                                `Reward token: ${shortenAddress(
+                                  pool.rewardToken,
+                                  4,
+                                )}\n\n` +
+                                `Stake, earn rewards, and join the Basebots ecosystem.`;
+                              const shareUrl =
+                                `https://x.com/intent/tweet?text=${encodeURIComponent(
+                                  text,
+                                )}&url=${encodeURIComponent(url)}`;
+                              if (typeof window !== "undefined") {
+                                window.open(
+                                  shareUrl,
+                                  "_blank",
+                                  "noopener,noreferrer",
+                                );
+                              }
+                            }}
                             className="rounded-full border border-sky-400/60 bg-sky-500/10 px-3 py-1 text-[11px] font-semibold text-sky-100 hover:bg-sky-500/20"
                           >
                             Share on X
@@ -1692,6 +1795,253 @@ export default function StakingPage() {
           )}
         </section>
       </div>
+
+      {/* ───────────────── Fund Pool Modal ───────────────── */}
+      <FundPoolModal
+        open={fundModalOpen}
+        onClose={() => setFundModalOpen(false)}
+        target={fundTarget}
+        publicClient={publicClient}
+        suggestedAmount={
+          lastCreatedPoolAddr && fundTarget?.pool === lastCreatedPoolAddr
+            ? lastCreatedTotalRewards || createForm.totalRewards
+            : undefined
+        }
+      />
     </main>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────
+ * FUND POOL MODAL COMPONENT
+ * ──────────────────────────────────────────────────────────── */
+type FundPoolModalProps = {
+  open: boolean;
+  onClose: () => void;
+  target: FundTarget | null;
+  publicClient: PublicClientType;
+  suggestedAmount?: string;
+};
+
+function FundPoolModal({
+  open,
+  onClose,
+  target,
+  publicClient,
+  suggestedAmount,
+}: FundPoolModalProps) {
+  const { address } = useAccount();
+  const [amount, setAmount] = useState("");
+  const [tokenMeta, setTokenMeta] = useState<TokenMeta | null>(null);
+  const [metaLoading, setMetaLoading] = useState(false);
+  const [metaErr, setMetaErr] = useState<string | null>(null);
+
+  const {
+    writeContract: writeFund,
+    data: fundTxHash,
+    error: fundErr,
+  } = useWriteContract();
+  const { isLoading: fundPending, isSuccess: fundMined } =
+    useWaitForTransactionReceipt({
+      hash: fundTxHash,
+      chainId: base.id,
+    });
+
+  const [fundMsg, setFundMsg] = useState("");
+
+  // Reset form when modal opens/closes
+  useEffect(() => {
+    if (open) {
+      setFundMsg("");
+      setMetaErr("");
+      setAmount(suggestedAmount || "");
+    }
+  }, [open, suggestedAmount]);
+
+  // Load token metadata for reward token
+  useEffect(() => {
+    if (!open || !target || !publicClient) return;
+    const client = publicClient as NonNullable<PublicClientType>;
+    let cancelled = false;
+
+    async function load() {
+      try {
+        setMetaLoading(true);
+        setMetaErr(null);
+        const [symbol, name, decimals] = await Promise.all([
+          client.readContract({
+            address: target.rewardToken,
+            abi: ERC20_METADATA_ABI,
+            functionName: "symbol",
+          }),
+          client.readContract({
+            address: target.rewardToken,
+            abi: ERC20_METADATA_ABI,
+            functionName: "name",
+          }),
+          client.readContract({
+            address: target.rewardToken,
+            abi: ERC20_METADATA_ABI,
+            functionName: "decimals",
+          }),
+        ]);
+
+        if (!cancelled) {
+          setTokenMeta({
+            symbol: (symbol as string) || "TOKEN",
+            name: (name as string) || "Token",
+            decimals: Number(decimals ?? 18),
+          });
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setMetaErr("Could not load token metadata; using 18 decimals.");
+          setTokenMeta({
+            symbol: "TOKEN",
+            name: "Token",
+            decimals: 18,
+          });
+        }
+      } finally {
+        if (!cancelled) {
+          setMetaLoading(false);
+        }
+      }
+    }
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, target, publicClient]);
+
+  async function handleFund() {
+    try {
+      setFundMsg("");
+      if (!target) {
+        setFundMsg("Missing pool info.");
+        return;
+      }
+      if (!address) {
+        setFundMsg("Connect your wallet to fund the pool.");
+        return;
+      }
+      const v = amount.trim();
+      if (!v) {
+        setFundMsg("Enter an amount to send.");
+        return;
+      }
+
+      const decimals = tokenMeta?.decimals ?? 18;
+      const amountWei = parseUnits(v, decimals);
+      if (amountWei <= 0n) {
+        setFundMsg("Amount must be greater than 0.");
+        return;
+      }
+
+      await writeFund({
+        address: target.rewardToken,
+        abi: ERC20_TRANSFER_ABI,
+        functionName: "transfer",
+        args: [target.pool, amountWei],
+        chainId: base.id,
+      });
+
+      setFundMsg("Funding transaction submitted. Confirm in your wallet.");
+    } catch (e) {
+      setFundMsg(getErrText(e));
+    }
+  }
+
+  if (!open || !target) return null;
+
+  const symbol = tokenMeta?.symbol ?? "TOKEN";
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="relative w-full max-w-md rounded-3xl border border-white/15 bg-[#050815] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.9)]">
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-3 top-3 text-xs text-white/50 hover:text-white"
+        >
+          ✕
+        </button>
+        <h2 className="text-sm font-semibold mb-1">Fund staking pool</h2>
+        <p className="text-[11px] text-white/60 mb-3">
+          Send reward tokens directly to the pool contract on Base. Rewards will
+          be streamed from that balance over time.
+        </p>
+
+        <div className="space-y-2 text-[11px] text-white/70 font-mono mb-3">
+          <div className="break-all">
+            Pool: <span className="text-white">{target.pool}</span>
+          </div>
+          <div className="break-all">
+            Reward token:{" "}
+            <span className="text-white">{target.rewardToken}</span>
+          </div>
+        </div>
+
+        <label className="block mb-3 text-sm">
+          <span className="text-xs uppercase tracking-wide text-white/60">
+            Amount to send ({symbol})
+          </span>
+          <input
+            type="number"
+            min="0"
+            step="0.000001"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder={suggestedAmount || "e.g. 1000"}
+            className={inputBase}
+          />
+          {metaLoading && (
+            <p className="mt-1 text-[11px] text-white/50">
+              Loading token info…
+            </p>
+          )}
+          {metaErr && (
+            <p className="mt-1 text-[11px] text-amber-200">{metaErr}</p>
+          )}
+        </label>
+
+        <button
+          type="button"
+          onClick={handleFund}
+          disabled={fundPending}
+          className={primaryBtn}
+        >
+          {fundPending ? "Sending…" : `Send ${symbol} to pool`}
+        </button>
+
+        <div className="mt-3 space-y-1 text-[11px] text-white/65">
+          {fundTxHash && (
+            <div>
+              Funding tx:{" "}
+              <Link
+                href={`https://basescan.org/tx/${fundTxHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#79ffe1] underline decoration-dotted underline-offset-4"
+              >
+                view on Basescan ↗
+              </Link>
+            </div>
+          )}
+          {fundMined && (
+            <div className="text-emerald-300">
+              Funding transaction confirmed ✔
+            </div>
+          )}
+          {(fundMsg || fundErr) && (
+            <div className="text-rose-300">
+              {fundMsg || getErrText(fundErr)}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
