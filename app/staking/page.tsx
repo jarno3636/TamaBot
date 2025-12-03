@@ -198,7 +198,6 @@ export default function StakingPage() {
     functionName: "takeFeeOnUnstake",
   });
 
-  // NOTE: make sure CONFIG_STAKING_POOL_ABI includes a `creator() view returns (address)`
   const { data: creatorAddress } = useReadContract({
     ...BASEBOTS_STAKING_POOL,
     functionName: "creator",
@@ -503,7 +502,6 @@ export default function StakingPage() {
 
   /* ──────────────────────────────────────────────────────────────
    * ONCE POOL TX MINED: DECODE PoolCreated FROM RECEIPT
-   * (to show exact pool address + funding instructions)
    * ──────────────────────────────────────────────────────────── */
   useEffect(() => {
     if (!publicClient || !createMined || !createTxHash) return;
@@ -583,7 +581,6 @@ export default function StakingPage() {
         const logs = await client.getLogs({
           address: CONFIG_STAKING_FACTORY.address as `0x${string}`,
           event: eventAbi,
-          // You can narrow this fromBlock if you know the deploy block
           fromBlock: 0n,
           toBlock: "latest",
         });
@@ -605,7 +602,6 @@ export default function StakingPage() {
               rewardToken: args.rewardToken,
             };
           })
-          // newest first
           .reverse();
 
         setFactoryPools(items);
@@ -1014,8 +1010,7 @@ export default function StakingPage() {
                   className={inputBase}
                 />
                 <p className="mt-1 text-[11px] text-white/50 font-mono">
-                  For Basebots, use:{" "}
-                  {shortenAddress(BASEBOTS_NFT.address, 4)}
+                  For Basebots, use: {shortenAddress(BASEBOTS_NFT.address, 4)}
                 </p>
               </label>
 
@@ -1846,7 +1841,7 @@ function FundPoolModal({
   useEffect(() => {
     if (open) {
       setFundMsg("");
-      setMetaErr("");
+      setMetaErr(null);
       setAmount(suggestedAmount || "");
     }
   }, [open, suggestedAmount]);
@@ -1855,6 +1850,8 @@ function FundPoolModal({
   useEffect(() => {
     if (!open || !target || !publicClient) return;
     const client = publicClient as NonNullable<PublicClientType>;
+    const currentTarget = target; // capture non-null target for async
+
     let cancelled = false;
 
     async function load() {
@@ -1863,17 +1860,17 @@ function FundPoolModal({
         setMetaErr(null);
         const [symbol, name, decimals] = await Promise.all([
           client.readContract({
-            address: target.rewardToken,
+            address: currentTarget.rewardToken,
             abi: ERC20_METADATA_ABI,
             functionName: "symbol",
           }),
           client.readContract({
-            address: target.rewardToken,
+            address: currentTarget.rewardToken,
             abi: ERC20_METADATA_ABI,
             functionName: "name",
           }),
           client.readContract({
-            address: target.rewardToken,
+            address: currentTarget.rewardToken,
             abi: ERC20_METADATA_ABI,
             functionName: "decimals",
           }),
