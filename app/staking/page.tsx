@@ -34,6 +34,13 @@ type FactoryPoolMeta = {
   rewardToken: `0x${string}`;
 };
 
+type FactoryPoolDetails = FactoryPoolMeta & {
+  startTime: number;
+  endTime: number;
+  totalStaked: bigint;
+  hasMyStake: boolean;
+};
+
 function nowSeconds() {
   return Math.floor(Date.now() / 1000);
 }
@@ -406,6 +413,9 @@ export default function StakingPage() {
    * FACTORY POOL DISCOVERY (PoolCreated logs)
    * ──────────────────────────────────────────────────────────── */
   const [factoryPools, setFactoryPools] = useState<FactoryPoolMeta[]>([]);
+  const [factoryPoolDetails, setFactoryPoolDetails] = useState<
+    FactoryPoolDetails[]
+  >([]);
   const [poolsLoading, setPoolsLoading] = useState(false);
   const [poolsError, setPoolsError] = useState<string | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
@@ -470,6 +480,92 @@ export default function StakingPage() {
     };
   }, [publicClient, refreshNonce]);
 
+  /* ──────────────────────────────────────────────────────────────
+   * FACTORY POOL DETAILS (status + my stake) via multicall
+   * ──────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    if (!publicClient || factoryPools.length === 0) {
+      setFactoryPoolDetails([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadDetails() {
+      try {
+        const contractsBase = factoryPools.map((p) => ({
+          address: p.pool,
+          abi: BASEBOTS_STAKING_POOL.abi,
+        })) as any[];
+
+        const [startRes, endRes, stakedRes, userRes] = await Promise.all([
+          publicClient.multicall({
+            contracts: contractsBase.map((c) => ({
+              ...c,
+              functionName: "startTime",
+            })),
+          }),
+          publicClient.multicall({
+            contracts: contractsBase.map((c) => ({
+              ...c,
+              functionName: "endTime",
+            })),
+          }),
+          publicClient.multicall({
+            contracts: contractsBase.map((c) => ({
+              ...c,
+              functionName: "totalStaked",
+            })),
+          }),
+          address
+            ? publicClient.multicall({
+                contracts: contractsBase.map((c) => ({
+                  ...c,
+                  functionName: "users",
+                  args: [address],
+                })),
+              })
+            : Promise.resolve(null),
+        ]);
+
+        if (cancelled) return;
+
+        const details: FactoryPoolDetails[] = factoryPools.map((p, i) => {
+          const st = (startRes as any)[i]?.result as bigint | undefined;
+          const et = (endRes as any)[i]?.result as bigint | undefined;
+          const ts = (stakedRes as any)[i]?.result as bigint | undefined;
+
+          let hasMyStake = false;
+          if (address && userRes) {
+            const u = (userRes as any)[i]?.result as any;
+            const amt = u?.amount as bigint | undefined;
+            hasMyStake = !!amt && amt > 0n;
+          }
+
+          return {
+            ...p,
+            startTime: st ? Number(st) : 0,
+            endTime: et ? Number(et) : 0,
+            totalStaked: ts ?? 0n,
+            hasMyStake,
+          };
+        });
+
+        setFactoryPoolDetails(details);
+      } catch (err) {
+        if (!cancelled) {
+          setPoolsError(getErrText(err));
+        }
+      }
+    }
+
+    void loadDetails();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [publicClient, factoryPools, address]);
+
   const myCreatedPools = useMemo(() => {
     if (!address) return [];
     return factoryPools.filter(
@@ -486,9 +582,39 @@ export default function StakingPage() {
     if (activeFilter === "closed") return poolStatus === "closed";
     if (activeFilter === "my-staked") return !!isMyStaked;
     if (activeFilter === "my-pools")
-      return !!isMyPool || (myCreatedPools.length > 0);
+      return !!isMyPool || myCreatedPools.length > 0;
     return true;
   }, [activeFilter, poolStatus, isMyStaked, isMyPool, myCreatedPools.length]);
+
+  /* ──────────────────────────────────────────────────────────────
+   * FILTER LOGIC (for factory pool list)
+   * ──────────────────────────────────────────────────────────── */
+  const filteredFactoryPools = useMemo(() => {
+    if (factoryPoolDetails.length === 0) return [];
+
+    return factoryPoolDetails.filter((p) => {
+      const status: "upcoming" | "live" | "closed" = (() => {
+        if (p.startTime === 0) return "upcoming";
+        if (now < p.startTime) return "upcoming";
+        if (p.endTime !== 0 && now > p.endTime) return "closed";
+        return "live";
+      })();
+
+      if (activeFilter === "all") return true;
+      if (activeFilter === "live") return status === "live";
+      if (activeFilter === "closed") return status === "closed";
+      if (activeFilter === "my-pools") {
+        return (
+          !!address &&
+          p.creator.toLowerCase() === (address as string).toLowerCase()
+        );
+      }
+      if (activeFilter === "my-staked") {
+        return p.hasMyStake;
+      }
+      return true;
+    });
+  }, [factoryPoolDetails, activeFilter, now, address]);
 
   /* ──────────────────────────────────────────────────────────────
    * BUTTON STYLES
@@ -1145,15 +1271,31 @@ export default function StakingPage() {
             </p>
           )}
 
-          {factoryPools.length > 0 && (
+          {factoryPools.length > 0 &&
+            filteredFactoryPools.length === 0 &&
+            !poolsLoading &&
+            !poolsError && (
+              <p className="text-xs text-white/60">
+                No pools match this filter yet.
+              </p>
+            )}
+
+          {filteredFactoryPools.length > 0 && (
             <div className="mt-1 grid gap-2 text-xs">
-              {factoryPools.map((pool) => {
+              {filteredFactoryPools.map((pool) => {
                 const isCreator =
                   address &&
                   pool.creator.toLowerCase() === address.toLowerCase();
                 const isBasebots =
                   pool.pool.toLowerCase() ===
                   (BASEBOTS_STAKING_POOL.address as `0x${string}`).toLowerCase();
+
+                const status: "upcoming" | "live" | "closed" = (() => {
+                  if (pool.startTime === 0) return "upcoming";
+                  if (now < pool.startTime) return "upcoming";
+                  if (pool.endTime !== 0 && now > pool.endTime) return "closed";
+                  return "live";
+                })();
 
                 return (
                   <div
@@ -1167,21 +1309,43 @@ export default function StakingPage() {
                             ? "Basebots x BOTS Pool"
                             : "Custom NFT staking pool"}
                         </span>
+                        <span
+                          className={[
+                            "px-2 py-[1px] rounded-full text-[10px] font-semibold border",
+                            status === "live"
+                              ? "border-emerald-400/70 bg-emerald-500/10 text-emerald-300"
+                              : status === "upcoming"
+                              ? "border-sky-400/70 bg-sky-500/10 text-sky-300"
+                              : "border-rose-400/70 bg-rose-500/10 text-rose-300",
+                          ].join(" ")}
+                        >
+                          {status === "live"
+                            ? "Live"
+                            : status === "upcoming"
+                            ? "Upcoming"
+                            : "Closed"}
+                        </span>
                         {isCreator && (
                           <span className="rounded-full border border-[#79ffe1]/70 bg-[#031c1b] px-2 py-[1px] text-[10px] font-semibold text-[#79ffe1]">
                             You created this
                           </span>
                         )}
+                        {pool.hasMyStake && (
+                          <span className="rounded-full border border-emerald-400/70 bg-emerald-500/10 px-2 py-[1px] text-[10px] font-semibold text-emerald-200">
+                            You&apos;re staked
+                          </span>
+                        )}
                       </div>
                       <div className="flex flex-wrap gap-3 text-[11px] text-white/65 font-mono">
-                        <span>
-                          Pool: {shortenAddress(pool.pool, 4)}
-                        </span>
-                        <span>
-                          NFT: {shortenAddress(pool.nft, 4)}
-                        </span>
+                        <span>Pool: {shortenAddress(pool.pool, 4)}</span>
+                        <span>NFT: {shortenAddress(pool.nft, 4)}</span>
                         <span>
                           Reward: {shortenAddress(pool.rewardToken, 4)}
+                        </span>
+                        <span>
+                          Staked:{" "}
+                          {pool.totalStaked.toString()}{" "}
+                          NFTs
                         </span>
                       </div>
                     </div>
