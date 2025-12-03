@@ -96,11 +96,41 @@ export const CONFIG_STAKING_FACTORY_ABI = [
     type: "function",
   },
 
-  { inputs: [], name: "maxTotalFeeBps", outputs: [{ internalType: "uint16", name: "" }], stateMutability: "view", type: "function" },
-  { inputs: [], name: "owner", outputs: [{ internalType: "address", name: "" }], stateMutability: "view", type: "function" },
-  { inputs: [], name: "poolImplementation", outputs: [{ internalType: "address", name: "" }], stateMutability: "view", type: "function" },
-  { inputs: [], name: "protocolFeeBps", outputs: [{ internalType: "uint16", name: "" }], stateMutability: "view", type: "function" },
-  { inputs: [], name: "protocolFeeRecipient", outputs: [{ internalType: "address", name: "" }], stateMutability: "view", type: "function" },
+  {
+    inputs: [],
+    name: "maxTotalFeeBps",
+    outputs: [{ internalType: "uint16", name: "", type: "uint16" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "owner",
+    outputs: [{ internalType: "address", name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "poolImplementation",
+    outputs: [{ internalType: "address", name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "protocolFeeBps",
+    outputs: [{ internalType: "uint16", name: "", type: "uint16" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "protocolFeeRecipient",
+    outputs: [{ internalType: "address", name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
 
   {
     inputs: [
@@ -114,8 +144,20 @@ export const CONFIG_STAKING_FACTORY_ABI = [
     type: "function",
   },
 
-  { inputs: [], name: "renounceOwnership", outputs: [], stateMutability: "nonpayable", type: "function" },
-  { inputs: [{ internalType: "address", name: "newOwner" }], name: "transferOwnership", outputs: [], stateMutability: "nonpayable", type: "function" },
+  {
+    inputs: [],
+    name: "renounceOwnership",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "address", name: "newOwner", type: "address" }],
+    name: "transferOwnership",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
 ] as const satisfies Abi;
 
 /* ========================================================================== */
@@ -167,39 +209,105 @@ export const CONFIG_STAKING_POOL_ABI = [
   },
 
   // --- Views ---
-  { inputs: [], name: "protocolFeeBps", outputs: [{ internalType: "uint16", name: "" }], stateMutability: "view", type: "function" },
-  { inputs: [], name: "creatorFeeBps", outputs: [{ internalType: "uint16", name: "" }], stateMutability: "view", type: "function" },
-  { inputs: [], name: "rewardRate", outputs: [{ internalType: "uint256", name: "" }], stateMutability: "view", type: "function" },
-  { inputs: [], name: "startTime", outputs: [{ internalType: "uint64", name: "" }], stateMutability: "view", type: "function" },
-  { inputs: [], name: "endTime", outputs: [{ internalType: "uint64", name: "" }], stateMutability: "view", type: "function" },
-  { inputs: [], name: "totalStaked", outputs: [{ internalType: "uint256", name: "" }], stateMutability: "view", type: "function" },
-  { inputs: [], name: "takeFeeOnClaim", outputs: [{ internalType: "bool", name: "" }], stateMutability: "view", type: "function" },
-  { inputs: [], name: "takeFeeOnUnstake", outputs: [{ internalType: "bool", name: "" }], stateMutability: "view", type: "function" },
-
   {
-    inputs: [{ internalType: "address", name: "userAddr", type: "address" }],
-    name: "pendingRewards",
-    outputs: [{ internalType: "uint256", name: "pendingGross" }],
+    inputs: [],
+    name: "protocolFeeBps",
+    outputs: [{ internalType: "uint16", name: "", type: "uint16" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "creatorFeeBps",
+    outputs: [{ internalType: "uint16", name: "", type: "uint16" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "rewardRate",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "startTime",
+    outputs: [{ internalType: "uint64", name: "", type: "uint64" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "endTime",
+    outputs: [{ internalType: "uint64", name: "", type: "uint64" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "totalStaked",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "takeFeeOnClaim",
+    outputs: [{ internalType: "bool", name: "", type: "bool" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "takeFeeOnUnstake",
+    outputs: [{ internalType: "bool", name: "", type: "bool" }],
     stateMutability: "view",
     type: "function",
   },
 
   {
-    inputs: [{ internalType: "address", name: "" }],
+    inputs: [{ internalType: "address", name: "userAddr", type: "address" }],
+    name: "pendingRewards",
+    outputs: [{ internalType: "uint256", name: "pendingGross", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+
+  {
+    inputs: [{ internalType: "address", name: "", type: "address" }],
     name: "users",
     outputs: [
-      { internalType: "uint256", name: "amount" },
-      { internalType: "uint256", name: "rewardDebt" },
-      { internalType: "uint256", name: "pending" },
+      { internalType: "uint256", name: "amount", type: "uint256" },
+      { internalType: "uint256", name: "rewardDebt", type: "uint256" },
+      { internalType: "uint256", name: "pending", type: "uint256" },
     ],
     stateMutability: "view",
     type: "function",
   },
 
   // --- Actions ---
-  { inputs: [], name: "claim", outputs: [], stateMutability: "nonpayable", type: "function" },
-  { inputs: [{ internalType: "uint256", name: "tokenId" }], name: "stake", outputs: [], stateMutability: "nonpayable", type: "function" },
-  { inputs: [{ internalType: "uint256", name: "tokenId" }], name: "unstake", outputs: [], stateMutability: "nonpayable", type: "function" },
+  {
+    inputs: [],
+    name: "claim",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "uint256", name: "tokenId", type: "uint256" }],
+    name: "stake",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "uint256", name: "tokenId", type: "uint256" }],
+    name: "unstake",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
 ] as const satisfies Abi;
 
 /* ========================================================================== */
