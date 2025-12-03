@@ -12,8 +12,7 @@ export default function BasebotTokenCard() {
   const { address } = useAccount();
 
   const isOwner =
-    address &&
-    address.toLowerCase() === OWNER_ADDRESS.toLowerCase();
+    address && address.toLowerCase() === OWNER_ADDRESS.toLowerCase();
 
   const copyAddress = () => {
     navigator.clipboard.writeText(contract);
@@ -24,8 +23,7 @@ export default function BasebotTokenCard() {
   return (
     <section className="glass glass-pad bg-[#020617]/80 border border-white/10">
       <div className="flex flex-col items-center gap-6 text-center">
-
-        {/* --- Token image (top, spinning, slightly smaller) --- */}
+        {/* --- Token image (top, spinning) --- */}
         <div className="relative w-32 h-32 md:w-40 md:h-40 rounded-full overflow-hidden border border-white/10 shadow-lg bg-[#020617] flex items-center justify-center">
           <img
             src="/token_icon.png"
@@ -111,6 +109,27 @@ export default function BasebotTokenCard() {
                   ? "Owner-only: configure staking pools"
                   : "Connect owner wallet to manage staking"}
               </span>
+            </div>
+          </div>
+
+          {/* --- Creator / pool promo --- */}
+          <div className="mt-4 max-w-xl mx-auto rounded-2xl border border-dashed border-white/20 bg-white/5 px-4 py-3 text-xs md:text-sm text-white/75 flex flex-col gap-2">
+            <p>
+              Got your own NFT collection? Plug it into{" "}
+              <span className="font-semibold text-[#79ffe1]">Basebots Staking</span>{" "}
+              and stream rewards in your token. Set your duration, caps, and
+              creator fee — your pool, your rules.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center gap-2 sm:justify-center">
+              <span className="text-[11px] uppercase tracking-wide text-white/60">
+                Introducing customizable staking pools.
+              </span>
+              <Link
+                href="/staking"
+                className="btn-pill !w-full sm:!w-auto !justify-center text-[12px]"
+              >
+                Start a staking pool ↗
+              </Link>
             </div>
           </div>
 
