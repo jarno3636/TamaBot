@@ -51,6 +51,16 @@ function shortenAddress(addr?: string, chars = 4): string {
   return `${addr.slice(0, 2 + chars)}…${addr.slice(-chars)}`;
 }
 
+// Helper to build app URL both on client and during build
+function getAppUrl(path: string) {
+  if (typeof window !== "undefined") {
+    return `${window.location.origin}${path}`;
+  }
+  const origin = (process.env.NEXT_PUBLIC_URL ?? "").replace(/\/$/, "");
+  if (!origin) return path;
+  return `${origin}${path}`;
+}
+
 export default function StakingPage() {
   const { address } = useAccount();
   const publicClient = usePublicClient({ chainId: base.id });
@@ -411,6 +421,7 @@ export default function StakingPage() {
 
   /* ──────────────────────────────────────────────────────────────
    * FACTORY POOL DISCOVERY (PoolCreated logs)
+   *  (TS FIX: guard publicClient with local const)
    * ──────────────────────────────────────────────────────────── */
   const [factoryPools, setFactoryPools] = useState<FactoryPoolMeta[]>([]);
   const [factoryPoolDetails, setFactoryPoolDetails] = useState<
@@ -421,7 +432,8 @@ export default function StakingPage() {
   const [refreshNonce, setRefreshNonce] = useState(0);
 
   useEffect(() => {
-    if (!publicClient) return;
+    const client = publicClient;
+    if (!client) return;
     let cancelled = false;
 
     async function loadPools() {
@@ -433,7 +445,7 @@ export default function StakingPage() {
           "event PoolCreated(address indexed pool,address indexed creator,address indexed nft,address rewardToken)"
         );
 
-        const logs = await publicClient.getLogs({
+        const logs = await client.getLogs({
           address: CONFIG_STAKING_FACTORY.address as `0x${string}`,
           event: eventAbi,
           // You can narrow this fromBlock if you know the deploy block
@@ -482,9 +494,11 @@ export default function StakingPage() {
 
   /* ──────────────────────────────────────────────────────────────
    * FACTORY POOL DETAILS (status + my stake) via multicall
+   *  (TS FIX: guard publicClient with local const)
    * ──────────────────────────────────────────────────────────── */
   useEffect(() => {
-    if (!publicClient || factoryPools.length === 0) {
+    const client = publicClient;
+    if (!client || factoryPools.length === 0) {
       setFactoryPoolDetails([]);
       return;
     }
@@ -499,26 +513,26 @@ export default function StakingPage() {
         })) as any[];
 
         const [startRes, endRes, stakedRes, userRes] = await Promise.all([
-          publicClient.multicall({
+          client.multicall({
             contracts: contractsBase.map((c) => ({
               ...c,
               functionName: "startTime",
             })),
           }),
-          publicClient.multicall({
+          client.multicall({
             contracts: contractsBase.map((c) => ({
               ...c,
               functionName: "endTime",
             })),
           }),
-          publicClient.multicall({
+          client.multicall({
             contracts: contractsBase.map((c) => ({
               ...c,
               functionName: "totalStaked",
             })),
           }),
           address
-            ? publicClient.multicall({
+            ? client.multicall({
                 contracts: contractsBase.map((c) => ({
                   ...c,
                   functionName: "users",
@@ -615,6 +629,45 @@ export default function StakingPage() {
       return true;
     });
   }, [factoryPoolDetails, activeFilter, now, address]);
+
+  /* ──────────────────────────────────────────────────────────────
+   * SHARE HANDLERS (Farcaster / X) FOR CREATED POOLS
+   * ──────────────────────────────────────────────────────────── */
+  function buildPoolShareText(pool: FactoryPoolDetails) {
+    const poolShort = shortenAddress(pool.pool, 4);
+    const nftShort = shortenAddress(pool.nft, 4);
+    const rewardShort = shortenAddress(pool.rewardToken, 4);
+
+    return (
+      `I just launched an NFT staking pool on Base 🚀\n\n` +
+      `Pool: ${poolShort}\n` +
+      `NFT: ${nftShort}\n` +
+      `Reward token: ${rewardShort}\n\n` +
+      `Stake, earn rewards, and join the Basebots ecosystem.`
+    );
+  }
+
+  function handleShareX(pool: FactoryPoolDetails) {
+    const url = getAppUrl(`/staking?pool=${pool.pool}`);
+    const text = buildPoolShareText(pool);
+    const shareUrl = `https://x.com/intent/tweet?text=${encodeURIComponent(
+      text,
+    )}&url=${encodeURIComponent(url)}`;
+    if (typeof window !== "undefined") {
+      window.open(shareUrl, "_blank", "noopener,noreferrer");
+    }
+  }
+
+  function handleShareFarcaster(pool: FactoryPoolDetails) {
+    const url = getAppUrl(`/staking?pool=${pool.pool}`);
+    const text = buildPoolShareText(pool);
+    const shareUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(
+      text,
+    )}&embeds[]=${encodeURIComponent(url)}`;
+    if (typeof window !== "undefined") {
+      window.open(shareUrl, "_blank", "noopener,noreferrer");
+    }
+  }
 
   /* ──────────────────────────────────────────────────────────────
    * BUTTON STYLES
@@ -1343,9 +1396,7 @@ export default function StakingPage() {
                           Reward: {shortenAddress(pool.rewardToken, 4)}
                         </span>
                         <span>
-                          Staked:{" "}
-                          {pool.totalStaked.toString()}{" "}
-                          NFTs
+                          Staked: {pool.totalStaked.toString()} NFTs
                         </span>
                       </div>
                     </div>
@@ -1366,6 +1417,26 @@ export default function StakingPage() {
                         >
                           Open in app
                         </Link>
+                      )}
+
+                      {/* Share buttons only for the creator */}
+                      {isCreator && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleShareFarcaster(pool)}
+                            className="rounded-full border border-purple-400/60 bg-purple-500/10 px-3 py-1 text-[11px] font-semibold text-purple-100 hover:bg-purple-500/20"
+                          >
+                            Share on Farcaster
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleShareX(pool)}
+                            className="rounded-full border border-sky-400/60 bg-sky-500/10 px-3 py-1 text-[11px] font-semibold text-sky-100 hover:bg-sky-500/20"
+                          >
+                            Share on X
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
