@@ -20,7 +20,7 @@ import {
   BOTS_TOKEN,
 } from "@/lib/stakingContracts";
 
-// If you have this already somewhere, you can remove this local copy
+// Basebots collection (ERC-721 on Base)
 const BASEBOTS_NFT_ADDRESS =
   "0x92E29025fd6bAdD17c3005084fe8C43D928222B4" as `0x${string}`;
 
@@ -51,7 +51,7 @@ function shortenAddress(addr?: string, chars = 4): string {
   return `${addr.slice(0, 2 + chars)}…${addr.slice(-chars)}`;
 }
 
-// Helper to build app URL both on client and during build
+// Build app URL both on client and during build
 function getAppUrl(path: string) {
   if (typeof window !== "undefined") {
     return `${window.location.origin}${path}`;
@@ -79,7 +79,7 @@ export default function StakingPage() {
   const protocolFeePercent = protocolFeeBps / 100;
 
   /* ──────────────────────────────────────────────────────────────
-   * READ BASEBOTS POOL CORE STATE
+   * READ FEATURED BASEBOTS POOL CORE STATE
    * ──────────────────────────────────────────────────────────── */
   const { data: startTimeRaw } = useReadContract({
     ...BASEBOTS_STAKING_POOL,
@@ -140,7 +140,7 @@ export default function StakingPage() {
   }, [startTime, endTime, now]);
 
   /* ──────────────────────────────────────────────────────────────
-   * READ USER POSITION
+   * READ USER POSITION ON FEATURED POOL
    * ──────────────────────────────────────────────────────────── */
   const { data: userInfoRaw } = useReadContract({
     ...BASEBOTS_STAKING_POOL,
@@ -187,7 +187,7 @@ export default function StakingPage() {
   /* ──────────────────────────────────────────────────────────────
    * APR ESTIMATE
    * ──────────────────────────────────────────────────────────── */
-  const assumedStakeValuePerNft = parseUnits("0.01", BOTS_TOKEN.decimals); // example value
+  const assumedStakeValuePerNft = parseUnits("0.01", BOTS_TOKEN.decimals); // example only
 
   const aprPercent = useMemo(() => {
     if (totalStaked === 0n || rewardRate === 0n) return 0;
@@ -252,7 +252,7 @@ export default function StakingPage() {
         args: [tokenId],
         chainId: base.id,
       });
-      setTxMessage("Transaction submitted. Confirm in your wallet.");
+      setTxMessage("Stake transaction submitted. Confirm in your wallet.");
     } catch (e) {
       setTxMessage(getErrText(e));
     }
@@ -277,7 +277,7 @@ export default function StakingPage() {
         args: [tokenId],
         chainId: base.id,
       });
-      setTxMessage("Unstake transaction submitted.");
+      setTxMessage("Unstake transaction submitted. Confirm in your wallet.");
     } catch (e) {
       setTxMessage(getErrText(e));
     }
@@ -296,7 +296,7 @@ export default function StakingPage() {
         args: [],
         chainId: base.id,
       });
-      setTxMessage("Claim transaction submitted.");
+      setTxMessage("Claim transaction submitted. Confirm in your wallet.");
     } catch (e) {
       setTxMessage(getErrText(e));
     }
@@ -312,7 +312,7 @@ export default function StakingPage() {
     durationDays: string;
     startDelayHours: string;
     maxStaked: string;
-    creatorFeePercent: string; // whole-number percent in the UI
+    creatorFeePercent: string; // whole-number percent
     feeMode: FeeMode;
   }>({
     nftAddress: "",
@@ -365,7 +365,7 @@ export default function StakingPage() {
 
       const totalRewardsWei = parseUnits(
         totalRewards || "0",
-        BOTS_TOKEN.decimals,
+        BOTS_TOKEN.decimals, // assumes 18-dec reward tokens; best for BOTS / similar
       );
       const durationSec = BigInt(Number(durationDays || "0") * 24 * 60 * 60);
       if (durationSec === 0n) {
@@ -391,8 +391,9 @@ export default function StakingPage() {
       }
       const creatorFeeBpsNum = Math.round(creatorFeePercentNum * 100);
 
-      const takeFeeOnClaim = feeMode === "claim" || feeMode === "both";
-      const takeFeeOnUnstake = feeMode === "unstake" || feeMode === "both";
+      const takeFeeOnClaimFlag = feeMode === "claim" || feeMode === "both";
+      const takeFeeOnUnstakeFlag =
+        feeMode === "unstake" || feeMode === "both";
 
       await writeFactory({
         ...CONFIG_STAKING_FACTORY,
@@ -406,14 +407,16 @@ export default function StakingPage() {
             endTime,
             maxStaked: maxStakedBig,
             creatorFeeBps: creatorFeeBpsNum,
-            takeFeeOnClaim,
-            takeFeeOnUnstake,
+            takeFeeOnClaim: takeFeeOnClaimFlag,
+            takeFeeOnUnstake: takeFeeOnUnstakeFlag,
           },
         ],
         chainId: base.id,
       });
 
-      setCreateMsg("Pool creation transaction submitted.");
+      setCreateMsg(
+        "Pool creation transaction sent. Once it confirms, your pool will appear in the list below.",
+      );
     } catch (err) {
       setCreateMsg(getErrText(err));
     }
@@ -421,7 +424,7 @@ export default function StakingPage() {
 
   /* ──────────────────────────────────────────────────────────────
    * FACTORY POOL DISCOVERY (PoolCreated logs)
-   *  (TS FIX: guard publicClient with local const)
+   *  TS-SAFE: early return if !publicClient, then use narrowed value
    * ──────────────────────────────────────────────────────────── */
   const [factoryPools, setFactoryPools] = useState<FactoryPoolMeta[]>([]);
   const [factoryPoolDetails, setFactoryPoolDetails] = useState<
@@ -432,8 +435,7 @@ export default function StakingPage() {
   const [refreshNonce, setRefreshNonce] = useState(0);
 
   useEffect(() => {
-    const client = publicClient;
-    if (!client) return;
+    if (!publicClient) return; // TS: everything below has non-nullable publicClient
     let cancelled = false;
 
     async function loadPools() {
@@ -442,13 +444,13 @@ export default function StakingPage() {
         setPoolsError(null);
 
         const eventAbi = parseAbiItem(
-          "event PoolCreated(address indexed pool,address indexed creator,address indexed nft,address rewardToken)"
+          "event PoolCreated(address indexed pool,address indexed creator,address indexed nft,address rewardToken)",
         );
 
-        const logs = await client.getLogs({
+        const logs = await publicClient.getLogs({
           address: CONFIG_STAKING_FACTORY.address as `0x${string}`,
           event: eventAbi,
-          // You can narrow this fromBlock if you know the deploy block
+          // if you know the deploy block, you can start from there instead of 0
           fromBlock: 0n,
           toBlock: "latest",
         });
@@ -494,11 +496,10 @@ export default function StakingPage() {
 
   /* ──────────────────────────────────────────────────────────────
    * FACTORY POOL DETAILS (status + my stake) via multicall
-   *  (TS FIX: guard publicClient with local const)
+   *  TS-SAFE: early return if !publicClient
    * ──────────────────────────────────────────────────────────── */
   useEffect(() => {
-    const client = publicClient;
-    if (!client || factoryPools.length === 0) {
+    if (!publicClient || factoryPools.length === 0) {
       setFactoryPoolDetails([]);
       return;
     }
@@ -513,26 +514,26 @@ export default function StakingPage() {
         })) as any[];
 
         const [startRes, endRes, stakedRes, userRes] = await Promise.all([
-          client.multicall({
+          publicClient.multicall({
             contracts: contractsBase.map((c) => ({
               ...c,
               functionName: "startTime",
             })),
           }),
-          client.multicall({
+          publicClient.multicall({
             contracts: contractsBase.map((c) => ({
               ...c,
               functionName: "endTime",
             })),
           }),
-          client.multicall({
+          publicClient.multicall({
             contracts: contractsBase.map((c) => ({
               ...c,
               functionName: "totalStaked",
             })),
           }),
           address
-            ? client.multicall({
+            ? publicClient.multicall({
                 contracts: contractsBase.map((c) => ({
                   ...c,
                   functionName: "users",
@@ -588,7 +589,7 @@ export default function StakingPage() {
   }, [factoryPools, address]);
 
   /* ──────────────────────────────────────────────────────────────
-   * FILTER LOGIC (for featured Basebots pool)
+   * FILTER LOGIC (featured Basebots pool)
    * ──────────────────────────────────────────────────────────── */
   const poolVisible = useMemo(() => {
     if (activeFilter === "all") return true;
@@ -601,7 +602,7 @@ export default function StakingPage() {
   }, [activeFilter, poolStatus, isMyStaked, isMyPool, myCreatedPools.length]);
 
   /* ──────────────────────────────────────────────────────────────
-   * FILTER LOGIC (for factory pool list)
+   * FILTER LOGIC (factory pool list)
    * ──────────────────────────────────────────────────────────── */
   const filteredFactoryPools = useMemo(() => {
     if (factoryPoolDetails.length === 0) return [];
@@ -631,7 +632,7 @@ export default function StakingPage() {
   }, [factoryPoolDetails, activeFilter, now, address]);
 
   /* ──────────────────────────────────────────────────────────────
-   * SHARE HANDLERS (Farcaster / X) FOR CREATED POOLS
+   * SHARE HANDLERS FOR CREATED POOLS
    * ──────────────────────────────────────────────────────────── */
   function buildPoolShareText(pool: FactoryPoolDetails) {
     const poolShort = shortenAddress(pool.pool, 4);
@@ -670,7 +671,7 @@ export default function StakingPage() {
   }
 
   /* ──────────────────────────────────────────────────────────────
-   * BUTTON STYLES
+   * STYLES
    * ──────────────────────────────────────────────────────────── */
   const primaryBtn =
     "w-full inline-flex items-center justify-center rounded-full bg-[#79ffe1] text-slate-950 text-sm font-semibold py-2.5 shadow-[0_10px_30px_rgba(121,255,225,0.45)] hover:bg-[#a5fff0] transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
@@ -688,7 +689,7 @@ export default function StakingPage() {
   return (
     <main className="min-h-[100svh] bg-deep text-white pb-16 page-layer overflow-x-hidden">
       <div className="container pt-6 px-5 stack space-y-6">
-        {/* ───────────────── Introduction ───────────────── */}
+        {/* ───────────────── Intro ───────────────── */}
         <section className="glass glass-pad relative overflow-hidden rounded-3xl">
           <div
             aria-hidden
@@ -702,7 +703,6 @@ export default function StakingPage() {
           />
           <div className="relative grid gap-6 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] items-center">
             <div className="flex items-center gap-4">
-              {/* BIGGER INTRO ICON */}
               <div className="relative flex h-24 w-24 md:h-28 md:w-28 items-center justify-center rounded-[28px] bg-gradient-to-tr from-[#79ffe1] via-sky-500 to-indigo-500 shadow-[0_0_36px_rgba(121,255,225,0.8)]">
                 <div className="flex h-[86%] w-[86%] items-center justify-center rounded-[24px] bg-black/85">
                   <Image
@@ -719,31 +719,37 @@ export default function StakingPage() {
                   NFT Staking Pools
                 </h1>
                 <p className="mt-1 text-white/80 text-sm md:text-base max-w-md">
-                  Stake NFTs and stream rewards in any ERC-20 on Base. You
-                  configure timing, caps, and your creator fee.
+                  Stake NFTs and stream rewards in any ERC-20 on Base. Configure
+                  timing, caps, and creator fee — all on-chain.
                 </p>
               </div>
             </div>
 
-            <div className="mt-2 md:mt-0 text-sm text-white/75 max-w-xl">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-white/60 mb-2">
+            <div className="mt-2 md:mt-0 text-sm text-white/75 max-w-xl space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-white/60">
                 How it works
               </h3>
               <ul className="space-y-1.5">
-                <li>• Choose an NFT collection and reward token.</li>
-                <li>• Set total rewards, duration, and max stakers.</li>
+                <li>• Choose an ERC-721 collection on Base.</li>
+                <li>• Choose an ERC-20 reward token on Base (BOTS by default).</li>
+                <li>• Set total rewards, duration, and optional max stakers.</li>
                 <li>• Add your creator fee on top of the protocol fee.</li>
-                <li>
-                  • Rewards stream over time and can be claimed or taken on
-                  unstake.
-                </li>
+                <li>• Rewards stream over time and can be claimed or on unstake.</li>
               </ul>
-              <p className="mt-3 text-[11px] text-white/60">
+              <p className="mt-1 text-[11px] text-white/60">
                 Protocol fee is currently{" "}
                 <span className="font-semibold text-[#79ffe1]">
                   {protocolFeePercent}%
                 </span>{" "}
                 of earned rewards and routes back to the BOTS rewards pot.
+              </p>
+              <p className="text-[11px] text-amber-200/90">
+                Note: the factory does{" "}
+                <span className="underline decoration-dotted underline-offset-2">
+                  not pull reward tokens for you
+                </span>
+                . After creating a pool, you usually fund it by sending the
+                reward tokens to the pool contract address.
               </p>
             </div>
           </div>
@@ -755,8 +761,8 @@ export default function StakingPage() {
             <div className="md:w-[32%] space-y-3">
               <h2 className="text-xl md:text-2xl font-bold">Create your pool</h2>
               <p className="text-sm text-white/80">
-                Launch a staking pool for any NFT collection on Base and reward
-                stakers with any ERC-20 (like BOTS).
+                Launch a staking pool for any ERC-721 collection on Base and
+                reward stakers with any ERC-20 (BOTS by default).
               </p>
               <div className="rounded-2xl border border-white/15 bg-black/40 p-3 text-xs text-white/70 space-y-1">
                 <div className="flex items-center justify-between gap-2">
@@ -774,6 +780,28 @@ export default function StakingPage() {
                 <p className="text-[11px] text-white/55 pt-1">
                   Creator fee is charged on top of the protocol fee.
                 </p>
+                <p className="text-[11px] text-white/55 pt-1">
+                  Optimized for{" "}
+                  <span className="font-semibold text-[#79ffe1]">$BOTS</span> as
+                  the reward token (18-decimals). Other 18-dec tokens also work,
+                  but all math assumes 18 decimals.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-3 text-[11px] text-amber-100 space-y-1">
+                <p className="font-semibold">
+                  After your pool confirms on-chain:
+                </p>
+                <ul className="list-disc list-inside space-y-0.5">
+                  <li>Refresh pools below to see it in the list.</li>
+                  <li>
+                    Fund the pool by sending your reward tokens to the pool
+                    contract address.
+                  </li>
+                  <li>
+                    Share the staking page link with your community so they can
+                    join.
+                  </li>
+                </ul>
               </div>
             </div>
 
@@ -783,7 +811,7 @@ export default function StakingPage() {
             >
               <label className="block col-span-2">
                 <span className="text-xs uppercase tracking-wide text-white/60">
-                  NFT collection (ERC-721)
+                  NFT collection (ERC-721 on Base)
                 </span>
                 <input
                   type="text"
@@ -794,14 +822,14 @@ export default function StakingPage() {
                   placeholder="0x..."
                   className={inputBase}
                 />
-                <p className="mt-1 text-[11px] text-white/50 font-mono">
-                  For Basebots, use: {shortenAddress(BASEBOTS_NFT_ADDRESS, 4)}
+                <p className="mt-1 text-[11px] text-white/50 font-mono break-all">
+                  For Basebots, use: {BASEBOTS_NFT_ADDRESS}
                 </p>
               </label>
 
               <label className="block col-span-2 md:col-span-1">
                 <span className="text-xs uppercase tracking-wide text-white/60">
-                  Reward token (ERC-20)
+                  Reward token (ERC-20 on Base)
                 </span>
                 <input
                   type="text"
@@ -815,8 +843,8 @@ export default function StakingPage() {
                   placeholder="0x..."
                   className={inputBase}
                 />
-                <p className="mt-1 text-[11px] text-white/50 font-mono">
-                  Default: BOTS ({shortenAddress(BOTS_TOKEN.address, 4)})
+                <p className="mt-1 text-[11px] text-white/50 font-mono break-all">
+                  Default: BOTS ({BOTS_TOKEN.address})
                 </p>
               </label>
 
@@ -928,7 +956,7 @@ export default function StakingPage() {
                 </p>
               </label>
 
-              {/* Fee mode with stronger active styling */}
+              {/* Fee mode */}
               <div className="col-span-2">
                 <span className="text-xs uppercase tracking-wide text-white/60">
                   Fee mode
@@ -988,7 +1016,7 @@ export default function StakingPage() {
                     rel="noopener noreferrer"
                     className="text-xs text-[#79ffe1] underline decoration-dotted underline-offset-4"
                   >
-                    View transaction ↗
+                    View creation tx ↗
                   </Link>
                 )}
               </div>
@@ -999,10 +1027,18 @@ export default function StakingPage() {
                 </p>
               )}
               {createMined && (
-                <p className="col-span-2 mt-1 text-xs text-emerald-300">
-                  Pool created successfully. Share this staking page with your
-                  community so they can join.
-                </p>
+                <div className="col-span-2 mt-2 rounded-2xl border border-emerald-400/50 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-100 space-y-1">
+                  <p className="font-semibold">
+                    ✅ Pool created successfully on Base.
+                  </p>
+                  <p>
+                    Refresh the pools list below to see it. Remember to{" "}
+                    <span className="font-semibold">
+                      send your reward tokens to the pool contract
+                    </span>{" "}
+                    so rewards can actually stream.
+                  </p>
+                </div>
               )}
             </form>
           </div>
@@ -1048,7 +1084,6 @@ export default function StakingPage() {
             />
             <div className="relative flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
               <div className="flex items-center gap-3">
-                {/* BIGGER POOL ICON */}
                 <div className="relative flex h-20 w-20 md:h-24 md:w-24 items-center justify-center rounded-[26px] bg-gradient-to-tr from-[#79ffe1] via-sky-500 to-indigo-500 border border-[#79ffe1]/50 shadow-[0_0_32px_rgba(121,255,225,0.8)]">
                   <div className="flex h-[86%] w-[86%] items-center justify-center rounded-[22px] bg-black/85">
                     <Image
@@ -1083,7 +1118,7 @@ export default function StakingPage() {
                     </span>
                     {isMyPool && (
                       <span className="px-2 py-[2px] rounded-full text-[11px] font-semibold border border-[#79ffe1]/60 bg-[#031c1b] text-[#79ffe1]">
-                        My pool
+                        You created this pool
                       </span>
                     )}
                   </div>
@@ -1285,7 +1320,7 @@ export default function StakingPage() {
           </section>
         )}
 
-        {/* ───────────────── Factory Pools List + Refresh ───────────────── */}
+        {/* ───────────────── Factory Pools List ───────────────── */}
         <section className="glass glass-pad rounded-3xl border border-white/10 bg-[#020617]/80 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -1295,7 +1330,7 @@ export default function StakingPage() {
               <p className="text-[11px] md:text-xs text-white/60">
                 These are pools emitted by the factory&apos;s{" "}
                 <span className="font-mono">PoolCreated</span> event. Anyone can
-                stake if they have the right NFT.
+                stake if they hold the correct NFT.
               </p>
             </div>
             <button
@@ -1312,9 +1347,7 @@ export default function StakingPage() {
           </div>
 
           {poolsError && (
-            <p className="text-xs text-rose-300 break-words">
-              {poolsError}
-            </p>
+            <p className="text-xs text-rose-300 break-words">{poolsError}</p>
           )}
 
           {factoryPools.length === 0 && !poolsLoading && !poolsError && (
@@ -1341,7 +1374,9 @@ export default function StakingPage() {
                   pool.creator.toLowerCase() === address.toLowerCase();
                 const isBasebots =
                   pool.pool.toLowerCase() ===
-                  (BASEBOTS_STAKING_POOL.address as `0x${string}`).toLowerCase();
+                  (
+                    BASEBOTS_STAKING_POOL.address as `0x${string}`
+                  ).toLowerCase();
 
                 const status: "upcoming" | "live" | "closed" = (() => {
                   if (pool.startTime === 0) return "upcoming";
@@ -1415,7 +1450,7 @@ export default function StakingPage() {
                           href="/staking"
                           className="rounded-full border border-[#79ffe1]/70 bg-[#031c1b] px-3 py-1 text-[11px] font-semibold text-[#79ffe1] hover:bg-[#052725]"
                         >
-                          Open in app
+                          Open featured pool
                         </Link>
                       )}
 
