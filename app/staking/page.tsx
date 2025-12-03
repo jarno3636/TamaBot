@@ -34,7 +34,7 @@ export default function StakingPage() {
   const [activeFilter, setActiveFilter] = useState<FilterTab>("all");
 
   /* ──────────────────────────────────────────────────────────────
-   * READ FACTORY PROTOCOL FEE (for explanation + fee preview)
+   * READ FACTORY PROTOCOL FEE
    * ──────────────────────────────────────────────────────────── */
   const { data: protocolFeeBpsRaw } = useReadContract({
     ...CONFIG_STAKING_FACTORY,
@@ -107,7 +107,7 @@ export default function StakingPage() {
   }, [startTime, endTime, now]);
 
   /* ──────────────────────────────────────────────────────────────
-   * READ USER POSITION FOR BASEBOTS POOL
+   * READ USER POSITION
    * ──────────────────────────────────────────────────────────── */
   const { data: userInfoRaw } = useReadContract({
     ...BASEBOTS_STAKING_POOL,
@@ -133,7 +133,7 @@ export default function StakingPage() {
     address.toLowerCase() === (creatorAddress as string).toLowerCase();
 
   /* ──────────────────────────────────────────────────────────────
-   * FEE PREVIEW (based on pending rewards)
+   * FEE PREVIEW
    * ──────────────────────────────────────────────────────────── */
   const feePreview = useMemo(() => {
     if (pendingGross === 0n) {
@@ -166,7 +166,7 @@ export default function StakingPage() {
   }, [totalStaked, rewardRate, assumedStakeValuePerNft]);
 
   /* ──────────────────────────────────────────────────────────────
-   * STAKE / UNSTAKE / CLAIM HOOKS
+   * STAKE / UNSTAKE / CLAIM
    * ──────────────────────────────────────────────────────────── */
   const [stakeTokenId, setStakeTokenId] = useState("");
   const [unstakeTokenId, setUnstakeTokenId] = useState("");
@@ -270,7 +270,7 @@ export default function StakingPage() {
   }
 
   /* ──────────────────────────────────────────────────────────────
-   * CREATE POOL FORM (factory.createPool)
+   * CREATE POOL FORM
    * ──────────────────────────────────────────────────────────── */
 
   type FeeMode = "claim" | "unstake" | "both";
@@ -428,13 +428,14 @@ export default function StakingPage() {
           />
           <div className="relative grid gap-6 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] items-center">
             <div className="flex items-center gap-4">
-              <div className="relative flex h-14 w-14 md:h-16 md:w-16 items-center justify-center rounded-3xl bg-gradient-to-tr from-[#79ffe1] via-sky-500 to-indigo-500 shadow-[0_0_26px_rgba(121,255,225,0.7)]">
-                <div className="flex h-[85%] w-[85%] items-center justify-center rounded-3xl bg-black/85">
+              {/* BIGGER INTRO ICON */}
+              <div className="relative flex h-20 w-20 md:h-24 md:w-24 items-center justify-center rounded-[28px] bg-gradient-to-tr from-[#79ffe1] via-sky-500 to-indigo-500 shadow-[0_0_30px_rgba(121,255,225,0.7)]">
+                <div className="flex h-[86%] w-[86%] items-center justify-center rounded-[24px] bg-black/85">
                   <Image
                     src="/icon.png"
                     alt="Basebots"
-                    width={40}
-                    height={40}
+                    width={72}
+                    height={72}
                     className="object-contain"
                   />
                 </div>
@@ -472,7 +473,8 @@ export default function StakingPage() {
         </section>
 
         {/* ───────────────── Create Pool ───────────────── */}
-        <section className="glass glass-pad bg-[#0f1320]/70 border border-white/10 rounded-3xl overflow-hidden">
+        {/* NOTE: removed overflow-hidden so inputs/focus rings are not clipped */}
+        <section className="glass glass-pad bg-[#0f1320]/70 border border-white/10 rounded-3xl">
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-8">
             <div className="md:w-[32%] space-y-3">
               <h2 className="text-xl md:text-2xl font-bold">
@@ -759,13 +761,14 @@ export default function StakingPage() {
             />
             <div className="relative flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
               <div className="flex items-center gap-3">
-                <div className="relative flex h-12 w-12 md:h-14 md:w-14 items-center justify-center rounded-3xl bg-gradient-to-tr from-[#79ffe1] via-sky-500 to-indigo-500 border border-[#79ffe1]/50 shadow-[0_0_24px_rgba(121,255,225,0.7)]">
-                  <div className="flex h-[85%] w-[85%] items-center justify-center rounded-3xl bg-black/85">
+                {/* BIGGER POOL ICON */}
+                <div className="relative flex h-16 w-16 md:h-20 md:w-20 items-center justify-center rounded-[26px] bg-gradient-to-tr from-[#79ffe1] via-sky-500 to-indigo-500 border border-[#79ffe1]/50 shadow-[0_0_28px_rgba(121,255,225,0.7)]">
+                  <div className="flex h-[86%] w-[86%] items-center justify-center rounded-[22px] bg-black/85">
                     <Image
                       src="/icon.png"
                       alt="Basebots x BOTS"
-                      width={40}
-                      height={40}
+                      width={64}
+                      height={64}
                       className="object-contain"
                     />
                   </div>
