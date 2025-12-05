@@ -158,6 +158,22 @@ export const CONFIG_STAKING_FACTORY_ABI = [
     stateMutability: "nonpayable",
     type: "function",
   },
+
+  // --- Registry helpers (add these in Solidity too) ---
+  {
+    inputs: [],
+    name: "allPoolsLength",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    name: "allPools",
+    outputs: [{ internalType: "address", name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
 ] as const satisfies Abi;
 
 /* ========================================================================== */
@@ -321,13 +337,15 @@ export const CONFIG_STAKING_POOL_ABI = [
 /*                               CONTRACT EXPORTS                             */
 /* ========================================================================== */
 
+// NOTE: all addresses normalized to lowercase to avoid checksum-case issues.
+// Viem/wagmi are happy with lowercase, and we always compare via .toLowerCase().
+
 export const CONFIG_STAKING_FACTORY = {
   address: "0x7c12acff6c84eca09be5fb09e14f2e4a5c9540d0" as `0x${string}`,
   abi: CONFIG_STAKING_FACTORY_ABI,
 } as const;
 
-// 👇 Use the real deploy block from Basescan if you know it.
-// This avoids huge fromBlock=0n scans that cause HTTP failures.
+// Use the real deploy block from Basescan if you know it to reduce log-scan range.
 export const CONFIG_STAKING_FACTORY_DEPLOY_BLOCK = 0n as const;
 
 export const BASEBOTS_STAKING_POOL = {
@@ -340,11 +358,11 @@ export const BASEBOTS_STAKING_POOL = {
 /* ========================================================================== */
 
 export const BASEBOTS_NFT = {
-  address: "0x92E29025fd6bAdD17c3005084fe8C43D928222B4" as `0x${string}`,
-};
+  address: "0x92e29025fd6badd17c3005084fe8c43d928222b4" as `0x${string}`,
+} as const;
 
 export const BOTS_TOKEN = {
-  address: "0xc45d7c40c9c65af95d33da5921f787D5cFD3FFcf" as `0x${string}`,
+  address: "0xc45d7c40c9c65af95d33da5921f787d5cfd3ffcf" as `0x${string}`,
   decimals: 18,
   symbol: "BOTS",
-};
+} as const;
