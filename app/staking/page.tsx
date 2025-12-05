@@ -503,7 +503,19 @@ export default function StakingPage() {
   }
 
   /* ──────────────────────────────────────────────────────────────
+   * FACTORY POOLS STATE
+   * ──────────────────────────────────────────────────────────── */
+  const [factoryPools, setFactoryPools] = useState<FactoryPoolMeta[]>([]);
+  const [factoryPoolDetails, setFactoryPoolDetails] = useState<
+    FactoryPoolDetails[]
+  >([]);
+  const [poolsLoading, setPoolsLoading] = useState(false);
+  const [poolsError, setPoolsError] = useState<string | null>(null);
+  const [refreshNonce, setRefreshNonce] = useState(0);
+
+  /* ──────────────────────────────────────────────────────────────
    * ONCE POOL TX MINED: DECODE PoolCreated FROM RECEIPT
+   * and inject new pool into factoryPools immediately
    * ──────────────────────────────────────────────────────────── */
   useEffect(() => {
     if (!publicClient || !createMined || !createTxHash) return;
@@ -536,6 +548,25 @@ export default function StakingPage() {
               };
               if (!cancelled) {
                 setLastCreatedPoolAddr(args.pool);
+
+                // Immediately add this pool into the list so it shows
+                setFactoryPools((prev) => {
+                  if (
+                    prev.some(
+                      (p) =>
+                        p.pool.toLowerCase() === args.pool.toLowerCase(),
+                    )
+                  ) {
+                    return prev;
+                  }
+                  const next: FactoryPoolMeta = {
+                    pool: args.pool,
+                    creator: args.creator,
+                    nft: args.nft,
+                    rewardToken: args.rewardToken,
+                  };
+                  return [next, ...prev];
+                });
               }
               break;
             }
@@ -558,14 +589,6 @@ export default function StakingPage() {
   /* ──────────────────────────────────────────────────────────────
    * FACTORY POOL DISCOVERY (PoolCreated logs)
    * ──────────────────────────────────────────────────────────── */
-  const [factoryPools, setFactoryPools] = useState<FactoryPoolMeta[]>([]);
-  const [factoryPoolDetails, setFactoryPoolDetails] = useState<
-    FactoryPoolDetails[]
-  >([]);
-  const [poolsLoading, setPoolsLoading] = useState(false);
-  const [poolsError, setPoolsError] = useState<string | null>(null);
-  const [refreshNonce, setRefreshNonce] = useState(0);
-
   useEffect(() => {
     if (!publicClient) return;
     const client = publicClient as NonNullable<PublicClientType>;
@@ -580,9 +603,9 @@ export default function StakingPage() {
           "event PoolCreated(address indexed pool,address indexed creator,address indexed nft,address rewardToken)",
         );
 
-        // ---- windowed log query to avoid RPC errors on huge ranges ----
+        // Windowed log query to avoid huge range RPC issues
         const latestBlock = await client.getBlockNumber();
-        const windowSize = 500_000n; // adjust if needed
+        const windowSize = 500_000n;
         const fromBlock =
           latestBlock > windowSize ? latestBlock - windowSize : 0n;
         const toBlock = latestBlock;
@@ -616,9 +639,18 @@ export default function StakingPage() {
         setFactoryPools(items);
       } catch (err) {
         if (!cancelled) {
-          setPoolsError(
-            `Failed to load pools from factory. ${getErrText(err)}`,
-          );
+          console.error("Factory getLogs failed", err);
+          const msg = getErrText(err);
+
+          // If it's the generic HTTP failure, don't spam a scary UI error
+          if (!msg.toLowerCase().includes("http request failed")) {
+            setPoolsError(`Failed to load pools from factory. ${msg}`);
+          } else {
+            setPoolsError(null);
+          }
+
+          // Keep any existing pools rather than nuking state
+          setFactoryPools((prev) => prev ?? []);
         }
       } finally {
         if (!cancelled) {
@@ -851,13 +883,7 @@ export default function StakingPage() {
     );
 
     return [...basebots, ...others];
-  }, [
-    factoryPoolDetails,
-    activeFilter,
-    now,
-    address,
-    poolSearch,
-  ]);
+  }, [factoryPoolDetails, activeFilter, now, address, poolSearch]);
 
   /* ──────────────────────────────────────────────────────────────
    * FUND POOL MODAL STATE (frontend funding UX)
@@ -1171,6 +1197,7 @@ export default function StakingPage() {
                       <button
                         key={opt.key}
                         type="button"
+                        aria-pressed={isActive}
                         onClick={() =>
                           setCreateForm((f) => ({
                             ...f,
@@ -1234,9 +1261,9 @@ export default function StakingPage() {
                     <>
                       <p>
                         Your pool address is{" "}
-                          <span className="font-mono">
-                            {lastCreatedPoolAddr}
-                          </span>
+                        <span className="font-mono">
+                          {lastCreatedPoolAddr}
+                        </span>
                         .
                       </p>
                       <p>
@@ -1291,21 +1318,25 @@ export default function StakingPage() {
               { key: "closed", label: "Closed" },
               { key: "my-staked", label: "My staked" },
               { key: "my-pools", label: "My pools" },
-            ].map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => setActiveFilter(t.key as FilterTab)}
-                className={[
-                  "px-3 py-1.5 rounded-full border transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/60",
-                  activeFilter === t.key
-                    ? "border-[#79ffe1] bg-[#031c1b] text-[#79ffe1] shadow-[0_0_14px_rgba(121,255,225,0.6)]"
-                    : "border-white/15 bg-[#020617] text-white/70 hover:border-white/40",
-                ].join(" ")}
-              >
-                {t.label}
-              </button>
-            ))}
+            ].map((t) => {
+              const isActive = activeFilter === t.key;
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  aria-pressed={isActive}
+                  onClick={() => setActiveFilter(t.key as FilterTab)}
+                  className={[
+                    "px-3 py-1.5 rounded-full border transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/60",
+                    isActive
+                      ? "border-[#79ffe1] bg-[#031c1b] text-[#79ffe1] shadow-[0_0_14px_rgba(121,255,225,0.6)]"
+                      : "border-white/15 bg-[#020617] text-white/70 hover:border-white/40 hover:bg-white/5",
+                  ].join(" ")}
+                >
+                  {t.label}
+                </button>
+              );
+            })}
           </div>
           <div className="w-full md:w-auto">
             <input
@@ -1771,7 +1802,7 @@ export default function StakingPage() {
                               const shareUrl =
                                 `https://x.com/intent/tweet?text=${encodeURIComponent(
                                   text,
-                                )}&url=${encodeURIComponent(url)}`;
+                                )}&url={${encodeURIComponent(url)}}`;
                               if (typeof window !== "undefined") {
                                 window.open(
                                   shareUrl,
@@ -1965,7 +1996,7 @@ function FundPoolModal({
         <button
           type="button"
           onClick={onClose}
-          className="absolute right-3 top-3 text-xs text-white/50 hover:text-white"
+          className="absolute right-3 top-3 text-xs text-white/50 hover:text-white active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 rounded-full"
         >
           ✕
         </button>
