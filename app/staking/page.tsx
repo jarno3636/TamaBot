@@ -22,6 +22,7 @@ import Image from "next/image";
 
 import {
   CONFIG_STAKING_FACTORY,
+  CONFIG_STAKING_FACTORY_DEPLOY_BLOCK,
   BASEBOTS_STAKING_POOL,
   BOTS_TOKEN,
   BASEBOTS_NFT,
@@ -503,19 +504,8 @@ export default function StakingPage() {
   }
 
   /* ──────────────────────────────────────────────────────────────
-   * FACTORY POOLS STATE
-   * ──────────────────────────────────────────────────────────── */
-  const [factoryPools, setFactoryPools] = useState<FactoryPoolMeta[]>([]);
-  const [factoryPoolDetails, setFactoryPoolDetails] = useState<
-    FactoryPoolDetails[]
-  >([]);
-  const [poolsLoading, setPoolsLoading] = useState(false);
-  const [poolsError, setPoolsError] = useState<string | null>(null);
-  const [refreshNonce, setRefreshNonce] = useState(0);
-
-  /* ──────────────────────────────────────────────────────────────
    * ONCE POOL TX MINED: DECODE PoolCreated FROM RECEIPT
-   * and inject new pool into factoryPools immediately
+   * (helps show the fund modal quickly)
    * ──────────────────────────────────────────────────────────── */
   useEffect(() => {
     if (!publicClient || !createMined || !createTxHash) return;
@@ -548,25 +538,6 @@ export default function StakingPage() {
               };
               if (!cancelled) {
                 setLastCreatedPoolAddr(args.pool);
-
-                // Immediately add this pool into the list so it shows
-                setFactoryPools((prev) => {
-                  if (
-                    prev.some(
-                      (p) =>
-                        p.pool.toLowerCase() === args.pool.toLowerCase(),
-                    )
-                  ) {
-                    return prev;
-                  }
-                  const next: FactoryPoolMeta = {
-                    pool: args.pool,
-                    creator: args.creator,
-                    nft: args.nft,
-                    rewardToken: args.rewardToken,
-                  };
-                  return [next, ...prev];
-                });
               }
               break;
             }
@@ -587,8 +558,16 @@ export default function StakingPage() {
   }, [publicClient, createMined, createTxHash]);
 
   /* ──────────────────────────────────────────────────────────────
-   * FACTORY POOL DISCOVERY (PoolCreated logs)
+   * FACTORY POOL DISCOVERY (PoolCreated logs, windowed scan)
    * ──────────────────────────────────────────────────────────── */
+  const [factoryPools, setFactoryPools] = useState<FactoryPoolMeta[]>([]);
+  const [factoryPoolDetails, setFactoryPoolDetails] = useState<
+    FactoryPoolDetails[]
+  >([]);
+  const [poolsLoading, setPoolsLoading] = useState(false);
+  const [poolsError, setPoolsError] = useState<string | null>(null);
+  const [refreshNonce, setRefreshNonce] = useState(0);
+
   useEffect(() => {
     if (!publicClient) return;
     const client = publicClient as NonNullable<PublicClientType>;
@@ -599,29 +578,73 @@ export default function StakingPage() {
         setPoolsLoading(true);
         setPoolsError(null);
 
-        const eventAbi = parseAbiItem(
-          "event PoolCreated(address indexed pool,address indexed creator,address indexed nft,address rewardToken)",
-        );
+        // Use the exact event from the factory ABI to avoid any mismatch
+        const poolCreatedEvent = CONFIG_STAKING_FACTORY.abi.find(
+          (e) => e.type === "event" && e.name === "PoolCreated",
+        ) as any;
 
-        // Windowed log query to avoid huge range RPC issues
+        if (!poolCreatedEvent) {
+          setPoolsError("PoolCreated event not found in factory ABI.");
+          return;
+        }
+
         const latestBlock = await client.getBlockNumber();
-        const windowSize = 500_000n;
-        const fromBlock =
-          latestBlock > windowSize ? latestBlock - windowSize : 0n;
-        const toBlock = latestBlock;
 
-        const logs = await client.getLogs({
-          address: CONFIG_STAKING_FACTORY.address as `0x${string}`,
-          event: eventAbi,
-          fromBlock,
-          toBlock,
-        });
+        // Start from deploy block if provided; otherwise last ~200k blocks
+        const deployBlock =
+          (CONFIG_STAKING_FACTORY_DEPLOY_BLOCK ??
+            0n) as typeof CONFIG_STAKING_FACTORY_DEPLOY_BLOCK;
+        const startBlock =
+          deployBlock > 0n
+            ? deployBlock
+            : latestBlock > 200_000n
+            ? latestBlock - 200_000n
+            : 0n;
+
+        const batchSize = 50_000n; // smaller windows to avoid RPC limits
+        const allLogs: any[] = [];
+
+        let fromBlock = startBlock;
+
+        while (fromBlock <= latestBlock) {
+          const toBlockCandidate = fromBlock + batchSize;
+          const toBlock =
+            toBlockCandidate > latestBlock ? latestBlock : toBlockCandidate;
+
+          try {
+            const logsBatch = await client.getLogs({
+              address: CONFIG_STAKING_FACTORY.address,
+              event: poolCreatedEvent,
+              fromBlock,
+              toBlock,
+            });
+
+            allLogs.push(...logsBatch);
+          } catch (err) {
+            // Log but don't blow up the whole page
+            console.error(
+              "getLogs error for range",
+              fromBlock.toString(),
+              toBlock.toString(),
+              err,
+            );
+            // If *every* batch fails, user will just see "no pools"
+          }
+
+          if (toBlock === latestBlock) break;
+          fromBlock = toBlock + 1n;
+        }
 
         if (cancelled) return;
 
-        const items: FactoryPoolMeta[] = logs
+        if (allLogs.length === 0) {
+          setFactoryPools([]);
+          return;
+        }
+
+        const items: FactoryPoolMeta[] = allLogs
           .map((log) => {
-            const args = log.args as unknown as {
+            const args = log.args as {
               pool: `0x${string}`;
               creator: `0x${string}`;
               nft: `0x${string}`;
@@ -634,23 +657,14 @@ export default function StakingPage() {
               rewardToken: args.rewardToken,
             };
           })
-          .reverse();
+          .reverse(); // newest first
 
         setFactoryPools(items);
       } catch (err) {
         if (!cancelled) {
-          console.error("Factory getLogs failed", err);
-          const msg = getErrText(err);
-
-          // If it's the generic HTTP failure, don't spam a scary UI error
-          if (!msg.toLowerCase().includes("http request failed")) {
-            setPoolsError(`Failed to load pools from factory. ${msg}`);
-          } else {
-            setPoolsError(null);
-          }
-
-          // Keep any existing pools rather than nuking state
-          setFactoryPools((prev) => prev ?? []);
+          setPoolsError(
+            `Failed to load pools from factory. ${getErrText(err)}`,
+          );
         }
       } finally {
         if (!cancelled) {
@@ -883,7 +897,13 @@ export default function StakingPage() {
     );
 
     return [...basebots, ...others];
-  }, [factoryPoolDetails, activeFilter, now, address, poolSearch]);
+  }, [
+    factoryPoolDetails,
+    activeFilter,
+    now,
+    address,
+    poolSearch,
+  ]);
 
   /* ──────────────────────────────────────────────────────────────
    * FUND POOL MODAL STATE (frontend funding UX)
@@ -1197,7 +1217,6 @@ export default function StakingPage() {
                       <button
                         key={opt.key}
                         type="button"
-                        aria-pressed={isActive}
                         onClick={() =>
                           setCreateForm((f) => ({
                             ...f,
@@ -1318,25 +1337,21 @@ export default function StakingPage() {
               { key: "closed", label: "Closed" },
               { key: "my-staked", label: "My staked" },
               { key: "my-pools", label: "My pools" },
-            ].map((t) => {
-              const isActive = activeFilter === t.key;
-              return (
-                <button
-                  key={t.key}
-                  type="button"
-                  aria-pressed={isActive}
-                  onClick={() => setActiveFilter(t.key as FilterTab)}
-                  className={[
-                    "px-3 py-1.5 rounded-full border transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/60",
-                    isActive
-                      ? "border-[#79ffe1] bg-[#031c1b] text-[#79ffe1] shadow-[0_0_14px_rgba(121,255,225,0.6)]"
-                      : "border-white/15 bg-[#020617] text-white/70 hover:border-white/40 hover:bg-white/5",
-                  ].join(" ")}
-                >
-                  {t.label}
-                </button>
-              );
-            })}
+            ].map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setActiveFilter(t.key as FilterTab)}
+                className={[
+                  "px-3 py-1.5 rounded-full border transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/60",
+                  activeFilter === t.key
+                    ? "border-[#79ffe1] bg-[#031c1b] text-[#79ffe1] shadow-[0_0_14px_rgba(121,255,225,0.6)]"
+                    : "border-white/15 bg-[#020617] text-white/70 hover:border-white/40",
+                ].join(" ")}
+              >
+                {t.label}
+              </button>
+            ))}
           </div>
           <div className="w-full md:w-auto">
             <input
@@ -1802,7 +1817,7 @@ export default function StakingPage() {
                               const shareUrl =
                                 `https://x.com/intent/tweet?text=${encodeURIComponent(
                                   text,
-                                )}&url={${encodeURIComponent(url)}}`;
+                                )}&url=${encodeURIComponent(url)}`;
                               if (typeof window !== "undefined") {
                                 window.open(
                                   shareUrl,
@@ -1996,7 +2011,7 @@ function FundPoolModal({
         <button
           type="button"
           onClick={onClose}
-          className="absolute right-3 top-3 text-xs text-white/50 hover:text-white active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 rounded-full"
+          className="absolute right-3 top-3 text-xs text-white/50 hover:text-white"
         >
           ✕
         </button>
