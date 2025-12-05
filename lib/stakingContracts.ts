@@ -518,7 +518,7 @@ export const CONFIG_STAKING_FACTORY = {
 } as const;
 
 // If you know the real deploy block from Basescan, set it here to narrow log scans.
-export const CONFIG_STAKING_FACTORY_DEPLOY_BLOCK = 0n as const;
+export const CONFIG_STAKING_FACTORY_DEPLOY_BLOCK = 38961393n as const;
 
 export const BASEBOTS_STAKING_POOL = {
   address: "0xdd0274f98ef8b9e8edddb74593bb93aff60fe892" as `0x${string}`,
