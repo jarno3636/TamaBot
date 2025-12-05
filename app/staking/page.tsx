@@ -505,7 +505,6 @@ export default function StakingPage() {
 
   /* ──────────────────────────────────────────────────────────────
    * ONCE POOL TX MINED: DECODE PoolCreated FROM RECEIPT
-   * (helps show the fund modal quickly)
    * ──────────────────────────────────────────────────────────── */
   useEffect(() => {
     if (!publicClient || !createMined || !createTxHash) return;
@@ -558,7 +557,7 @@ export default function StakingPage() {
   }, [publicClient, createMined, createTxHash]);
 
   /* ──────────────────────────────────────────────────────────────
-   * FACTORY POOL DISCOVERY (PoolCreated logs, windowed scan)
+   * FACTORY POOL DISCOVERY (PoolCreated logs)
    * ──────────────────────────────────────────────────────────── */
   const [factoryPools, setFactoryPools] = useState<FactoryPoolMeta[]>([]);
   const [factoryPoolDetails, setFactoryPoolDetails] = useState<
@@ -578,93 +577,98 @@ export default function StakingPage() {
         setPoolsLoading(true);
         setPoolsError(null);
 
-        // Use the exact event from the factory ABI to avoid any mismatch
-        const poolCreatedEvent = CONFIG_STAKING_FACTORY.abi.find(
-          (e) => e.type === "event" && e.name === "PoolCreated",
-        ) as any;
-
-        if (!poolCreatedEvent) {
-          setPoolsError("PoolCreated event not found in factory ABI.");
-          return;
-        }
-
         const latestBlock = await client.getBlockNumber();
 
-        // Start from deploy block if provided; otherwise last ~200k blocks
-        const deployBlock =
-          (CONFIG_STAKING_FACTORY_DEPLOY_BLOCK ??
-            0n) as typeof CONFIG_STAKING_FACTORY_DEPLOY_BLOCK;
-        const startBlock =
-          deployBlock > 0n
-            ? deployBlock
-            : latestBlock > 200_000n
-            ? latestBlock - 200_000n
-            : 0n;
+        // start from deploy block, but also cap to a reasonable window behind latest
+        const windowSize = 500_000n;
+        const minWindowBlock =
+          latestBlock > windowSize ? latestBlock - windowSize : 0n;
 
-        const batchSize = 50_000n; // smaller windows to avoid RPC limits
-        const allLogs: any[] = [];
+        const fromBlock =
+          CONFIG_STAKING_FACTORY_DEPLOY_BLOCK > minWindowBlock
+            ? CONFIG_STAKING_FACTORY_DEPLOY_BLOCK
+            : minWindowBlock;
 
-        let fromBlock = startBlock;
+        const toBlock = latestBlock;
 
-        while (fromBlock <= latestBlock) {
-          const toBlockCandidate = fromBlock + batchSize;
-          const toBlock =
-            toBlockCandidate > latestBlock ? latestBlock : toBlockCandidate;
+        console.log(
+          "[staking] loading pools logs",
+          "from",
+          fromBlock.toString(),
+          "to",
+          toBlock.toString(),
+        );
 
-          try {
-            const logsBatch = await client.getLogs({
-              address: CONFIG_STAKING_FACTORY.address,
-              event: poolCreatedEvent,
-              fromBlock,
-              toBlock,
-            });
+        // more robust: fetch all logs for this address, then decode PoolCreated manually
+        const rawLogs = await client.getLogs({
+          address: CONFIG_STAKING_FACTORY.address as `0x${string}`,
+          fromBlock,
+          toBlock,
+        });
 
-            allLogs.push(...logsBatch);
-          } catch (err) {
-            // Log but don't blow up the whole page
-            console.error(
-              "getLogs error for range",
-              fromBlock.toString(),
-              toBlock.toString(),
-              err,
-            );
-            // If *every* batch fails, user will just see "no pools"
-          }
-
-          if (toBlock === latestBlock) break;
-          fromBlock = toBlock + 1n;
-        }
+        console.log(
+          "[staking] raw logs from factory in range:",
+          rawLogs.length,
+        );
 
         if (cancelled) return;
 
-        if (allLogs.length === 0) {
-          setFactoryPools([]);
-          return;
-        }
+        const eventAbi = parseAbiItem(
+          "event PoolCreated(address indexed pool,address indexed creator,address indexed nft,address rewardToken)",
+        );
 
-        const items: FactoryPoolMeta[] = allLogs
-          .map((log) => {
-            const args = log.args as {
+        const items: FactoryPoolMeta[] = [];
+
+        for (const log of rawLogs) {
+          try {
+            const decoded = decodeEventLog({
+              abi: [eventAbi],
+              data: log.data,
+              topics: log.topics,
+            });
+
+            if (decoded.eventName !== "PoolCreated") continue;
+
+            const args = decoded.args as {
               pool: `0x${string}`;
               creator: `0x${string}`;
               nft: `0x${string}`;
               rewardToken: `0x${string}`;
             };
-            return {
+
+            items.push({
               pool: args.pool,
               creator: args.creator,
               nft: args.nft,
               rewardToken: args.rewardToken,
-            };
-          })
-          .reverse(); // newest first
+            });
+          } catch {
+            // ignore non-PoolCreated logs
+          }
+        }
 
-        setFactoryPools(items);
-      } catch (err) {
+        // newest first
+        const uniqueByPool = new Map<string, FactoryPoolMeta>();
+        for (const p of items.reverse()) {
+          uniqueByPool.set(p.pool.toLowerCase(), p);
+        }
+
+        const finalItems = Array.from(uniqueByPool.values()).reverse();
+
+        console.log(
+          "[staking] decoded PoolCreated pools:",
+          finalItems.length,
+          finalItems,
+        );
+
         if (!cancelled) {
-          setPoolsError(
-            `Failed to load pools from factory. ${getErrText(err)}`,
-          );
+          setFactoryPools(finalItems);
+        }
+      } catch (err) {
+        console.error("getLogs error while loading pools", err);
+        if (!cancelled) {
+          setPoolsError(`Failed to load pools from factory. ${getErrText(err)}`);
+          setFactoryPools([]);
         }
       } finally {
         if (!cancelled) {
@@ -754,6 +758,7 @@ export default function StakingPage() {
 
         setFactoryPoolDetails(details);
       } catch (err) {
+        console.error("Error loading pool details", err);
         if (!cancelled) {
           setPoolsError(getErrText(err));
         }
@@ -1903,11 +1908,20 @@ function FundPoolModal({
     }
   }, [open, suggestedAmount]);
 
+  // Auto-close once tx is mined (after a small delay so user sees success)
+  useEffect(() => {
+    if (!open || !fundMined) return;
+    const id = setTimeout(() => {
+      onClose();
+    }, 1500);
+    return () => clearTimeout(id);
+  }, [open, fundMined, onClose]);
+
   // Load token metadata for reward token (on-chain here for exact decimals)
   useEffect(() => {
     if (!open || !target || !publicClient) return;
     const client = publicClient as NonNullable<PublicClientType>;
-    const currentTarget = target; // capture non-null target for async
+    const currentTarget = target;
 
     let cancelled = false;
 
@@ -2006,12 +2020,12 @@ function FundPoolModal({
   const symbol = tokenMeta?.symbol ?? "TOKEN";
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="relative w-full max-w-md rounded-3xl border border-white/15 bg-[#050815] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.9)]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+      <div className="relative w-full max-w-md rounded-3xl border border-white/15 bg-[#050815] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.95)]">
         <button
           type="button"
           onClick={onClose}
-          className="absolute right-3 top-3 text-xs text-white/50 hover:text-white"
+          className="absolute right-3 top-3 text-xs text-white/60 hover:text-white"
         >
           ✕
         </button>
@@ -2079,13 +2093,22 @@ function FundPoolModal({
           )}
           {fundMined && (
             <div className="text-emerald-300">
-              Funding transaction confirmed ✔
+              Funding transaction confirmed ✔ (closing…
             </div>
           )}
           {(fundMsg || fundErr) && (
             <div className="text-rose-300">
               {fundMsg || getErrText(fundErr)}
             </div>
+          )}
+          {!fundMined && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="mt-2 inline-flex items-center justify-center rounded-full border border-white/30 bg-white/5 px-3 py-1 text-[11px] font-medium text-white/80 hover:bg-white/10 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+            >
+              Close
+            </button>
           )}
         </div>
       </div>
