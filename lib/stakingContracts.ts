@@ -1,5 +1,4 @@
-// lib/stakingContracts.ts
-import type { Abi } from "viem";
+/import type { Abi } from "viem";
 
 /* ========================================================================== */
 /*                               FACTORY ABI                                  */
@@ -16,13 +15,7 @@ export const CONFIG_STAKING_FACTORY_ABI = [
     stateMutability: "nonpayable",
     type: "constructor",
   },
-
-  // --- Errors ---
-  {
-    inputs: [],
-    name: "FailedDeployment",
-    type: "error",
-  },
+  { inputs: [], name: "FailedDeployment", type: "error" },
   {
     inputs: [
       { internalType: "uint256", name: "balance", type: "uint256" },
@@ -41,23 +34,11 @@ export const CONFIG_STAKING_FACTORY_ABI = [
     name: "OwnableUnauthorizedAccount",
     type: "error",
   },
-
-  // --- Events ---
   {
     anonymous: false,
     inputs: [
-      {
-        indexed: true,
-        internalType: "address",
-        name: "previousOwner",
-        type: "address",
-      },
-      {
-        indexed: true,
-        internalType: "address",
-        name: "newOwner",
-        type: "address",
-      },
+      { indexed: true, internalType: "address", name: "previousOwner", type: "address" },
+      { indexed: true, internalType: "address", name: "newOwner", type: "address" },
     ],
     name: "OwnershipTransferred",
     type: "event",
@@ -65,30 +46,10 @@ export const CONFIG_STAKING_FACTORY_ABI = [
   {
     anonymous: false,
     inputs: [
-      {
-        indexed: true,
-        internalType: "address",
-        name: "pool",
-        type: "address",
-      },
-      {
-        indexed: true,
-        internalType: "address",
-        name: "creator",
-        type: "address",
-      },
-      {
-        indexed: true,
-        internalType: "address",
-        name: "nft",
-        type: "address",
-      },
-      {
-        indexed: false,
-        internalType: "address",
-        name: "rewardToken",
-        type: "address",
-      },
+      { indexed: true, internalType: "address", name: "pool", type: "address" },
+      { indexed: true, internalType: "address", name: "creator", type: "address" },
+      { indexed: true, internalType: "address", name: "nft", type: "address" },
+      { indexed: false, internalType: "address", name: "rewardToken", type: "address" },
     ],
     name: "PoolCreated",
     type: "event",
@@ -96,30 +57,13 @@ export const CONFIG_STAKING_FACTORY_ABI = [
   {
     anonymous: false,
     inputs: [
-      {
-        indexed: false,
-        internalType: "uint16",
-        name: "protocolFeeBps",
-        type: "uint16",
-      },
-      {
-        indexed: false,
-        internalType: "uint16",
-        name: "maxTotalFeeBps",
-        type: "uint16",
-      },
-      {
-        indexed: false,
-        internalType: "address",
-        name: "recipient",
-        type: "address",
-      },
+      { indexed: false, internalType: "uint16", name: "protocolFeeBps", type: "uint16" },
+      { indexed: false, internalType: "uint16", name: "maxTotalFeeBps", type: "uint16" },
+      { indexed: false, internalType: "address", name: "recipient", type: "address" },
     ],
     name: "ProtocolFeeUpdated",
     type: "event",
   },
-
-  // --- Functions ---
   {
     inputs: [
       {
@@ -211,7 +155,6 @@ export const CONFIG_STAKING_FACTORY_ABI = [
 /* ========================================================================== */
 
 export const CONFIG_STAKING_POOL_ABI = [
-  // --- Events ---
   {
     anonymous: false,
     inputs: [
@@ -253,9 +196,7 @@ export const CONFIG_STAKING_POOL_ABI = [
   },
   {
     anonymous: false,
-    inputs: [
-      { indexed: false, internalType: "uint256", name: "newRate", type: "uint256" },
-    ],
+    inputs: [{ indexed: false, internalType: "uint256", name: "newRate", type: "uint256" }],
     name: "RewardRateUpdated",
     type: "event",
   },
@@ -277,8 +218,6 @@ export const CONFIG_STAKING_POOL_ABI = [
     name: "Unstaked",
     type: "event",
   },
-
-  // --- Views / getters ---
   {
     inputs: [],
     name: "accRewardPerNft",
@@ -286,6 +225,7 @@ export const CONFIG_STAKING_POOL_ABI = [
     stateMutability: "view",
     type: "function",
   },
+  { inputs: [], name: "claim", outputs: [], stateMutability: "nonpayable", type: "function" },
   {
     inputs: [],
     name: "creator",
@@ -298,6 +238,16 @@ export const CONFIG_STAKING_POOL_ABI = [
     name: "creatorFeeBps",
     outputs: [{ internalType: "uint16", name: "", type: "uint16" }],
     stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      { internalType: "address", name: "to", type: "address" },
+      { internalType: "uint256", name: "amount", type: "uint256" },
+    ],
+    name: "emergencyRewardWithdraw",
+    outputs: [],
+    stateMutability: "nonpayable",
     type: "function",
   },
   {
@@ -405,6 +355,27 @@ export const CONFIG_STAKING_POOL_ABI = [
     type: "function",
   },
   {
+    inputs: [{ internalType: "uint256", name: "tokenId", type: "uint256" }],
+    name: "stake",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "uint256[]", name: "tokenIds", type: "uint256[]" }],
+    name: "stakeBatch",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    name: "stakedOwner",
+    outputs: [{ internalType: "address", name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
     inputs: [],
     name: "startTime",
     outputs: [{ internalType: "uint64", name: "", type: "uint64" }],
@@ -433,57 +404,6 @@ export const CONFIG_STAKING_POOL_ABI = [
     type: "function",
   },
   {
-    inputs: [{ internalType: "uint256", name: "", type: "uint256" }],
-    name: "stakedOwner",
-    outputs: [{ internalType: "address", name: "", type: "address" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [{ internalType: "address", name: "", type: "address" }],
-    name: "users",
-    outputs: [
-      { internalType: "uint256", name: "amount", type: "uint256" },
-      { internalType: "uint256", name: "rewardDebt", type: "uint256" },
-      { internalType: "uint256", name: "pending", type: "uint256" },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-
-  // --- Actions ---
-  {
-    inputs: [],
-    name: "claim",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [
-      { internalType: "address", name: "to", type: "address" },
-      { internalType: "uint256", name: "amount", type: "uint256" },
-    ],
-    name: "emergencyRewardWithdraw",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [{ internalType: "uint256", name: "tokenId", type: "uint256" }],
-    name: "stake",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [{ internalType: "uint256[]", name: "tokenIds", type: "uint256[]" }],
-    name: "stakeBatch",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
     inputs: [{ internalType: "uint256", name: "tokenId", type: "uint256" }],
     name: "unstake",
     outputs: [],
@@ -504,20 +424,30 @@ export const CONFIG_STAKING_POOL_ABI = [
     stateMutability: "nonpayable",
     type: "function",
   },
+  {
+    inputs: [{ internalType: "address", name: "", type: "address" }],
+    name: "users",
+    outputs: [
+      { internalType: "uint256", name: "amount", type: "uint256" },
+      { internalType: "uint256", name: "rewardDebt", type: "uint256" },
+      { internalType: "uint256", name: "pending", type: "uint256" },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
 ] as const satisfies Abi;
 
 /* ========================================================================== */
 /*                               CONTRACT EXPORTS                             */
 /* ========================================================================== */
 
-// All addresses normalized to lowercase to avoid checksum-case issues.
-
 export const CONFIG_STAKING_FACTORY = {
+  // factory address (lowercase is fine for viem, no checksum issues)
   address: "0x7c12acff6c84eca09be5fb09e14f2e4a5c9540d0" as `0x${string}`,
   abi: CONFIG_STAKING_FACTORY_ABI,
 } as const;
 
-// If you know the real deploy block from Basescan, set it here to narrow log scans.
+// Factory deployed at block 38961393 on Base
 export const CONFIG_STAKING_FACTORY_DEPLOY_BLOCK = 38961393n as const;
 
 export const BASEBOTS_STAKING_POOL = {
@@ -530,11 +460,11 @@ export const BASEBOTS_STAKING_POOL = {
 /* ========================================================================== */
 
 export const BASEBOTS_NFT = {
-  address: "0x92e29025fd6badd17c3005084fe8c43d928222b4" as `0x${string}`,
-} as const;
+  address: "0x92E29025fd6bAdD17c3005084fe8C43D928222B4" as `0x${string}`,
+};
 
 export const BOTS_TOKEN = {
-  address: "0xc45d7c40c9c65af95d33da5921f787d5cfd3ffcf" as `0x${string}`,
+  address: "0xc45d7c40c9c65af95d33da5921f787D5cFD3FFcf" as `0x${string}`,
   decimals: 18,
   symbol: "BOTS",
-} as const;
+};
