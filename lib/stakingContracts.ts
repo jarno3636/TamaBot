@@ -326,6 +326,10 @@ export const CONFIG_STAKING_FACTORY = {
   abi: CONFIG_STAKING_FACTORY_ABI,
 } as const;
 
+// 👇 Use the real deploy block from Basescan if you know it.
+// This avoids huge fromBlock=0n scans that cause HTTP failures.
+export const CONFIG_STAKING_FACTORY_DEPLOY_BLOCK = 0n as const;
+
 export const BASEBOTS_STAKING_POOL = {
   address: "0xdd0274f98ef8b9e8edddb74593bb93aff60fe892" as `0x${string}`,
   abi: CONFIG_STAKING_POOL_ABI,
@@ -340,7 +344,7 @@ export const BASEBOTS_NFT = {
 };
 
 export const BOTS_TOKEN = {
-  address: "0xc45d7c40c9c65af95d33da5921f787d5cfd3ffcf" as `0x${string}`,
+  address: "0xc45d7c40c9c65af95d33da5921f787D5cFD3FFcf" as `0x${string}`,
   decimals: 18,
   symbol: "BOTS",
 };
