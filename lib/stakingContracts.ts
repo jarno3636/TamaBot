@@ -18,7 +18,11 @@ export const CONFIG_STAKING_FACTORY_ABI = [
   },
 
   // --- Errors ---
-  { inputs: [], name: "FailedDeployment", type: "error" },
+  {
+    inputs: [],
+    name: "FailedDeployment",
+    type: "error",
+  },
   {
     inputs: [
       { internalType: "uint256", name: "balance", type: "uint256" },
@@ -42,8 +46,18 @@ export const CONFIG_STAKING_FACTORY_ABI = [
   {
     anonymous: false,
     inputs: [
-      { indexed: true, internalType: "address", name: "previousOwner", type: "address" },
-      { indexed: true, internalType: "address", name: "newOwner", type: "address" },
+      {
+        indexed: true,
+        internalType: "address",
+        name: "previousOwner",
+        type: "address",
+      },
+      {
+        indexed: true,
+        internalType: "address",
+        name: "newOwner",
+        type: "address",
+      },
     ],
     name: "OwnershipTransferred",
     type: "event",
@@ -51,10 +65,30 @@ export const CONFIG_STAKING_FACTORY_ABI = [
   {
     anonymous: false,
     inputs: [
-      { indexed: true, internalType: "address", name: "pool", type: "address" },
-      { indexed: true, internalType: "address", name: "creator", type: "address" },
-      { indexed: true, internalType: "address", name: "nft", type: "address" },
-      { indexed: false, internalType: "address", name: "rewardToken", type: "address" },
+      {
+        indexed: true,
+        internalType: "address",
+        name: "pool",
+        type: "address",
+      },
+      {
+        indexed: true,
+        internalType: "address",
+        name: "creator",
+        type: "address",
+      },
+      {
+        indexed: true,
+        internalType: "address",
+        name: "nft",
+        type: "address",
+      },
+      {
+        indexed: false,
+        internalType: "address",
+        name: "rewardToken",
+        type: "address",
+      },
     ],
     name: "PoolCreated",
     type: "event",
@@ -62,9 +96,24 @@ export const CONFIG_STAKING_FACTORY_ABI = [
   {
     anonymous: false,
     inputs: [
-      { indexed: false, internalType: "uint16", name: "protocolFeeBps", type: "uint16" },
-      { indexed: false, internalType: "uint16", name: "maxTotalFeeBps", type: "uint16" },
-      { indexed: false, internalType: "address", name: "recipient", type: "address" },
+      {
+        indexed: false,
+        internalType: "uint16",
+        name: "protocolFeeBps",
+        type: "uint16",
+      },
+      {
+        indexed: false,
+        internalType: "uint16",
+        name: "maxTotalFeeBps",
+        type: "uint16",
+      },
+      {
+        indexed: false,
+        internalType: "address",
+        name: "recipient",
+        type: "address",
+      },
     ],
     name: "ProtocolFeeUpdated",
     type: "event",
@@ -95,7 +144,6 @@ export const CONFIG_STAKING_FACTORY_ABI = [
     stateMutability: "nonpayable",
     type: "function",
   },
-
   {
     inputs: [],
     name: "maxTotalFeeBps",
@@ -131,7 +179,13 @@ export const CONFIG_STAKING_FACTORY_ABI = [
     stateMutability: "view",
     type: "function",
   },
-
+  {
+    inputs: [],
+    name: "renounceOwnership",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
   {
     inputs: [
       { internalType: "uint16", name: "_protocolFeeBps", type: "uint16" },
@@ -143,35 +197,11 @@ export const CONFIG_STAKING_FACTORY_ABI = [
     stateMutability: "nonpayable",
     type: "function",
   },
-
-  {
-    inputs: [],
-    name: "renounceOwnership",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
   {
     inputs: [{ internalType: "address", name: "newOwner", type: "address" }],
     name: "transferOwnership",
     outputs: [],
     stateMutability: "nonpayable",
-    type: "function",
-  },
-
-  // --- Registry helpers (add these in Solidity too) ---
-  {
-    inputs: [],
-    name: "allPoolsLength",
-    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [{ internalType: "uint256", name: "", type: "uint256" }],
-    name: "allPools",
-    outputs: [{ internalType: "address", name: "", type: "address" }],
-    stateMutability: "view",
     type: "function",
   },
 ] as const satisfies Abi;
@@ -191,7 +221,6 @@ export const CONFIG_STAKING_POOL_ABI = [
     name: "EmergencyWithdraw",
     type: "event",
   },
-
   {
     anonymous: false,
     inputs: [
@@ -211,7 +240,6 @@ export const CONFIG_STAKING_POOL_ABI = [
     name: "Initialized",
     type: "event",
   },
-
   {
     anonymous: false,
     inputs: [
@@ -223,19 +251,38 @@ export const CONFIG_STAKING_POOL_ABI = [
     name: "RewardPaid",
     type: "event",
   },
-
-  // --- Views ---
   {
-    inputs: [],
-    name: "protocolFeeBps",
-    outputs: [{ internalType: "uint16", name: "", type: "uint16" }],
-    stateMutability: "view",
-    type: "function",
+    anonymous: false,
+    inputs: [
+      { indexed: false, internalType: "uint256", name: "newRate", type: "uint256" },
+    ],
+    name: "RewardRateUpdated",
+    type: "event",
   },
   {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: "address", name: "user", type: "address" },
+      { indexed: true, internalType: "uint256", name: "tokenId", type: "uint256" },
+    ],
+    name: "Staked",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: "address", name: "user", type: "address" },
+      { indexed: true, internalType: "uint256", name: "tokenId", type: "uint256" },
+    ],
+    name: "Unstaked",
+    type: "event",
+  },
+
+  // --- Views / getters ---
+  {
     inputs: [],
-    name: "creatorFeeBps",
-    outputs: [{ internalType: "uint16", name: "", type: "uint16" }],
+    name: "accRewardPerNft",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
     stateMutability: "view",
     type: "function",
   },
@@ -248,15 +295,8 @@ export const CONFIG_STAKING_POOL_ABI = [
   },
   {
     inputs: [],
-    name: "rewardRate",
-    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "startTime",
-    outputs: [{ internalType: "uint64", name: "", type: "uint64" }],
+    name: "creatorFeeBps",
+    outputs: [{ internalType: "uint16", name: "", type: "uint16" }],
     stateMutability: "view",
     type: "function",
   },
@@ -268,9 +308,106 @@ export const CONFIG_STAKING_POOL_ABI = [
     type: "function",
   },
   {
+    inputs: [{ internalType: "uint256", name: "assumedStakeValuePerNft", type: "uint256" }],
+    name: "estimateApr",
+    outputs: [{ internalType: "uint256", name: "aprBps", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
     inputs: [],
-    name: "totalStaked",
+    name: "factory",
+    outputs: [{ internalType: "address", name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        components: [
+          { internalType: "address", name: "factory", type: "address" },
+          { internalType: "address", name: "creator", type: "address" },
+          { internalType: "contract IERC721", name: "nft", type: "address" },
+          { internalType: "contract IERC20", name: "rewardToken", type: "address" },
+          { internalType: "uint256", name: "rewardRate", type: "uint256" },
+          { internalType: "uint64", name: "startTime", type: "uint64" },
+          { internalType: "uint64", name: "endTime", type: "uint64" },
+          { internalType: "uint64", name: "maxStaked", type: "uint64" },
+          { internalType: "uint16", name: "protocolFeeBps", type: "uint16" },
+          { internalType: "uint16", name: "creatorFeeBps", type: "uint16" },
+          { internalType: "bool", name: "takeFeeOnClaim", type: "bool" },
+          { internalType: "bool", name: "takeFeeOnUnstake", type: "bool" },
+        ],
+        internalType: "struct ConfigurableNftStakingPool.InitParams",
+        name: "p",
+        type: "tuple",
+      },
+    ],
+    name: "initialize",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "initialized",
+    outputs: [{ internalType: "bool", name: "", type: "bool" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "lastUpdateTime",
+    outputs: [{ internalType: "uint64", name: "", type: "uint64" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "maxStaked",
+    outputs: [{ internalType: "uint64", name: "", type: "uint64" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "nft",
+    outputs: [{ internalType: "contract IERC721", name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "address", name: "userAddr", type: "address" }],
+    name: "pendingRewards",
+    outputs: [{ internalType: "uint256", name: "pendingGross", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "protocolFeeBps",
+    outputs: [{ internalType: "uint16", name: "", type: "uint16" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "rewardRate",
     outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "rewardToken",
+    outputs: [{ internalType: "contract IERC20", name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "startTime",
+    outputs: [{ internalType: "uint64", name: "", type: "uint64" }],
     stateMutability: "view",
     type: "function",
   },
@@ -288,15 +425,20 @@ export const CONFIG_STAKING_POOL_ABI = [
     stateMutability: "view",
     type: "function",
   },
-
   {
-    inputs: [{ internalType: "address", name: "userAddr", type: "address" }],
-    name: "pendingRewards",
-    outputs: [{ internalType: "uint256", name: "pendingGross", type: "uint256" }],
+    inputs: [],
+    name: "totalStaked",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
     stateMutability: "view",
     type: "function",
   },
-
+  {
+    inputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    name: "stakedOwner",
+    outputs: [{ internalType: "address", name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
   {
     inputs: [{ internalType: "address", name: "", type: "address" }],
     name: "users",
@@ -318,8 +460,25 @@ export const CONFIG_STAKING_POOL_ABI = [
     type: "function",
   },
   {
+    inputs: [
+      { internalType: "address", name: "to", type: "address" },
+      { internalType: "uint256", name: "amount", type: "uint256" },
+    ],
+    name: "emergencyRewardWithdraw",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
     inputs: [{ internalType: "uint256", name: "tokenId", type: "uint256" }],
     name: "stake",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "uint256[]", name: "tokenIds", type: "uint256[]" }],
+    name: "stakeBatch",
     outputs: [],
     stateMutability: "nonpayable",
     type: "function",
@@ -331,21 +490,34 @@ export const CONFIG_STAKING_POOL_ABI = [
     stateMutability: "nonpayable",
     type: "function",
   },
+  {
+    inputs: [{ internalType: "uint256[]", name: "tokenIds", type: "uint256[]" }],
+    name: "unstakeBatch",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "uint256", name: "newRate", type: "uint256" }],
+    name: "updateRewardRate",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
 ] as const satisfies Abi;
 
 /* ========================================================================== */
 /*                               CONTRACT EXPORTS                             */
 /* ========================================================================== */
 
-// NOTE: all addresses normalized to lowercase to avoid checksum-case issues.
-// Viem/wagmi are happy with lowercase, and we always compare via .toLowerCase().
+// All addresses normalized to lowercase to avoid checksum-case issues.
 
 export const CONFIG_STAKING_FACTORY = {
   address: "0x7c12acff6c84eca09be5fb09e14f2e4a5c9540d0" as `0x${string}`,
   abi: CONFIG_STAKING_FACTORY_ABI,
 } as const;
 
-// Use the real deploy block from Basescan if you know it to reduce log-scan range.
+// If you know the real deploy block from Basescan, set it here to narrow log scans.
 export const CONFIG_STAKING_FACTORY_DEPLOY_BLOCK = 0n as const;
 
 export const BASEBOTS_STAKING_POOL = {
