@@ -133,11 +133,13 @@ function getErrText(e: unknown): string {
 }
 
 const primaryBtn =
-  "w-full inline-flex items-center justify-center rounded-full bg-[#79ffe1] text-slate-950 text-sm font-semibold py-2.5 shadow-[0_10px_30px_rgba(121,255,225,0.45)] hover:bg-[#a5fff0] transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
+  "w-full inline-flex items-center justify-center rounded-full bg-[#79ffe1] text-slate-950 text-sm font-semibold py-2.5 shadow-[0_10px_30px_rgba(121,255,225,0.45)] hover:bg-[#a5fff0] transition-all active:scale-[0.97] active:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/70 disabled:opacity-60 disabled:cursor-not-allowed";
+
 const secondaryBtn =
-  "w-full inline-flex items-center justify-center rounded-full bg-white/5 text-white text-sm font-semibold py-2.5 border border-white/30 hover:bg-white/10 transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
+  "w-full inline-flex items-center justify-center rounded-full bg-white/5 text-white text-sm font-semibold py-2.5 border border-white/30 hover:bg-white/10 transition-all active:scale-[0.97] active:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 disabled:opacity-60 disabled:cursor-not-allowed";
+
 const successBtn =
-  "w-full inline-flex items-center justify-center rounded-full bg-emerald-500/15 text-emerald-200 text-sm font-semibold py-2.5 border border-emerald-400/60 hover:bg-emerald-500/25 transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
+  "w-full inline-flex items-center justify-center rounded-full bg-emerald-500/15 text-emerald-200 text-sm font-semibold py-2.5 border border-emerald-400/60 hover:bg-emerald-500/25 transition-all active:scale-[0.97] active:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 disabled:opacity-60 disabled:cursor-not-allowed";
 
 const inputBase =
   "mt-1 w-full max-w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-[13px] md:text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60";
@@ -578,11 +580,18 @@ export default function StakingPage() {
           "event PoolCreated(address indexed pool,address indexed creator,address indexed nft,address rewardToken)",
         );
 
+        // ---- windowed log query to avoid RPC errors on huge ranges ----
+        const latestBlock = await client.getBlockNumber();
+        const windowSize = 500_000n; // adjust if needed
+        const fromBlock =
+          latestBlock > windowSize ? latestBlock - windowSize : 0n;
+        const toBlock = latestBlock;
+
         const logs = await client.getLogs({
           address: CONFIG_STAKING_FACTORY.address as `0x${string}`,
           event: eventAbi,
-          fromBlock: 0n,
-          toBlock: "latest",
+          fromBlock,
+          toBlock,
         });
 
         if (cancelled) return;
@@ -607,7 +616,9 @@ export default function StakingPage() {
         setFactoryPools(items);
       } catch (err) {
         if (!cancelled) {
-          setPoolsError(getErrText(err));
+          setPoolsError(
+            `Failed to load pools from factory. ${getErrText(err)}`,
+          );
         }
       } finally {
         if (!cancelled) {
@@ -1167,7 +1178,7 @@ export default function StakingPage() {
                           }))
                         }
                         className={[
-                          "px-3 py-1.5 rounded-full border text-xs transition-all duration-150 flex items-center gap-1.5",
+                          "px-3 py-1.5 rounded-full border text-xs transition-all duration-150 flex items-center gap-1.5 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/70",
                           isActive
                             ? [
                                 "border-[#79ffe1]",
@@ -1223,9 +1234,9 @@ export default function StakingPage() {
                     <>
                       <p>
                         Your pool address is{" "}
-                        <span className="font-mono">
-                          {lastCreatedPoolAddr}
-                        </span>
+                          <span className="font-mono">
+                            {lastCreatedPoolAddr}
+                          </span>
                         .
                       </p>
                       <p>
@@ -1251,7 +1262,7 @@ export default function StakingPage() {
                           <button
                             type="button"
                             onClick={openFundModalForLastCreated}
-                            className="rounded-full border border-emerald-300/70 bg-emerald-500/20 px-3 py-1 text-[11px] font-semibold text-emerald-50 hover:bg-emerald-500/30"
+                            className="rounded-full border border-emerald-300/70 bg-emerald-500/20 px-3 py-1 text-[11px] font-semibold text-emerald-50 hover:bg-emerald-500/30 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/80"
                           >
                             Fund this pool now
                           </button>
@@ -1286,7 +1297,7 @@ export default function StakingPage() {
                 type="button"
                 onClick={() => setActiveFilter(t.key as FilterTab)}
                 className={[
-                  "px-3 py-1.5 rounded-full border transition-all",
+                  "px-3 py-1.5 rounded-full border transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/60",
                   activeFilter === t.key
                     ? "border-[#79ffe1] bg-[#031c1b] text-[#79ffe1] shadow-[0_0_14px_rgba(121,255,225,0.6)]"
                     : "border-white/15 bg-[#020617] text-white/70 hover:border-white/40",
@@ -1574,7 +1585,7 @@ export default function StakingPage() {
               type="button"
               onClick={() => setRefreshNonce((n) => n + 1)}
               disabled={poolsLoading}
-              className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/5 px-3 py-1.5 text-[11px] font-medium text-white/80 hover:bg-white/10 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/5 px-3 py-1.5 text-[11px] font-medium text-white/80 hover:bg-white/10 disabled:opacity-60 disabled:cursor-not-allowed transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/60"
             >
               {poolsLoading && (
                 <span className="h-3 w-3 animate-spin rounded-full border border-t-transparent border-white/70" />
@@ -1683,14 +1694,14 @@ export default function StakingPage() {
                         href={`https://basescan.org/address/${pool.pool}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="rounded-full border border-white/20 bg-white/5 px-3 py-1 text-[11px] text-white/80 hover:bg-white/10"
+                        className="rounded-full border border-white/20 bg-white/5 px-3 py-1 text-[11px] text-white/80 hover:bg-white/10 transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
                       >
                         View pool ↗
                       </Link>
                       {isBasebots && (
                         <Link
                           href="/staking"
-                          className="rounded-full border border-[#79ffe1]/70 bg-[#031c1b] px-3 py-1 text-[11px] font-semibold text-[#79ffe1] hover:bg-[#052725]"
+                          className="rounded-full border border-[#79ffe1]/70 bg-[#031c1b] px-3 py-1 text-[11px] font-semibold text-[#79ffe1] hover:bg-[#052725] transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/70"
                         >
                           Open Basebots pool
                         </Link>
@@ -1706,7 +1717,7 @@ export default function StakingPage() {
                               rewardToken: pool.rewardToken,
                             })
                           }
-                          className="rounded-full border border-emerald-400/70 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-100 hover:bg-emerald-500/20"
+                          className="rounded-full border border-emerald-400/70 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-100 hover:bg-emerald-500/20 transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/80"
                         >
                           Fund pool
                         </button>
@@ -1740,7 +1751,7 @@ export default function StakingPage() {
                                 );
                               }
                             }}
-                            className="rounded-full border border-purple-400/60 bg-purple-500/10 px-3 py-1 text-[11px] font-semibold text-purple-100 hover:bg-purple-500/20"
+                            className="rounded-full border border-purple-400/60 bg-purple-500/10 px-3 py-1 text-[11px] font-semibold text-purple-100 hover:bg-purple-500/20 transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-300/80"
                           >
                             Share on Farcaster
                           </button>
@@ -1769,7 +1780,7 @@ export default function StakingPage() {
                                 );
                               }
                             }}
-                            className="rounded-full border border-sky-400/60 bg-sky-500/10 px-3 py-1 text-[11px] font-semibold text-sky-100 hover:bg-sky-500/20"
+                            className="rounded-full border border-sky-400/60 bg-sky-500/10 px-3 py-1 text-[11px] font-semibold text-sky-100 hover:bg-sky-500/20 transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/80"
                           >
                             Share on X
                           </button>
