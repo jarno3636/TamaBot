@@ -16,7 +16,7 @@ type Options = {
 const RPC_URL =
   process.env.BASE_RPC_URL ||
   process.env.NEXT_PUBLIC_BASE_RPC_URL ||
-  "https://mainnet.base.org"; // fallback (often rate-limited)
+  "https://mainnet.base.org";
 
 const client = createPublicClient({
   chain: base,
@@ -38,8 +38,6 @@ export async function fetchPoolsByCreator(
   try {
     const latest = await client.getBlockNumber();
 
-    // ✅ Cap scan window so Vercel doesn’t time out / RPC doesn’t rate-limit.
-    // You can override via /api/pools?window=1500000 etc.
     const windowBlocks = opts.windowBlocks ?? 500_000n;
     const minWindowBlock = latest > windowBlocks ? latest - windowBlocks : 0n;
 
@@ -48,7 +46,6 @@ export async function fetchPoolsByCreator(
         ? CONFIG_STAKING_FACTORY_DEPLOY_BLOCK
         : minWindowBlock;
 
-    // tune this if your RPC complains (25k–100k typical)
     const STEP = 50_000n;
 
     const logs: any[] = [];
@@ -90,12 +87,12 @@ export async function fetchPoolsByCreator(
       e?.message ||
       "fetchPoolsByCreator failed (unknown RPC/log error)";
 
-    // ✅ TS-safe: do NOT pass `{ cause }` as 2nd param (breaks on older TS/lib)
+    // IMPORTANT: no 2nd argument here
     const err = new Error(
       `${msg} | rpc=${RPC_URL} | factory=${CONFIG_STAKING_FACTORY.address} | deployBlock=${CONFIG_STAKING_FACTORY_DEPLOY_BLOCK.toString()}`,
     );
 
-    // attach cause without requiring TS lib support
+    // attach extra debug info without TS/lib support requirements
     (err as any).cause = e;
 
     throw err;
