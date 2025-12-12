@@ -25,13 +25,14 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-// Custom fetch to expose real HTTP status + body when RPC fails.
-// This is the key to diagnosing "HTTP request failed".
-async function debugFetch(input: RequestInfo | URL, init?: RequestInit) {
+// ✅ viem http transport uses fetchFn (not fetch)
+async function debugFetchFn(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
   const res = await fetch(input, init);
 
   if (!res.ok) {
-    // Try to read body safely (Alchemy often returns JSON errors)
     let bodyText = "";
     try {
       bodyText = await res.text();
@@ -59,7 +60,7 @@ const client = createPublicClient({
     timeout: 25_000,
     retryCount: 2,
     retryDelay: 500,
-    fetch: debugFetch, // 👈 important
+    fetchFn: debugFetchFn, // ✅ correct property name
   }),
 });
 
@@ -87,7 +88,8 @@ export async function fetchPoolsByCreator(
     const logs: any[] = [];
 
     for (let start = from; start <= latest; start += stepBlocks) {
-      const end = start + stepBlocks - 1n > latest ? latest : start + stepBlocks - 1n;
+      const end =
+        start + stepBlocks - 1n > latest ? latest : start + stepBlocks - 1n;
 
       try {
         const chunk = await client.getLogs({
@@ -100,11 +102,7 @@ export async function fetchPoolsByCreator(
 
         logs.push(...chunk);
       } catch (e: any) {
-        // Attach range details so your API prints the exact failing slice.
-        const msg =
-          e?.message ||
-          e?.shortMessage ||
-          "HTTP request failed.";
+        const msg = e?.message || e?.shortMessage || "HTTP request failed.";
 
         const err = new Error(
           `${msg} | rpc=${RPC_URL} | factory=${CONFIG_STAKING_FACTORY.address} | range=${start.toString()}-${end.toString()}`,
@@ -119,7 +117,7 @@ export async function fetchPoolsByCreator(
     // newest first
     logs.sort((a, b) => Number(b.blockNumber - a.blockNumber));
 
-    // de-dupe by pool (keep newest)
+    // de-dupe by pool address (keep newest)
     const map = new Map<string, any>();
     for (const l of logs) {
       map.set((l.args.pool as string).toLowerCase(), l);
@@ -134,10 +132,7 @@ export async function fetchPoolsByCreator(
       txHash: l.transactionHash,
     }));
   } catch (e: any) {
-    const msg =
-      e?.message ||
-      e?.shortMessage ||
-      "fetchPoolsByCreator failed (unknown)";
+    const msg = e?.message || e?.shortMessage || "fetchPoolsByCreator failed";
 
     const err = new Error(
       `${msg} | rpc=${RPC_URL} | factory=${CONFIG_STAKING_FACTORY.address} | deployBlock=${CONFIG_STAKING_FACTORY_DEPLOY_BLOCK.toString()}`,
