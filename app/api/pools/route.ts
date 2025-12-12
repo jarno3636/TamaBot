@@ -10,28 +10,23 @@ export async function GET(req: Request) {
 
   const creator = searchParams.get("creator") as `0x${string}` | null;
 
-  // If caller doesn't pass window, we choose:
-  // - with creator: larger default window (likely still OK)
-  // - without creator: smaller default window (prevents 500/timeouts)
-  const windowParam = searchParams.get("window");
-  const windowBlocks =
-    windowParam && windowParam.trim().length > 0
-      ? BigInt(windowParam)
-      : creator
-      ? 1_000_000n
-      : 150_000n;
+  const window = searchParams.get("window");
+  const step = searchParams.get("step");
+  const throttle = searchParams.get("throttle");
 
   try {
-    const pools = await fetchPoolsByCreator(creator ?? undefined, { windowBlocks });
-    return NextResponse.json({ ok: true, pools, windowBlocks: windowBlocks.toString() });
+    const pools = await fetchPoolsByCreator(creator ?? undefined, {
+      windowBlocks: window ? BigInt(window) : undefined,
+      stepBlocks: step ? BigInt(step) : undefined,
+      throttleMs: throttle ? Number(throttle) : undefined,
+    });
+
+    return NextResponse.json({ ok: true, pools });
   } catch (e: any) {
     console.error("[/api/pools] error", {
       creator,
-      windowBlocks: windowBlocks.toString(),
       message: e?.message,
-      shortMessage: e?.shortMessage,
-      name: e?.name,
-      cause: (e as any)?.cause,
+      cause: e?.cause?.message,
       stack: e?.stack,
     });
 
