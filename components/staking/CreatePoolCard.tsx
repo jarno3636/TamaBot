@@ -11,14 +11,13 @@ import {
   usePublicClient,
 } from "wagmi";
 import { base } from "viem/chains";
-import {
-  parseUnits,
-  parseAbiItem,
-  decodeEventLog,
-  type Hex,
-} from "viem";
+import { parseUnits, parseAbiItem, decodeEventLog, type Hex } from "viem";
 
-import { CONFIG_STAKING_FACTORY, BASEBOTS_STAKING_POOL, BOTS_TOKEN, BASEBOTS_NFT } from "@/lib/stakingContracts";
+import {
+  CONFIG_STAKING_FACTORY,
+  BOTS_TOKEN,
+  BASEBOTS_NFT,
+} from "@/lib/stakingContracts";
 import type { FeeMode, FundTarget } from "./stakingUtils";
 import { nowSeconds, shortenAddress, getErrText } from "./stakingUtils";
 
@@ -196,21 +195,22 @@ export default function CreatePoolCard({
               data: log.data,
               topics: log.topics,
             });
+
             if (decoded.eventName === "PoolCreated") {
               const args = decoded.args as {
                 pool: `0x${string}`;
                 rewardToken: `0x${string}`;
               };
+
               if (!cancelled) {
                 setLastCreatedPoolAddr(args.pool);
-                // reward token already in state, but keeping consistent
                 setLastCreatedRewardToken(args.rewardToken);
                 onLastCreatedPoolResolved?.(args.pool);
               }
               break;
             }
           } catch {
-            // ignore
+            // ignore non-matching logs
           }
         }
       } catch (e) {
@@ -243,9 +243,10 @@ export default function CreatePoolCard({
                 {protocolFeePercent}%
               </span>
             </div>
+
             <div className="flex items-center justify-between gap-2">
               <span>Your creator fee</span>
-              <span className="font-semibold">{creator}%</span>
+              <span className="font-semibold">{creatorFee}%</span>
             </div>
 
             <div className="mt-2 rounded-xl border border-amber-400/60 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100">
@@ -431,7 +432,11 @@ export default function CreatePoolCard({
           </div>
 
           <div className="col-span-2 flex flex-wrap items-center justify-between gap-3 mt-3">
-            <button type="submit" disabled={createPending} className={primaryBtn}>
+            <button
+              type="submit"
+              disabled={createPending}
+              className={primaryBtn}
+            >
               {createPending ? "Creating pool…" : "Create pool"}
             </button>
 
