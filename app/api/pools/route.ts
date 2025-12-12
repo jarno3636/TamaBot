@@ -2,30 +2,32 @@
 import { NextResponse } from "next/server";
 import { fetchPoolsByCreator } from "@/lib/fetchFactoryPools";
 
-export const runtime = "nodejs"; // avoid Edge issues with RPC/log scanning
-export const dynamic = "force-dynamic"; // avoid caching while debugging
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
 
-  // optional filter: only return pools created by this address
   const creator = searchParams.get("creator") as `0x${string}` | null;
 
-  // optional: how far back to scan from latest block (in blocks)
-  // e.g. /api/pools?window=500000 or /api/pools?window=1500000
-  const window = searchParams.get("window");
+  // If caller doesn't pass window, we choose:
+  // - with creator: larger default window (likely still OK)
+  // - without creator: smaller default window (prevents 500/timeouts)
+  const windowParam = searchParams.get("window");
   const windowBlocks =
-    window && window.trim().length > 0 ? BigInt(window) : undefined;
+    windowParam && windowParam.trim().length > 0
+      ? BigInt(windowParam)
+      : creator
+      ? 1_000_000n
+      : 150_000n;
 
   try {
-    const pools = await fetchPoolsByCreator(creator ?? undefined, {
-      windowBlocks,
-    });
-    return NextResponse.json({ ok: true, pools });
+    const pools = await fetchPoolsByCreator(creator ?? undefined, { windowBlocks });
+    return NextResponse.json({ ok: true, pools, windowBlocks: windowBlocks.toString() });
   } catch (e: any) {
     console.error("[/api/pools] error", {
       creator,
-      window,
+      windowBlocks: windowBlocks.toString(),
       message: e?.message,
       shortMessage: e?.shortMessage,
       name: e?.name,
