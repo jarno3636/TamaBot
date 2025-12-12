@@ -8,50 +8,18 @@ import {
 } from "./stakingContracts";
 
 type Options = {
-  // how far back from latest to scan
   windowBlocks?: bigint; // default 300k
-  // how big each getLogs chunk is
-  stepBlocks?: bigint; // default 10k
-  // throttle between chunks (ms)
-  throttleMs?: number; // default 150ms
+  stepBlocks?: bigint; // default 2k–5k for public RPC
+  throttleMs?: number;
 };
 
 const RPC_URL =
+  process.env.BASE_POOLS_RPC_URL || // 👈 server-only RPC for scanning
   process.env.BASE_RPC_URL ||
-  process.env.NEXT_PUBLIC_BASE_RPC_URL ||
   "https://mainnet.base.org";
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
-}
-
-// ✅ viem http transport uses fetchFn (not fetch)
-async function debugFetchFn(
-  input: RequestInfo | URL,
-  init?: RequestInit,
-): Promise<Response> {
-  const res = await fetch(input, init);
-
-  if (!res.ok) {
-    let bodyText = "";
-    try {
-      bodyText = await res.text();
-    } catch {
-      bodyText = "<no body>";
-    }
-
-    const url = typeof input === "string" ? input : String(input);
-    const msg = `RPC HTTP ${res.status} ${res.statusText} | url=${url} | body=${bodyText.slice(
-      0,
-      500,
-    )}`;
-
-    const err = new Error(msg);
-    (err as any).status = res.status;
-    throw err;
-  }
-
-  return res;
 }
 
 const client = createPublicClient({
@@ -59,8 +27,7 @@ const client = createPublicClient({
   transport: http(RPC_URL, {
     timeout: 25_000,
     retryCount: 2,
-    retryDelay: 500,
-    fetchFn: debugFetchFn, // ✅ correct property name
+    retryDelay: 400,
   }),
 });
 
@@ -73,71 +40,61 @@ export async function fetchPoolsByCreator(
   opts: Options = {},
 ) {
   const windowBlocks = opts.windowBlocks ?? 300_000n;
-  const stepBlocks = opts.stepBlocks ?? 10_000n;
-  const throttleMs = opts.throttleMs ?? 150;
+  const stepBlocks = opts.stepBlocks ?? 2_000n; // ✅ safe for public RPC providers
+  const throttleMs = opts.throttleMs ?? 120;
 
-  try {
-    const latest = await client.getBlockNumber();
+  const latest = await client.getBlockNumber();
 
-    const minWindowBlock = latest > windowBlocks ? latest - windowBlocks : 0n;
-    const from =
-      CONFIG_STAKING_FACTORY_DEPLOY_BLOCK > minWindowBlock
-        ? CONFIG_STAKING_FACTORY_DEPLOY_BLOCK
-        : minWindowBlock;
+  const minWindowBlock = latest > windowBlocks ? latest - windowBlocks : 0n;
+  const from =
+    CONFIG_STAKING_FACTORY_DEPLOY_BLOCK > minWindowBlock
+      ? CONFIG_STAKING_FACTORY_DEPLOY_BLOCK
+      : minWindowBlock;
 
-    const logs: any[] = [];
+  const logs: any[] = [];
 
-    for (let start = from; start <= latest; start += stepBlocks) {
-      const end =
-        start + stepBlocks - 1n > latest ? latest : start + stepBlocks - 1n;
+  for (let start = from; start <= latest; start += stepBlocks) {
+    const end =
+      start + stepBlocks - 1n > latest ? latest : start + stepBlocks - 1n;
 
-      try {
-        const chunk = await client.getLogs({
-          address: CONFIG_STAKING_FACTORY.address,
-          event: PoolCreated,
-          fromBlock: start,
-          toBlock: end,
-          ...(creator ? { args: { creator } } : {}),
-        });
+    try {
+      const chunk = await client.getLogs({
+        address: CONFIG_STAKING_FACTORY.address,
+        event: PoolCreated,
+        fromBlock: start,
+        toBlock: end,
+        ...(creator ? { args: { creator } } : {}),
+      });
 
-        logs.push(...chunk);
-      } catch (e: any) {
-        const msg = e?.message || e?.shortMessage || "HTTP request failed.";
-
-        const err = new Error(
-          `${msg} | rpc=${RPC_URL} | factory=${CONFIG_STAKING_FACTORY.address} | range=${start.toString()}-${end.toString()}`,
-        );
-        (err as any).cause = e;
-        throw err;
-      }
-
-      if (throttleMs > 0) await sleep(throttleMs);
+      logs.push(...chunk);
+    } catch (e: any) {
+      const msg = e?.message || e?.shortMessage || "HTTP request failed.";
+      const err = new Error(
+        `${msg} | rpc=${RPC_URL} | factory=${CONFIG_STAKING_FACTORY.address} | range=${start.toString()}-${end.toString()}`,
+      );
+      (err as any).cause = e;
+      throw err;
     }
 
-    // newest first
-    logs.sort((a, b) => Number(b.blockNumber - a.blockNumber));
-
-    // de-dupe by pool address (keep newest)
-    const map = new Map<string, any>();
-    for (const l of logs) {
-      map.set((l.args.pool as string).toLowerCase(), l);
-    }
-
-    return Array.from(map.values()).map((l) => ({
-      pool: l.args.pool as `0x${string}`,
-      creator: l.args.creator as `0x${string}`,
-      nft: l.args.nft as `0x${string}`,
-      rewardToken: l.args.rewardToken as `0x${string}`,
-      blockNumber: l.blockNumber,
-      txHash: l.transactionHash,
-    }));
-  } catch (e: any) {
-    const msg = e?.message || e?.shortMessage || "fetchPoolsByCreator failed";
-
-    const err = new Error(
-      `${msg} | rpc=${RPC_URL} | factory=${CONFIG_STAKING_FACTORY.address} | deployBlock=${CONFIG_STAKING_FACTORY_DEPLOY_BLOCK.toString()}`,
-    );
-    (err as any).cause = e;
-    throw err;
+    if (throttleMs > 0) await sleep(throttleMs);
   }
+
+  // newest first
+  logs.sort((a, b) => Number((b.blockNumber ?? 0n) - (a.blockNumber ?? 0n)));
+
+  // de-dupe by pool (keep newest)
+  const map = new Map<string, any>();
+  for (const l of logs) {
+    map.set((l.args.pool as string).toLowerCase(), l);
+  }
+
+  // ✅ IMPORTANT: convert BigInt fields to string
+  return Array.from(map.values()).map((l) => ({
+    pool: l.args.pool as `0x${string}`,
+    creator: l.args.creator as `0x${string}`,
+    nft: l.args.nft as `0x${string}`,
+    rewardToken: l.args.rewardToken as `0x${string}`,
+    blockNumber: (l.blockNumber as bigint).toString(),
+    txHash: l.transactionHash as `0x${string}`,
+  }));
 }
