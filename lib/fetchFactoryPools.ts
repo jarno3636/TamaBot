@@ -8,7 +8,7 @@ import {
 } from "./stakingContracts";
 
 type Options = {
-  // How far back to scan from latest block (default 500k)
+  // How far back to scan from latest block (default 500k).
   // Increase if you deployed long ago and need older pools.
   windowBlocks?: bigint;
 };
@@ -39,7 +39,7 @@ export async function fetchPoolsByCreator(
     const latest = await client.getBlockNumber();
 
     // ✅ Cap scan window so Vercel doesn’t time out / RPC doesn’t rate-limit.
-    // If you truly need “all time”, pass ?window=2000000 etc. from the API.
+    // You can override via /api/pools?window=1500000 etc.
     const windowBlocks = opts.windowBlocks ?? 500_000n;
     const minWindowBlock = latest > windowBlocks ? latest - windowBlocks : 0n;
 
@@ -48,7 +48,7 @@ export async function fetchPoolsByCreator(
         ? CONFIG_STAKING_FACTORY_DEPLOY_BLOCK
         : minWindowBlock;
 
-    // tune this if RPC complains
+    // tune this if your RPC complains (25k–100k typical)
     const STEP = 50_000n;
 
     const logs: any[] = [];
@@ -70,7 +70,7 @@ export async function fetchPoolsByCreator(
     // newest first
     logs.sort((a, b) => Number(b.blockNumber - a.blockNumber));
 
-    // de-dupe by pool
+    // de-dupe by pool address (keep newest)
     const map = new Map<string, any>();
     for (const l of logs) {
       map.set((l.args.pool as string).toLowerCase(), l);
@@ -89,9 +89,15 @@ export async function fetchPoolsByCreator(
       e?.shortMessage ||
       e?.message ||
       "fetchPoolsByCreator failed (unknown RPC/log error)";
-    throw new Error(
+
+    // ✅ TS-safe: do NOT pass `{ cause }` as 2nd param (breaks on older TS/lib)
+    const err = new Error(
       `${msg} | rpc=${RPC_URL} | factory=${CONFIG_STAKING_FACTORY.address} | deployBlock=${CONFIG_STAKING_FACTORY_DEPLOY_BLOCK.toString()}`,
-      { cause: e },
     );
+
+    // attach cause without requiring TS lib support
+    (err as any).cause = e;
+
+    throw err;
   }
 }
