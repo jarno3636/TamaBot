@@ -22,7 +22,6 @@ import Image from "next/image";
 
 import {
   CONFIG_STAKING_FACTORY,
-  CONFIG_STAKING_FACTORY_DEPLOY_BLOCK,
   BASEBOTS_STAKING_POOL,
   BOTS_TOKEN,
   BASEBOTS_NFT,
@@ -452,15 +451,15 @@ export default function StakingPage() {
         return;
       }
 
-      const rewardRate = totalRewardsWei / durationSec;
-      if (rewardRate === 0n) {
+      const rewardRateCalc = totalRewardsWei / durationSec;
+      if (rewardRateCalc === 0n) {
         setCreateMsg("Total rewards too low for the selected duration.");
         return;
       }
 
       const startOffset = Number(startDelayHours || "0") * 60 * 60;
-      const startTime = BigInt(nowSeconds() + startOffset);
-      const endTime = startTime + durationSec;
+      const startTimeCalc = BigInt(nowSeconds() + startOffset);
+      const endTimeCalc = startTimeCalc + durationSec;
       const maxStakedBig = BigInt(maxStaked || "0");
 
       const creatorFeePercentNum = Number(creatorFeePercent || "0");
@@ -483,9 +482,9 @@ export default function StakingPage() {
           {
             nft: nftAddress as `0x${string}`,
             rewardToken: rewardToken as `0x${string}`,
-            rewardRate,
-            startTime,
-            endTime,
+            rewardRate: rewardRateCalc,
+            startTime: startTimeCalc,
+            endTime: endTimeCalc,
             maxStaked: maxStakedBig,
             creatorFeeBps: creatorFeeBpsNum,
             takeFeeOnClaim,
@@ -557,7 +556,7 @@ export default function StakingPage() {
   }, [publicClient, createMined, createTxHash]);
 
   /* ──────────────────────────────────────────────────────────────
-   * FACTORY POOL DISCOVERY (PoolCreated logs)
+   * FACTORY POOL DISCOVERY (via /api/pools) ✅ FIX
    * ──────────────────────────────────────────────────────────── */
   const [factoryPools, setFactoryPools] = useState<FactoryPoolMeta[]>([]);
   const [factoryPoolDetails, setFactoryPoolDetails] = useState<
@@ -568,8 +567,6 @@ export default function StakingPage() {
   const [refreshNonce, setRefreshNonce] = useState(0);
 
   useEffect(() => {
-    if (!publicClient) return;
-    const client = publicClient as NonNullable<PublicClientType>;
     let cancelled = false;
 
     async function loadPools() {
@@ -577,112 +574,68 @@ export default function StakingPage() {
         setPoolsLoading(true);
         setPoolsError(null);
 
-        const latestBlock = await client.getBlockNumber();
+        const params = new URLSearchParams();
 
-        // start from deploy block, but also cap to a reasonable window behind latest
-        const windowSize = 500_000n;
-        const minWindowBlock =
-          latestBlock > windowSize ? latestBlock - windowSize : 0n;
-
-        const fromBlock =
-          CONFIG_STAKING_FACTORY_DEPLOY_BLOCK > minWindowBlock
-            ? CONFIG_STAKING_FACTORY_DEPLOY_BLOCK
-            : minWindowBlock;
-
-        const toBlock = latestBlock;
-
-        console.log(
-          "[staking] loading pools logs",
-          "from",
-          fromBlock.toString(),
-          "to",
-          toBlock.toString(),
-        );
-
-        // more robust: fetch all logs for this address, then decode PoolCreated manually
-        const rawLogs = await client.getLogs({
-          address: CONFIG_STAKING_FACTORY.address as `0x${string}`,
-          fromBlock,
-          toBlock,
-        });
-
-        console.log(
-          "[staking] raw logs from factory in range:",
-          rawLogs.length,
-        );
-
-        if (cancelled) return;
-
-        const eventAbi = parseAbiItem(
-          "event PoolCreated(address indexed pool,address indexed creator,address indexed nft,address rewardToken)",
-        );
-
-        const items: FactoryPoolMeta[] = [];
-
-        for (const log of rawLogs) {
-          try {
-            const decoded = decodeEventLog({
-              abi: [eventAbi],
-              data: log.data,
-              topics: log.topics,
-            });
-
-            if (decoded.eventName !== "PoolCreated") continue;
-
-            const args = decoded.args as {
-              pool: `0x${string}`;
-              creator: `0x${string}`;
-              nft: `0x${string}`;
-              rewardToken: `0x${string}`;
-            };
-
-            items.push({
-              pool: args.pool,
-              creator: args.creator,
-              nft: args.nft,
-              rewardToken: args.rewardToken,
-            });
-          } catch {
-            // ignore non-PoolCreated logs
-          }
+        // If user is on "My pools", ask API for only their pools (fast + reliable)
+        if (activeFilter === "my-pools" && address) {
+          params.set("creator", address);
         }
 
-        // newest first
-        const uniqueByPool = new Map<string, FactoryPoolMeta>();
-        for (const p of items.reverse()) {
-          uniqueByPool.set(p.pool.toLowerCase(), p);
+        // Optional: if your API supports it, you can pass factory address too
+        // params.set("factory", CONFIG_STAKING_FACTORY.address);
+
+        const url = `/api/pools${params.toString() ? `?${params.toString()}` : ""}`;
+
+        const res = await fetch(url, { cache: "no-store" });
+        if (!res.ok) {
+          throw new Error(`Pools API failed (${res.status})`);
+        }
+        const json = await res.json();
+
+        if (!json?.ok) {
+          throw new Error(json?.error ?? "Failed to load pools");
         }
 
-        const finalItems = Array.from(uniqueByPool.values()).reverse();
+        const pools = (json.pools ?? []) as Array<{
+          pool: string;
+          creator: string;
+          nft: string;
+          rewardToken: string;
+        }>;
 
-        console.log(
-          "[staking] decoded PoolCreated pools:",
-          finalItems.length,
-          finalItems,
-        );
+        const items: FactoryPoolMeta[] = pools
+          .filter((p) => p?.pool && p?.creator && p?.nft && p?.rewardToken)
+          .map((p) => ({
+            pool: p.pool as `0x${string}`,
+            creator: p.creator as `0x${string}`,
+            nft: p.nft as `0x${string}`,
+            rewardToken: p.rewardToken as `0x${string}`,
+          }));
 
-        if (!cancelled) {
-          setFactoryPools(finalItems);
+        // Dedup by pool address
+        const unique = new Map<string, FactoryPoolMeta>();
+        for (const p of items) {
+          const key = p.pool.toLowerCase();
+          if (!unique.has(key)) unique.set(key, p);
         }
+
+        if (!cancelled) setFactoryPools(Array.from(unique.values()));
       } catch (err) {
-        console.error("getLogs error while loading pools", err);
+        console.error("Pools API load error", err);
         if (!cancelled) {
           setPoolsError(`Failed to load pools from factory. ${getErrText(err)}`);
           setFactoryPools([]);
         }
       } finally {
-        if (!cancelled) {
-          setPoolsLoading(false);
-        }
+        if (!cancelled) setPoolsLoading(false);
       }
     }
 
     void loadPools();
-
     return () => {
       cancelled = true;
     };
-  }, [publicClient, refreshNonce]);
+  }, [refreshNonce, activeFilter, address]);
 
   /* ──────────────────────────────────────────────────────────────
    * FACTORY POOL DETAILS (status + my stake) via multicall
@@ -902,13 +855,7 @@ export default function StakingPage() {
     );
 
     return [...basebots, ...others];
-  }, [
-    factoryPoolDetails,
-    activeFilter,
-    now,
-    address,
-    poolSearch,
-  ]);
+  }, [factoryPoolDetails, activeFilter, now, address, poolSearch]);
 
   /* ──────────────────────────────────────────────────────────────
    * FUND POOL MODAL STATE (frontend funding UX)
@@ -1627,9 +1574,10 @@ export default function StakingPage() {
                 All pools created via factory
               </h3>
               <p className="text-[11px] md:text-xs text-white/60">
-                These are pools emitted by the factory&apos;s{" "}
-                <span className="font-mono">PoolCreated</span> event. Anyone can
-                stake if they have the right NFT and reward token.
+                These are pools returned by your server API (which indexes the
+                factory&apos;s <span className="font-mono">PoolCreated</span>{" "}
+                events). Anyone can stake if they have the right NFT and reward
+                token.
               </p>
             </div>
             <button
