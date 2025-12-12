@@ -41,9 +41,20 @@ const rkConnectors = connectorsForWallets(walletGroups, {
   projectId,
 });
 
+// ✅ Frontend RPC (public env var). Keep this “good”.
+const FRONTEND_RPC =
+  process.env.NEXT_PUBLIC_BASE_RPC_URL ||
+  "https://mainnet.base.org"; // fallback if you forget to set it
+
 export const wagmiConfig = createConfig({
   chains: [base],
-  transports: { [base.id]: http(process.env.NEXT_PUBLIC_BASE_RPC_URL || undefined) },
+  transports: {
+    [base.id]: http(FRONTEND_RPC, {
+      timeout: 20_000,
+      retryCount: 2,
+      retryDelay: 300,
+    }),
+  },
   connectors: [
     miniAppConnector(),
     injected({ target: "coinbaseWallet", shimDisconnect: true }),
