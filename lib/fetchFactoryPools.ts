@@ -1,6 +1,12 @@
 // lib/fetchFactoryPools.ts
 import "server-only";
-import { createPublicClient, http, parseAbiItem } from "viem";
+import {
+  createPublicClient,
+  http,
+  decodeEventLog,
+  getAbiItem,
+  type AbiEvent,
+} from "viem";
 import { base } from "viem/chains";
 import {
   CONFIG_STAKING_FACTORY,
@@ -8,16 +14,13 @@ import {
 } from "./stakingContracts";
 
 type Options = {
-  // how far back from latest to scan
-  windowBlocks?: bigint; // default varies (see below)
-  // how big each getLogs chunk is
-  stepBlocks?: bigint; // default 500
-  // throttle between chunks (ms)
-  throttleMs?: number; // default 200
+  windowBlocks?: bigint; // default varies
+  stepBlocks?: bigint; // default 2k (less RPC spam)
+  throttleMs?: number; // default 150
 };
 
 const RPC_URL =
-  process.env.BASE_POOLS_RPC_URL || // ✅ server-only RPC for heavy log scanning
+  process.env.BASE_POOLS_RPC_URL ||
   process.env.BASE_RPC_URL ||
   process.env.NEXT_PUBLIC_BASE_RPC_URL ||
   "https://mainnet.base.org";
@@ -37,37 +40,34 @@ function isRateLimitError(e: any) {
   );
 }
 
-// Simple in-memory cache for server runtime (works within a warm lambda)
 const cache = new Map<string, { at: number; value: any }>();
-const CACHE_TTL_MS = 60_000; // 60s
+const CACHE_TTL_MS = 60_000;
 
 const client = createPublicClient({
   chain: base,
-  transport: http(RPC_URL, {
-    timeout: 25_000,
-    retryCount: 0, // we do our own backoff
-  }),
+  transport: http(RPC_URL, { timeout: 25_000, retryCount: 0 }),
 });
 
-const PoolCreated = parseAbiItem(
-  "event PoolCreated(address indexed pool,address indexed creator,address indexed nft,address rewardToken)",
-);
+// ✅ Get the real PoolCreated event from your factory ABI
+const poolCreatedEvent = getAbiItem({
+  abi: CONFIG_STAKING_FACTORY.abi,
+  name: "PoolCreated",
+}) as AbiEvent;
+
+const creatorInput = poolCreatedEvent.inputs?.find((i) => i.name === "creator");
+const isCreatorIndexed = Boolean((creatorInput as any)?.indexed);
 
 export async function fetchPoolsByCreator(
   creator?: `0x${string}`,
   opts: Options = {},
 ) {
-  const stepBlocks = opts.stepBlocks ?? 500n;
-  const throttleMs = opts.throttleMs ?? 200;
+  const stepBlocks = opts.stepBlocks ?? 2_000n;
+  const throttleMs = opts.throttleMs ?? 150;
 
-  // IMPORTANT:
-  // - If creator is provided and caller did NOT provide a windowBlocks,
-  //   scan full history from deploy block (so "My pools" never misses older pools).
-  // - If creator is not provided, use a window to keep "All pools" fast.
+  // If creator is provided and caller did NOT provide windowBlocks, scan full history
   const defaultWindowBlocks = creator ? undefined : 200_000n;
   const windowBlocks = opts.windowBlocks ?? defaultWindowBlocks;
 
-  // Cache key varies by creator + knobs
   const cacheKey = [
     (creator?.toLowerCase() ?? "all"),
     (windowBlocks?.toString() ?? "full"),
@@ -76,23 +76,25 @@ export async function fetchPoolsByCreator(
   ].join("|");
 
   const cached = cache.get(cacheKey);
-  if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
-    return cached.value;
-  }
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.value;
 
   const latest = await client.getBlockNumber();
 
-  // Determine scan start:
-  // - full scan: deploy block
-  // - window scan: max(deploy block, latest - window)
-  let from: bigint = CONFIG_STAKING_FACTORY_DEPLOY_BLOCK;
+  // Guard: deploy block accidentally set above latest
+  if (CONFIG_STAKING_FACTORY_DEPLOY_BLOCK > latest) {
+    const empty: any[] = [];
+    cache.set(cacheKey, { at: Date.now(), value: empty });
+    return empty;
+  }
 
+  // Determine scan start
+  let from: bigint = CONFIG_STAKING_FACTORY_DEPLOY_BLOCK;
   if (windowBlocks !== undefined) {
-    const minWindowBlock = latest > windowBlocks ? latest - windowBlocks : 0n;
+    const minWindow = latest > windowBlocks ? latest - windowBlocks : 0n;
     from =
-      CONFIG_STAKING_FACTORY_DEPLOY_BLOCK > minWindowBlock
+      CONFIG_STAKING_FACTORY_DEPLOY_BLOCK > minWindow
         ? CONFIG_STAKING_FACTORY_DEPLOY_BLOCK
-        : minWindowBlock;
+        : minWindow;
   }
 
   const logs: any[] = [];
@@ -106,19 +108,19 @@ export async function fetchPoolsByCreator(
 
     while (true) {
       try {
+        // ✅ Only pass args.creator if it is indexed
         const chunk = await client.getLogs({
           address: CONFIG_STAKING_FACTORY.address,
-          event: PoolCreated,
+          event: poolCreatedEvent,
           fromBlock: start,
           toBlock: end,
-          ...(creator ? { args: { creator } } : {}),
+          ...(creator && isCreatorIndexed ? { args: { creator } } : {}),
         });
 
         logs.push(...chunk);
         break;
       } catch (e: any) {
         attempt++;
-
         if (isRateLimitError(e) && attempt < maxAttempts) {
           const baseDelay = 600 * Math.pow(2, attempt - 1);
           const jitter = Math.floor(Math.random() * 250);
@@ -126,9 +128,9 @@ export async function fetchPoolsByCreator(
           continue;
         }
 
-        const msg = e?.message || e?.shortMessage || "HTTP request failed.";
+        const msg = e?.message || e?.shortMessage || "RPC request failed.";
         const err = new Error(
-          `${msg}\n\nrpc=${RPC_URL} | factory=${CONFIG_STAKING_FACTORY.address} | range=${start.toString()}-${end.toString()}`,
+          `${msg}\n\nrpc=${RPC_URL} | factory=${CONFIG_STAKING_FACTORY.address} | range=${start}-${end}`,
         );
         (err as any).cause = e;
         throw err;
@@ -138,27 +140,53 @@ export async function fetchPoolsByCreator(
     if (throttleMs > 0) await sleep(throttleMs);
   }
 
-  // newest first (avoid Number(bigint) overflow)
-  logs.sort((a, b) => {
-    const A = (a.blockNumber ?? 0n) as bigint;
-    const B = (b.blockNumber ?? 0n) as bigint;
+  // Decode + normalize (also handles non-indexed creator filtering)
+  const decoded = logs
+    .map((l) => {
+      try {
+        const d = decodeEventLog({
+          abi: [poolCreatedEvent],
+          data: l.data,
+          topics: l.topics,
+        });
+        return { log: l, args: d.args as any };
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean) as Array<{ log: any; args: any }>;
+
+  const filtered = creator
+    ? decoded.filter(
+        (x) =>
+          String(x.args?.creator || "").toLowerCase() ===
+          creator.toLowerCase(),
+      )
+    : decoded;
+
+  // newest first
+  filtered.sort((a, b) => {
+    const A = (a.log.blockNumber ?? 0n) as bigint;
+    const B = (b.log.blockNumber ?? 0n) as bigint;
     if (A === B) return 0;
     return A > B ? -1 : 1;
   });
 
-  // de-dupe by pool (keep newest)
+  // de-dupe by pool
   const map = new Map<string, any>();
-  for (const l of logs) {
-    map.set((l.args.pool as string).toLowerCase(), l);
+  for (const x of filtered) {
+    const poolAddr = String(x.args?.pool || "").toLowerCase();
+    if (!poolAddr) continue;
+    if (!map.has(poolAddr)) map.set(poolAddr, x);
   }
 
-  const result = Array.from(map.values()).map((l) => ({
-    pool: l.args.pool as `0x${string}`,
-    creator: l.args.creator as `0x${string}`,
-    nft: l.args.nft as `0x${string}`,
-    rewardToken: l.args.rewardToken as `0x${string}`,
-    blockNumber: (l.blockNumber as bigint).toString(),
-    txHash: l.transactionHash as `0x${string}`,
+  const result = Array.from(map.values()).map((x) => ({
+    pool: x.args.pool as `0x${string}`,
+    creator: x.args.creator as `0x${string}`,
+    nft: x.args.nft as `0x${string}`,
+    rewardToken: x.args.rewardToken as `0x${string}`,
+    blockNumber: (x.log.blockNumber as bigint).toString(),
+    txHash: x.log.transactionHash as `0x${string}`,
   }));
 
   cache.set(cacheKey, { at: Date.now(), value: result });
