@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * In-memory cache to reduce RPC load + prevent 429s.
- * Note: This cache lives per server instance (fine for Vercel/Node; best-effort).
+ * Note: This cache lives per server instance (Vercel/Node; best-effort).
  */
 type CacheEntry = {
   expiresAt: number;
@@ -27,7 +27,6 @@ const POOLS_INFLIGHT: Map<string, InFlightEntry> =
 
 function safeBigInt(input: string | null): bigint | undefined {
   if (!input) return undefined;
-  // only allow digits to avoid BigInt("1e6") etc
   if (!/^\d+$/.test(input)) return undefined;
   try {
     return BigInt(input);
@@ -50,11 +49,10 @@ function makeKey(params: {
   step?: string | null;
   throttle?: string | null;
 }) {
-  // normalize creator for cache key consistency
   const c = params.creator ? params.creator.toLowerCase() : "";
   return [
     `creator=${c}`,
-    `window=${params.window ?? ""}`,
+    `window=${params.window ?? ""}`, // empty means FULL (if your fetch defaults to full)
     `step=${params.step ?? ""}`,
     `throttle=${params.throttle ?? ""}`,
   ].join("&");
@@ -86,7 +84,6 @@ export async function GET(req: Request) {
   const stepBlocks = safeBigInt(stepParam);
   const throttleMs = safeNumber(throttleParam);
 
-  // if they provided invalid numeric params, return 400 (helps debugging)
   if (windowParam && windowBlocks === undefined) {
     return NextResponse.json(
       { ok: false, error: `Invalid window (must be integer blocks): ${windowParam}` },
@@ -107,8 +104,7 @@ export async function GET(req: Request) {
   }
 
   // ---- Cache config ----
-  // Short TTL prevents repeated RPC hits when users flip tabs / refresh
-  const TTL_MS = 25_000; // 25s
+  const TTL_MS = 25_000;
   const key = makeKey({
     creator,
     window: windowParam,
@@ -121,13 +117,12 @@ export async function GET(req: Request) {
   const now = Date.now();
   if (cached && cached.expiresAt > now) {
     const res = NextResponse.json({ ok: true, pools: cached.value });
-    // CDN hints (best-effort; still dynamic)
     res.headers.set("Cache-Control", "public, max-age=0, s-maxage=10");
     res.headers.set("X-Pools-Cache", "HIT");
     return res;
   }
 
-  // Single-flight: if a fetch for this key is in progress, await it
+  // Single-flight
   const inflight = POOLS_INFLIGHT.get(key);
   if (inflight) {
     try {
@@ -137,7 +132,6 @@ export async function GET(req: Request) {
       res.headers.set("X-Pools-Cache", "JOIN");
       return res;
     } catch (e: any) {
-      // fall through to normal error
       const res = NextResponse.json(
         { ok: false, error: e?.message ?? "Failed to load pools" },
         { status: 500 },
@@ -147,13 +141,18 @@ export async function GET(req: Request) {
     }
   }
 
-  // Start fetch + register inflight
+  // ✅ Only pass opts if the user provided them
+  const opts =
+    windowBlocks !== undefined || stepBlocks !== undefined || throttleMs !== undefined
+      ? {
+          ...(windowBlocks !== undefined ? { windowBlocks } : {}),
+          ...(stepBlocks !== undefined ? { stepBlocks } : {}),
+          ...(throttleMs !== undefined ? { throttleMs } : {}),
+        }
+      : undefined;
+
   const p = (async () => {
-    return await fetchPoolsByCreator(creator, {
-      windowBlocks,
-      stepBlocks,
-      throttleMs,
-    });
+    return opts ? await fetchPoolsByCreator(creator, opts) : await fetchPoolsByCreator(creator);
   })();
 
   POOLS_INFLIGHT.set(key, p);
@@ -161,20 +160,17 @@ export async function GET(req: Request) {
   try {
     const pools = await p;
 
-    // Store cache
     POOLS_CACHE.set(key, {
       value: pools,
       expiresAt: Date.now() + TTL_MS,
     });
 
-    // Housekeeping: prevent unbounded growth
-    // (cheap cleanup: remove expired entries occasionally)
+    // housekeeping
     if (POOLS_CACHE.size > 250) {
       const t = Date.now();
       for (const [k, v] of POOLS_CACHE) {
         if (v.expiresAt <= t) POOLS_CACHE.delete(k);
       }
-      // still too big? prune oldest-ish (Map preserves insertion order)
       while (POOLS_CACHE.size > 250) {
         const firstKey = POOLS_CACHE.keys().next().value;
         if (!firstKey) break;
