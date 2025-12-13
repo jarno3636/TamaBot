@@ -1,14 +1,10 @@
+// components/staking/FundPoolModal.tsx
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import {
-  useAccount,
-  useWriteContract,
-  useWaitForTransactionReceipt,
-  usePublicClient,
-} from "wagmi";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, usePublicClient } from "wagmi";
 import { base } from "viem/chains";
 import { parseUnits } from "viem";
 import type { FundTarget, TokenMeta } from "./stakingUtils";
@@ -148,23 +144,12 @@ export default function FundPoolModal({
   }
 
   if (!open || !target || !mounted) return null;
-
   const symbol = tokenMeta?.symbol ?? "TOKEN";
 
   const modal = (
-    <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center px-4"
-      role="dialog"
-      aria-modal="true"
-    >
-      {/* darker overlay */}
-      <button
-        aria-label="Close"
-        onClick={onClose}
-        className="absolute inset-0 bg-black/85 backdrop-blur-md"
-      />
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4" role="dialog" aria-modal="true">
+      <button aria-label="Close" onClick={onClose} className="absolute inset-0 bg-black/85 backdrop-blur-md" />
 
-      {/* solid panel */}
       <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-white/15 bg-[#070A16] shadow-[0_30px_90px_rgba(0,0,0,0.92)] ring-1 ring-white/10">
         <div
           aria-hidden
@@ -185,9 +170,7 @@ export default function FundPoolModal({
           </button>
 
           <h2 className="text-sm font-semibold">Fund pool</h2>
-          <p className="mt-1 text-[11px] text-white/60">
-            Send reward tokens directly to the pool contract.
-          </p>
+          <p className="mt-1 text-[11px] text-white/60">Send reward tokens directly to the pool contract.</p>
 
           <div className="mt-3 rounded-2xl border border-white/10 bg-black/30 p-3 text-[11px] text-white/75 font-mono space-y-2">
             <div className="break-all">
@@ -199,9 +182,7 @@ export default function FundPoolModal({
           </div>
 
           <label className="mt-3 block">
-            <span className="text-[11px] uppercase tracking-wide text-white/60">
-              Amount ({symbol})
-            </span>
+            <span className="text-[11px] uppercase tracking-wide text-white/60">Amount ({symbol})</span>
             <input
               type="number"
               min="0"
@@ -231,7 +212,7 @@ export default function FundPoolModal({
                   rel="noopener noreferrer"
                   className="text-[#79ffe1] underline decoration-dotted underline-offset-4"
                 >
-                  view on Basescan ↗
+                  view ↗
                 </Link>
               </div>
             )}
