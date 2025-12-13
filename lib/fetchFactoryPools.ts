@@ -9,7 +9,7 @@ import {
 
 type Options = {
   // how far back from latest to scan
-  windowBlocks?: bigint; // default 200k
+  windowBlocks?: bigint; // default varies (see below)
   // how big each getLogs chunk is
   stepBlocks?: bigint; // default 500
   // throttle between chunks (ms)
@@ -28,7 +28,6 @@ function sleep(ms: number) {
 
 function isRateLimitError(e: any) {
   const msg = String(e?.message || e?.shortMessage || "").toLowerCase();
-  // viem often wraps status in message; sometimes the cause has status
   const status = e?.status || e?.cause?.status;
   return (
     status === 429 ||
@@ -40,13 +39,13 @@ function isRateLimitError(e: any) {
 
 // Simple in-memory cache for server runtime (works within a warm lambda)
 const cache = new Map<string, { at: number; value: any }>();
-const CACHE_TTL_MS = 60_000; // 60s (tune if needed)
+const CACHE_TTL_MS = 60_000; // 60s
 
 const client = createPublicClient({
   chain: base,
   transport: http(RPC_URL, {
     timeout: 25_000,
-    retryCount: 0, // we'll do our own retry w/ backoff below
+    retryCount: 0, // we do our own backoff
   }),
 });
 
@@ -58,15 +57,22 @@ export async function fetchPoolsByCreator(
   creator?: `0x${string}`,
   opts: Options = {},
 ) {
-  const windowBlocks = opts.windowBlocks ?? 200_000n;
-  const stepBlocks = opts.stepBlocks ?? 500n; // ✅ smaller chunks reduce RPC pressure
+  const stepBlocks = opts.stepBlocks ?? 500n;
   const throttleMs = opts.throttleMs ?? 200;
 
-  // Cache key varies by creator + window/step
+  // IMPORTANT:
+  // - If creator is provided and caller did NOT provide a windowBlocks,
+  //   scan full history from deploy block (so "My pools" never misses older pools).
+  // - If creator is not provided, use a window to keep "All pools" fast.
+  const defaultWindowBlocks = creator ? undefined : 200_000n;
+  const windowBlocks = opts.windowBlocks ?? defaultWindowBlocks;
+
+  // Cache key varies by creator + knobs
   const cacheKey = [
-    creator?.toLowerCase() ?? "all",
-    windowBlocks.toString(),
+    (creator?.toLowerCase() ?? "all"),
+    (windowBlocks?.toString() ?? "full"),
     stepBlocks.toString(),
+    String(throttleMs),
   ].join("|");
 
   const cached = cache.get(cacheKey);
@@ -75,12 +81,19 @@ export async function fetchPoolsByCreator(
   }
 
   const latest = await client.getBlockNumber();
-  const minWindowBlock = latest > windowBlocks ? latest - windowBlocks : 0n;
 
-  const from =
-    CONFIG_STAKING_FACTORY_DEPLOY_BLOCK > minWindowBlock
-      ? CONFIG_STAKING_FACTORY_DEPLOY_BLOCK
-      : minWindowBlock;
+  // Determine scan start:
+  // - full scan: deploy block
+  // - window scan: max(deploy block, latest - window)
+  let from: bigint = CONFIG_STAKING_FACTORY_DEPLOY_BLOCK;
+
+  if (windowBlocks !== undefined) {
+    const minWindowBlock = latest > windowBlocks ? latest - windowBlocks : 0n;
+    from =
+      CONFIG_STAKING_FACTORY_DEPLOY_BLOCK > minWindowBlock
+        ? CONFIG_STAKING_FACTORY_DEPLOY_BLOCK
+        : minWindowBlock;
+  }
 
   const logs: any[] = [];
 
@@ -102,13 +115,12 @@ export async function fetchPoolsByCreator(
         });
 
         logs.push(...chunk);
-        break; // success
+        break;
       } catch (e: any) {
         attempt++;
 
         if (isRateLimitError(e) && attempt < maxAttempts) {
-          // exponential backoff + jitter
-          const baseDelay = 600 * Math.pow(2, attempt - 1); // 600ms, 1.2s, 2.4s...
+          const baseDelay = 600 * Math.pow(2, attempt - 1);
           const jitter = Math.floor(Math.random() * 250);
           await sleep(baseDelay + jitter);
           continue;
@@ -126,8 +138,13 @@ export async function fetchPoolsByCreator(
     if (throttleMs > 0) await sleep(throttleMs);
   }
 
-  // newest first
-  logs.sort((a, b) => Number((b.blockNumber ?? 0n) - (a.blockNumber ?? 0n)));
+  // newest first (avoid Number(bigint) overflow)
+  logs.sort((a, b) => {
+    const A = (a.blockNumber ?? 0n) as bigint;
+    const B = (b.blockNumber ?? 0n) as bigint;
+    if (A === B) return 0;
+    return A > B ? -1 : 1;
+  });
 
   // de-dupe by pool (keep newest)
   const map = new Map<string, any>();
@@ -135,7 +152,6 @@ export async function fetchPoolsByCreator(
     map.set((l.args.pool as string).toLowerCase(), l);
   }
 
-  // ✅ BigInt-safe response (strings)
   const result = Array.from(map.values()).map((l) => ({
     pool: l.args.pool as `0x${string}`,
     creator: l.args.creator as `0x${string}`,
