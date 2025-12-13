@@ -5,12 +5,7 @@ import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import {
-  useAccount,
-  usePublicClient,
-  useWriteContract,
-  useWaitForTransactionReceipt,
-} from "wagmi";
+import { useAccount, usePublicClient, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { base } from "viem/chains";
 import { parseUnits, type Hex } from "viem";
 
@@ -22,6 +17,7 @@ import {
 } from "@/lib/stakingContracts";
 
 import CreatePoolCard from "@/components/staking/CreatePoolCard";
+import FundPoolModal from "@/components/staking/FundPoolModal";
 
 /* ──────────────────────────────────────────────────────────────
  * Types
@@ -48,8 +44,6 @@ type TokenMeta = {
   decimals: number;
 };
 
-type PublicClientType = ReturnType<typeof usePublicClient>;
-
 type FundTarget = {
   pool: `0x${string}`;
   rewardToken: `0x${string}`;
@@ -68,7 +62,6 @@ function shortenAddress(addr?: string, chars = 4): string {
   return `${addr.slice(0, 2 + chars)}…${addr.slice(-chars)}`;
 }
 
-// Helper to build app URL both on client and during build
 function getAppUrl(path: string) {
   if (typeof window !== "undefined") return `${window.location.origin}${path}`;
   const origin = (process.env.NEXT_PUBLIC_URL ?? "").replace(/\/$/, "");
@@ -79,10 +72,8 @@ function getAppUrl(path: string) {
 function getErrText(e: unknown): string {
   if (e && typeof e === "object") {
     const anyE = e as any;
-    if (typeof anyE.shortMessage === "string" && anyE.shortMessage.length > 0)
-      return anyE.shortMessage;
-    if (typeof anyE.message === "string" && anyE.message.length > 0)
-      return anyE.message;
+    if (typeof anyE.shortMessage === "string" && anyE.shortMessage.length > 0) return anyE.shortMessage;
+    if (typeof anyE.message === "string" && anyE.message.length > 0) return anyE.message;
   }
   if (typeof e === "string") return e;
   try {
@@ -95,11 +86,8 @@ function getErrText(e: unknown): string {
 const inputBase =
   "mt-1 w-full max-w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-[13px] md:text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60";
 
-const primaryBtn =
-  "w-full inline-flex items-center justify-center rounded-full bg-[#79ffe1] text-slate-950 text-sm font-semibold py-2.5 shadow-[0_10px_30px_rgba(121,255,225,0.45)] hover:bg-[#a5fff0] transition-all active:scale-[0.97] active:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/70 disabled:opacity-60 disabled:cursor-not-allowed";
-
 /* ──────────────────────────────────────────────────────────────
- * Minimal ERC-20 ABIs for funding modal
+ * Minimal ERC-20 metadata ABI (token-info fallback for modal)
  * ──────────────────────────────────────────────────────────── */
 const ERC20_METADATA_ABI = [
   { name: "name", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "string", name: "" }] },
@@ -107,22 +95,45 @@ const ERC20_METADATA_ABI = [
   { name: "decimals", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "uint8", name: "" }] },
 ] as const;
 
-const ERC20_TRANSFER_ABI = [
+/* ──────────────────────────────────────────────────────────────
+ * Pool interaction ABIs
+ * ──────────────────────────────────────────────────────────── */
+const ERC721_APPROVAL_ABI = [
   {
-    name: "transfer",
+    name: "isApprovedForAll",
     type: "function",
-    stateMutability: "nonpayable",
+    stateMutability: "view",
     inputs: [
-      { name: "to", type: "address" },
-      { name: "amount", type: "uint256" },
+      { name: "owner", type: "address" },
+      { name: "operator", type: "address" },
     ],
     outputs: [{ name: "", type: "bool" }],
   },
+  {
+    name: "setApprovalForAll",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "operator", type: "address" },
+      { name: "approved", type: "bool" },
+    ],
+    outputs: [],
+  },
 ] as const;
 
-/* ──────────────────────────────────────────────────────────────
- * Page
- * ──────────────────────────────────────────────────────────── */
+const POOL_ACTIONS_ABI = [
+  { name: "claim", type: "function", stateMutability: "nonpayable", inputs: [], outputs: [] },
+  { name: "stake", type: "function", stateMutability: "nonpayable", inputs: [{ name: "tokenId", type: "uint256" }], outputs: [] },
+  { name: "unstake", type: "function", stateMutability: "nonpayable", inputs: [{ name: "tokenId", type: "uint256" }], outputs: [] },
+  {
+    name: "pendingRewards",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "userAddr", type: "address" }],
+    outputs: [{ name: "pendingGross", type: "uint256" }],
+  },
+] as const;
+
 export default function StakingPage() {
   const { address } = useAccount();
   const publicClient = usePublicClient({ chainId: base.id });
@@ -130,12 +141,11 @@ export default function StakingPage() {
   const [activeFilter, setActiveFilter] = useState<FilterTab>("all");
   const [poolSearch, setPoolSearch] = useState("");
 
-  /* ───────────────── Protocol fee (shown in Create card) ───────────────── */
+  /* ───────────────── Protocol fee ───────────────── */
   const { data: protocolFeeBpsRaw } = (require("wagmi") as typeof import("wagmi")).useReadContract({
     ...CONFIG_STAKING_FACTORY,
     functionName: "protocolFeeBps",
   });
-
   const protocolFeeBps = Number(protocolFeeBpsRaw ?? 0);
   const protocolFeePercent = protocolFeeBps / 100;
 
@@ -164,12 +174,7 @@ export default function StakingPage() {
         const json = await res.json();
         if (!json?.ok) throw new Error(json?.error ?? "Failed to load pools");
 
-        const pools = (json.pools ?? []) as Array<{
-          pool: string;
-          creator: string;
-          nft: string;
-          rewardToken: string;
-        }>;
+        const pools = (json.pools ?? []) as Array<{ pool: string; creator: string; nft: string; rewardToken: string }>;
 
         const items: FactoryPoolMeta[] = pools
           .filter((p) => p?.pool && p?.creator && p?.nft && p?.rewardToken)
@@ -180,7 +185,6 @@ export default function StakingPage() {
             rewardToken: p.rewardToken as `0x${string}`,
           }));
 
-        // Dedup by pool address
         const unique = new Map<string, FactoryPoolMeta>();
         for (const p of items) {
           const key = p.pool.toLowerCase();
@@ -205,35 +209,28 @@ export default function StakingPage() {
     };
   }, [refreshNonce, activeFilter, address]);
 
-  /* ───────────────── Pool details via multicall (status + my stake + total) ───────────────── */
+  /* ───────────────── Pool details (multicall) ───────────────── */
   useEffect(() => {
     if (!publicClient || factoryPools.length === 0) {
       setFactoryPoolDetails([]);
       return;
     }
 
-    const client = publicClient as NonNullable<PublicClientType>;
     let cancelled = false;
 
     async function loadDetails() {
       try {
         const contractsBase = factoryPools.map((p) => ({
           address: p.pool,
-          abi: BASEBOTS_STAKING_POOL.abi, // pool implementation ABI
+          abi: BASEBOTS_STAKING_POOL.abi,
         })) as any[];
 
         const [startRes, endRes, stakedRes, userRes] = await Promise.all([
-          client.multicall({
-            contracts: contractsBase.map((c) => ({ ...c, functionName: "startTime" })),
-          }),
-          client.multicall({
-            contracts: contractsBase.map((c) => ({ ...c, functionName: "endTime" })),
-          }),
-          client.multicall({
-            contracts: contractsBase.map((c) => ({ ...c, functionName: "totalStaked" })),
-          }),
+          publicClient.multicall({ contracts: contractsBase.map((c) => ({ ...c, functionName: "startTime" })) }),
+          publicClient.multicall({ contracts: contractsBase.map((c) => ({ ...c, functionName: "endTime" })) }),
+          publicClient.multicall({ contracts: contractsBase.map((c) => ({ ...c, functionName: "totalStaked" })) }),
           address
-            ? client.multicall({
+            ? publicClient.multicall({
                 contracts: contractsBase.map((c) => ({ ...c, functionName: "users", args: [address] })),
               })
             : Promise.resolve(null),
@@ -275,38 +272,37 @@ export default function StakingPage() {
     };
   }, [publicClient, factoryPools, address]);
 
-  /* ───────────────── Token meta (reward token) via /api/token-info ───────────────── */
+  /* ───────────────── Token meta map (reward token) ───────────────── */
   const [tokenMetaMap, setTokenMetaMap] = useState<Record<string, TokenMeta>>({});
 
   useEffect(() => {
+    if (!publicClient) return;
     if (factoryPoolDetails.length === 0) return;
-    let cancelled = false;
 
+    let cancelled = false;
     const uniqueRewards = Array.from(new Set(factoryPoolDetails.map((p) => p.rewardToken.toLowerCase())));
     const missing = uniqueRewards.filter((a) => !tokenMetaMap[a]);
     if (missing.length === 0) return;
 
-    async function loadMeta() {
+    (async () => {
       try {
         const updates: Record<string, TokenMeta> = {};
+
         for (const addr of missing) {
           try {
-            const url = getAppUrl(`/api/token-info?address=${addr}`);
-            const res = await fetch(url);
-            if (!res.ok) throw new Error("Token info request failed");
-            const json = await res.json();
-            if (!json.ok) throw new Error(json.error ?? "Token lookup failed");
+            const [symbol, name, decimals] = await Promise.all([
+              publicClient.readContract({ address: addr as `0x${string}`, abi: ERC20_METADATA_ABI, functionName: "symbol" }),
+              publicClient.readContract({ address: addr as `0x${string}`, abi: ERC20_METADATA_ABI, functionName: "name" }),
+              publicClient.readContract({ address: addr as `0x${string}`, abi: ERC20_METADATA_ABI, functionName: "decimals" }),
+            ]);
 
             updates[addr] = {
-              symbol: json.symbol || shortenAddress(addr, 4),
-              name: json.name || shortenAddress(addr, 4),
-              decimals:
-                typeof json.decimals === "number" && Number.isFinite(json.decimals)
-                  ? json.decimals
-                  : 18,
+              symbol: (symbol as string) || shortenAddress(addr, 4),
+              name: (name as string) || shortenAddress(addr, 4),
+              decimals: Number(decimals ?? 18),
             };
           } catch {
-            // ignore; fallback is short address
+            // ignore
           }
         }
 
@@ -316,13 +312,12 @@ export default function StakingPage() {
       } catch (e) {
         console.error("Failed to fetch token metadata", e);
       }
-    }
+    })();
 
-    void loadMeta();
     return () => {
       cancelled = true;
     };
-  }, [factoryPoolDetails, tokenMetaMap]);
+  }, [publicClient, factoryPoolDetails, tokenMetaMap]);
 
   /* ───────────────── Filters + search ───────────────── */
   const filteredPools = useMemo(() => {
@@ -340,9 +335,7 @@ export default function StakingPage() {
       if (activeFilter === "all") return true;
       if (activeFilter === "live") return status === "live";
       if (activeFilter === "closed") return status === "closed";
-      if (activeFilter === "my-pools") {
-        return !!address && p.creator.toLowerCase() === address.toLowerCase();
-      }
+      if (activeFilter === "my-pools") return !!address && p.creator.toLowerCase() === address.toLowerCase();
       if (activeFilter === "my-staked") return p.hasMyStake;
       return true;
     });
@@ -369,11 +362,46 @@ export default function StakingPage() {
     setFundModalOpen(true);
   }
 
+  /* ───────────────── Enter Pool modal state ───────────────── */
+  const [activePoolAddr, setActivePoolAddr] = useState<`0x${string}` | null>(null);
+  const activePool = useMemo(() => {
+    if (!activePoolAddr) return null;
+    return factoryPoolDetails.find((p) => p.pool.toLowerCase() === activePoolAddr.toLowerCase()) ?? null;
+  }, [activePoolAddr, factoryPoolDetails]);
+
+  // read ?pool= from URL (same-page modal behavior)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const pool = url.searchParams.get("pool");
+    if (pool && pool.startsWith("0x") && pool.length === 42) {
+      setActivePoolAddr(pool as `0x${string}`);
+    }
+  }, []);
+
+  function openPoolModal(poolAddr: `0x${string}`) {
+    setActivePoolAddr(poolAddr);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("pool", poolAddr);
+      window.history.replaceState({}, "", url.toString());
+    }
+  }
+
+  function closePoolModal() {
+    setActivePoolAddr(null);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("pool");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }
+
   /* ───────────────── Render ───────────────── */
   return (
     <main className="min-h-[100svh] bg-deep text-white pb-16 page-layer overflow-x-hidden">
       <div className="container pt-6 px-5 stack space-y-6">
-        {/* ───────────────── Intro ───────────────── */}
+        {/* Intro */}
         <section className="glass glass-pad relative overflow-hidden rounded-3xl">
           <div
             aria-hidden
@@ -381,8 +409,7 @@ export default function StakingPage() {
             style={{
               background:
                 "radial-gradient(900px 400px at 10% -20%, rgba(58,166,216,0.18), transparent 60%), radial-gradient(900px 500px at 90% -30%, rgba(121,255,225,0.14), transparent 70%)",
-              maskImage:
-                "radial-gradient(120% 120% at 50% 0%, #000 55%, transparent 100%)",
+              maskImage: "radial-gradient(120% 120% at 50% 0%, #000 55%, transparent 100%)",
             }}
           />
           <div className="relative grid gap-6 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] items-center">
@@ -393,49 +420,44 @@ export default function StakingPage() {
                 </div>
               </div>
               <div>
-                <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">
-                  NFT Staking Pools
-                </h1>
+                <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">NFT Staking</h1>
                 <p className="mt-1 text-white/80 text-sm md:text-base max-w-md">
                   Create pools for any ERC-721 on Base and stream rewards in any ERC-20.
                 </p>
                 <p className="mt-2 text-[11px] text-white/60 max-w-md">
                   Creating a pool sets the schedule —{" "}
-                  <span className="font-semibold text-[#79ffe1]">it does not automatically pull reward tokens</span>.
+                  <span className="font-semibold text-[#79ffe1]">you must fund it after</span>.
                 </p>
               </div>
             </div>
 
             <div className="mt-2 md:mt-0 text-sm text-white/75 max-w-xl">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-white/60 mb-2">
-                How it works
-              </h3>
-              <ul className="space-y-1.5">
-                <li>• Choose an NFT collection (ERC-721 on Base).</li>
-                <li>• Choose a reward token (ERC-20 on Base).</li>
-                <li>• Set total rewards, duration, optional caps, and creator fee.</li>
-                <li>• After creation, send reward tokens to the pool address.</li>
-              </ul>
-              <p className="mt-3 text-[11px] text-white/60">
-                Protocol fee is currently{" "}
-                <span className="font-semibold text-[#79ffe1]">{protocolFeePercent}%</span>{" "}
-                of earned rewards (plus any creator fee).
-              </p>
+              <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs uppercase tracking-wide text-white/60">Protocol fee</span>
+                  <span className="font-semibold text-[#79ffe1]">{protocolFeePercent}%</span>
+                </div>
+                <p className="mt-2 text-[11px] text-white/60">
+                  Tip: after creation, click <span className="text-white/80 font-semibold">Fund</span> to send reward
+                  tokens to the pool address.
+                </p>
+              </div>
             </div>
           </div>
         </section>
 
-        {/* ───────────────── Create Pool (component) ───────────────── */}
+        {/* Create Pool */}
         <CreatePoolCard
           protocolFeePercent={protocolFeePercent}
           onOpenFundModal={(target, suggestedAmount) => openFundModal(target, suggestedAmount)}
+          onLastCreatedPoolResolved={(poolAddr) => openPoolModal(poolAddr)}
         />
 
-        {/* ───────────────── Filters ───────────────── */}
+        {/* Filters */}
         <section className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-xs">
           <div className="flex flex-wrap gap-2">
             {[
-              { key: "all", label: "All pools" },
+              { key: "all", label: "All" },
               { key: "live", label: "Live" },
               { key: "closed", label: "Closed" },
               { key: "my-staked", label: "My staked" },
@@ -468,14 +490,13 @@ export default function StakingPage() {
           </div>
         </section>
 
-        {/* ───────────────── Pools List ───────────────── */}
+        {/* Pools List */}
         <section className="glass glass-pad rounded-3xl border border-white/10 bg-[#020617]/80 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h3 className="text-sm md:text-base font-semibold">Pools</h3>
-              <p className="text-[11px] md:text-xs text-white/60">
-                Pools are returned by your server API (indexing{" "}
-                <span className="font-mono">PoolCreated</span> events). Any Basebots-NFT pool gets a special badge.
+              <h3 className="text-sm md:text-base font-semibold">Staking Pools</h3>
+              <p className="text-[11px] md:text-xs text-white/55">
+                Tap <span className="text-white/75 font-semibold">Enter</span> to stake / unstake / claim. Creators can fund.
               </p>
             </div>
 
@@ -495,23 +516,19 @@ export default function StakingPage() {
           {poolsError && <p className="text-xs text-rose-300 break-words">{poolsError}</p>}
 
           {factoryPools.length === 0 && !poolsLoading && !poolsError && (
-            <p className="text-xs text-white/60">
-              No pools yet. Create the first one above.
-            </p>
+            <p className="text-xs text-white/60">No pools yet. Create one above.</p>
           )}
 
           {factoryPools.length > 0 && filteredPools.length === 0 && !poolsLoading && !poolsError && (
-            <p className="text-xs text-white/60">No pools match this filter/search yet.</p>
+            <p className="text-xs text-white/60">No pools match your filter/search.</p>
           )}
 
           {filteredPools.length > 0 && (
-            <div className="mt-1 grid gap-2 text-xs">
+            <div className="mt-1 grid gap-3 text-xs">
               {filteredPools.map((pool) => {
                 const now = nowSeconds();
-
                 const isCreator = !!address && pool.creator.toLowerCase() === address.toLowerCase();
-                const isBasebotsNft =
-                  pool.nft.toLowerCase() === (BASEBOTS_NFT.address as `0x${string}`).toLowerCase();
+                const isBasebotsNft = pool.nft.toLowerCase() === BASEBOTS_NFT.address.toLowerCase();
 
                 const status: "upcoming" | "live" | "closed" = (() => {
                   if (pool.startTime === 0) return "upcoming";
@@ -522,122 +539,82 @@ export default function StakingPage() {
 
                 const rewardLower = pool.rewardToken.toLowerCase();
                 const meta = tokenMetaMap[rewardLower];
-                const rewardLabel = meta
-                  ? `${meta.symbol} (${shortenAddress(pool.rewardToken, 4)})`
-                  : shortenAddress(pool.rewardToken, 4);
+                const rewardLabel = meta ? meta.symbol : shortenAddress(pool.rewardToken, 4);
 
                 return (
                   <div
                     key={pool.pool}
-                    className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 rounded-2xl border border-white/12 bg-black/35 px-3 py-2.5"
+                    className="rounded-2xl border border-white/12 bg-black/35 px-4 py-3"
                   >
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-semibold text-white/90">
-                          {isBasebotsNft ? "Basebots NFT staking pool" : "NFT staking pool"}
-                        </span>
-
-                        <span
-                          className={[
-                            "px-2 py-[1px] rounded-full text-[10px] font-semibold border",
-                            status === "live"
-                              ? "border-emerald-400/70 bg-emerald-500/10 text-emerald-300"
-                              : status === "upcoming"
-                              ? "border-sky-400/70 bg-sky-500/10 text-sky-300"
-                              : "border-rose-400/70 bg-rose-500/10 text-rose-300",
-                          ].join(" ")}
-                        >
-                          {status === "live" ? "Live" : status === "upcoming" ? "Upcoming" : "Closed"}
-                        </span>
-
-                        {isBasebotsNft && (
-                          <span className="rounded-full border border-[#79ffe1]/70 bg-[#031c1b] px-2 py-[1px] text-[10px] font-semibold text-[#79ffe1]">
-                            Basebots NFT
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-white/90">
+                            {isBasebotsNft ? "Basebots NFT Pool" : "NFT Pool"}
                           </span>
-                        )}
 
-                        {isCreator && (
-                          <span className="rounded-full border border-amber-400/60 bg-amber-500/10 px-2 py-[1px] text-[10px] font-semibold text-amber-200">
-                            You created this
+                          <span
+                            className={[
+                              "px-2 py-[1px] rounded-full text-[10px] font-semibold border",
+                              status === "live"
+                                ? "border-emerald-400/70 bg-emerald-500/10 text-emerald-300"
+                                : status === "upcoming"
+                                ? "border-sky-400/70 bg-sky-500/10 text-sky-300"
+                                : "border-rose-400/70 bg-rose-500/10 text-rose-300",
+                            ].join(" ")}
+                          >
+                            {status === "live" ? "Live" : status === "upcoming" ? "Upcoming" : "Closed"}
                           </span>
-                        )}
 
-                        {pool.hasMyStake && (
-                          <span className="rounded-full border border-emerald-400/70 bg-emerald-500/10 px-2 py-[1px] text-[10px] font-semibold text-emerald-200">
-                            You&apos;re staked
-                          </span>
-                        )}
+                          {isCreator && (
+                            <span className="rounded-full border border-amber-400/60 bg-amber-500/10 px-2 py-[1px] text-[10px] font-semibold text-amber-200">
+                              Creator
+                            </span>
+                          )}
+
+                          {pool.hasMyStake && (
+                            <span className="rounded-full border border-emerald-400/70 bg-emerald-500/10 px-2 py-[1px] text-[10px] font-semibold text-emerald-200">
+                              You’re staked
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap gap-4 text-[11px] text-white/65 font-mono">
+                          <span>Pool: {shortenAddress(pool.pool, 4)}</span>
+                          <span>NFT: {shortenAddress(pool.nft, 4)}</span>
+                          <span>Reward: {rewardLabel}</span>
+                          <span>Staked: {pool.totalStaked.toString()}</span>
+                        </div>
                       </div>
 
-                      <div className="flex flex-wrap gap-3 text-[11px] text-white/65 font-mono">
-                        <span>Pool: {shortenAddress(pool.pool, 4)}</span>
-                        <span>NFT: {shortenAddress(pool.nft, 4)}</span>
-                        <span>Reward: {rewardLabel}</span>
-                        <span>Staked: {pool.totalStaked.toString()} NFTs</span>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2 justify-start md:justify-end">
-                      <Link
-                        href={`https://basescan.org/address/${pool.pool}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="rounded-full border border-white/20 bg-white/5 px-3 py-1 text-[11px] text-white/80 hover:bg-white/10 transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
-                      >
-                        View ↗
-                      </Link>
-
-                      {isCreator && (
+                      <div className="flex flex-wrap items-center gap-2 justify-start md:justify-end">
                         <button
                           type="button"
-                          onClick={() => openFundModal({ pool: pool.pool, rewardToken: pool.rewardToken })}
-                          className="rounded-full border border-emerald-400/70 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-100 hover:bg-emerald-500/20 transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/80"
+                          onClick={() => openPoolModal(pool.pool)}
+                          className="rounded-full border border-[#79ffe1]/50 bg-[#031c1b] px-3 py-1 text-[11px] font-semibold text-[#79ffe1] hover:bg-[#052b29] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/60"
                         >
-                          Fund pool
+                          Enter
                         </button>
-                      )}
 
-                      {isCreator && (
-                        <>
+                        <Link
+                          href={`https://basescan.org/address/${pool.pool}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded-full border border-white/20 bg-white/5 px-3 py-1 text-[11px] text-white/80 hover:bg-white/10 transition-all active:scale-95"
+                        >
+                          Basescan ↗
+                        </Link>
+
+                        {isCreator && (
                           <button
                             type="button"
-                            onClick={() => {
-                              const url = getAppUrl(`/staking?pool=${pool.pool}`);
-                              const text =
-                                `I just launched an NFT staking pool on Base 🚀\n\n` +
-                                `Pool: ${shortenAddress(pool.pool, 4)}\n` +
-                                `NFT: ${shortenAddress(pool.nft, 4)}\n` +
-                                `Reward token: ${shortenAddress(pool.rewardToken, 4)}\n\n` +
-                                `Stake, earn rewards, and join the ecosystem.`;
-                              const shareUrl =
-                                `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(url)}`;
-                              if (typeof window !== "undefined") window.open(shareUrl, "_blank", "noopener,noreferrer");
-                            }}
-                            className="rounded-full border border-purple-400/60 bg-purple-500/10 px-3 py-1 text-[11px] font-semibold text-purple-100 hover:bg-purple-500/20 transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-300/80"
+                            onClick={() => openFundModal({ pool: pool.pool, rewardToken: pool.rewardToken })}
+                            className="rounded-full border border-emerald-400/70 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-100 hover:bg-emerald-500/20 transition-all active:scale-95"
                           >
-                            Share (Farcaster)
+                            Fund
                           </button>
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const url = getAppUrl(`/staking?pool=${pool.pool}`);
-                              const text =
-                                `I just launched an NFT staking pool on Base 🚀\n\n` +
-                                `Pool: ${shortenAddress(pool.pool, 4)}\n` +
-                                `NFT: ${shortenAddress(pool.nft, 4)}\n` +
-                                `Reward token: ${shortenAddress(pool.rewardToken, 4)}\n\n` +
-                                `Stake, earn rewards, and join the ecosystem.`;
-                              const shareUrl =
-                                `https://x.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
-                              if (typeof window !== "undefined") window.open(shareUrl, "_blank", "noopener,noreferrer");
-                            }}
-                            className="rounded-full border border-sky-400/60 bg-sky-500/10 px-3 py-1 text-[11px] font-semibold text-sky-100 hover:bg-sky-500/20 transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/80"
-                          >
-                            Share (X)
-                          </button>
-                        </>
-                      )}
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -647,211 +624,338 @@ export default function StakingPage() {
         </section>
       </div>
 
-      {/* ───────────────── Fund Pool Modal ───────────────── */}
+      {/* Fund Pool Modal (portal-based) */}
       <FundPoolModal
         open={fundModalOpen}
         onClose={() => setFundModalOpen(false)}
         target={fundTarget}
-        publicClient={publicClient}
         suggestedAmount={fundSuggestedAmount || undefined}
+      />
+
+      {/* Enter Pool Modal (same-page) */}
+      <EnterPoolModal
+        open={!!activePool}
+        onClose={closePoolModal}
+        pool={activePool}
+        address={address}
       />
     </main>
   );
 }
 
 /* ──────────────────────────────────────────────────────────────
- * FUND POOL MODAL
+ * ENTER POOL MODAL (same page)
+ * - approve NFT (setApprovalForAll)
+ * - stake tokenId
+ * - unstake tokenId
+ * - claim
+ * - shows pending rewards
  * ──────────────────────────────────────────────────────────── */
-type FundPoolModalProps = {
+function EnterPoolModal({
+  open,
+  onClose,
+  pool,
+  address,
+}: {
   open: boolean;
   onClose: () => void;
-  target: FundTarget | null;
-  publicClient: PublicClientType;
-  suggestedAmount?: string;
-};
-
-function FundPoolModal({ open, onClose, target, publicClient, suggestedAmount }: FundPoolModalProps) {
-  const { address } = useAccount();
-  const [amount, setAmount] = useState("");
-  const [tokenMeta, setTokenMeta] = useState<TokenMeta | null>(null);
-  const [metaLoading, setMetaLoading] = useState(false);
-  const [metaErr, setMetaErr] = useState<string | null>(null);
-
-  const { writeContract: writeFund, data: fundTxHash, error: fundErr } = useWriteContract();
-  const { isLoading: fundPending, isSuccess: fundMined } = useWaitForTransactionReceipt({
-    hash: fundTxHash,
+  pool: FactoryPoolDetails | null;
+  address?: `0x${string}`;
+}) {
+  const publicClient = usePublicClient({ chainId: base.id });
+  const { writeContract, data: txHash, error: txErr } = useWriteContract();
+  const { isLoading: txPending, isSuccess: txMined } = useWaitForTransactionReceipt({
+    hash: txHash,
     chainId: base.id,
   });
 
-  const [fundMsg, setFundMsg] = useState("");
+  const [mounted, setMounted] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [tokenId, setTokenId] = useState("");
+  const [approved, setApproved] = useState<boolean | null>(null);
+  const [pendingRewards, setPendingRewards] = useState<bigint | null>(null);
 
-  // Reset when open
+  useEffect(() => setMounted(true), []);
+
   useEffect(() => {
-    if (open) {
-      setFundMsg("");
-      setMetaErr(null);
-      setAmount(suggestedAmount || "");
-    }
-  }, [open, suggestedAmount]);
+    if (!open) return;
+    setMsg("");
+    setTokenId("");
+  }, [open]);
 
-  // Auto-close after mined
-  useEffect(() => {
-    if (!open || !fundMined) return;
-    const id = setTimeout(() => onClose(), 1500);
-    return () => clearTimeout(id);
-  }, [open, fundMined, onClose]);
-
-  // Load metadata on-chain for exact decimals
-  useEffect(() => {
-    if (!open || !target || !publicClient) return;
-    const client = publicClient as NonNullable<PublicClientType>;
-    const currentTarget = target;
-
-    let cancelled = false;
-
-    async function load() {
-      try {
-        setMetaLoading(true);
-        setMetaErr(null);
-
-        const [symbol, name, decimals] = await Promise.all([
-          client.readContract({
-            address: currentTarget.rewardToken,
-            abi: ERC20_METADATA_ABI,
-            functionName: "symbol",
-          }),
-          client.readContract({
-            address: currentTarget.rewardToken,
-            abi: ERC20_METADATA_ABI,
-            functionName: "name",
-          }),
-          client.readContract({
-            address: currentTarget.rewardToken,
-            abi: ERC20_METADATA_ABI,
-            functionName: "decimals",
-          }),
-        ]);
-
-        if (!cancelled) {
-          setTokenMeta({
-            symbol: (symbol as string) || "TOKEN",
-            name: (name as string) || "Token",
-            decimals: Number(decimals ?? 18),
-          });
-        }
-      } catch {
-        if (!cancelled) {
-          setMetaErr("Could not load token metadata; using 18 decimals.");
-          setTokenMeta({ symbol: "TOKEN", name: "Token", decimals: 18 });
-        }
-      } finally {
-        if (!cancelled) setMetaLoading(false);
-      }
-    }
-
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [open, target, publicClient]);
-
-  async function handleFund() {
+  async function refreshApprovalAndRewards() {
+    if (!open || !pool || !publicClient || !address) return;
     try {
-      setFundMsg("");
-      if (!target) return setFundMsg("Missing pool info.");
-      if (!address) return setFundMsg("Connect your wallet to fund the pool.");
-
-      const v = amount.trim();
-      if (!v) return setFundMsg("Enter an amount to send.");
-
-      const decimals = tokenMeta?.decimals ?? 18;
-      const amountWei = parseUnits(v, decimals);
-      if (amountWei <= 0n) return setFundMsg("Amount must be greater than 0.");
-
-      await writeFund({
-        address: target.rewardToken,
-        abi: ERC20_TRANSFER_ABI,
-        functionName: "transfer",
-        args: [target.pool, amountWei],
-        chainId: base.id,
-      });
-
-      setFundMsg("Funding transaction submitted. Confirm in your wallet.");
-    } catch (e) {
-      setFundMsg(getErrText(e));
+      const [isApproved, pending] = await Promise.all([
+        publicClient.readContract({
+          address: pool.nft,
+          abi: ERC721_APPROVAL_ABI,
+          functionName: "isApprovedForAll",
+          args: [address, pool.pool],
+        }) as Promise<boolean>,
+        publicClient.readContract({
+          address: pool.pool,
+          abi: POOL_ACTIONS_ABI,
+          functionName: "pendingRewards",
+          args: [address],
+        }) as Promise<bigint>,
+      ]);
+      setApproved(!!isApproved);
+      setPendingRewards(pending ?? 0n);
+    } catch {
+      setApproved(null);
+      setPendingRewards(null);
     }
   }
 
-  if (!open || !target) return null;
-  const symbol = tokenMeta?.symbol ?? "TOKEN";
+  useEffect(() => {
+    void refreshApprovalAndRewards();
+    // refresh after mined
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, pool?.pool, address, txMined]);
+
+  async function doApprove() {
+    try {
+      setMsg("");
+      if (!pool) return;
+      if (!address) return setMsg("Connect your wallet.");
+
+      await writeContract({
+        address: pool.nft,
+        abi: ERC721_APPROVAL_ABI,
+        functionName: "setApprovalForAll",
+        args: [pool.pool, true],
+        chainId: base.id,
+      });
+      setMsg("Approval submitted. Confirm in your wallet.");
+    } catch (e) {
+      setMsg(getErrText(e));
+    }
+  }
+
+  async function doStake() {
+    try {
+      setMsg("");
+      if (!pool) return;
+      if (!address) return setMsg("Connect your wallet.");
+
+      const tid = tokenId.trim();
+      if (!tid) return setMsg("Enter a tokenId.");
+      if (!/^\d+$/.test(tid)) return setMsg("tokenId must be an integer.");
+
+      await writeContract({
+        address: pool.pool,
+        abi: POOL_ACTIONS_ABI,
+        functionName: "stake",
+        args: [BigInt(tid)],
+        chainId: base.id,
+      });
+
+      setMsg("Stake submitted. Confirm in your wallet.");
+    } catch (e) {
+      setMsg(getErrText(e));
+    }
+  }
+
+  async function doUnstake() {
+    try {
+      setMsg("");
+      if (!pool) return;
+      if (!address) return setMsg("Connect your wallet.");
+
+      const tid = tokenId.trim();
+      if (!tid) return setMsg("Enter a tokenId.");
+      if (!/^\d+$/.test(tid)) return setMsg("tokenId must be an integer.");
+
+      await writeContract({
+        address: pool.pool,
+        abi: POOL_ACTIONS_ABI,
+        functionName: "unstake",
+        args: [BigInt(tid)],
+        chainId: base.id,
+      });
+
+      setMsg("Unstake submitted. Confirm in your wallet.");
+    } catch (e) {
+      setMsg(getErrText(e));
+    }
+  }
+
+  async function doClaim() {
+    try {
+      setMsg("");
+      if (!pool) return;
+      if (!address) return setMsg("Connect your wallet.");
+
+      await writeContract({
+        address: pool.pool,
+        abi: POOL_ACTIONS_ABI,
+        functionName: "claim",
+        args: [],
+        chainId: base.id,
+      });
+
+      setMsg("Claim submitted. Confirm in your wallet.");
+    } catch (e) {
+      setMsg(getErrText(e));
+    }
+  }
+
+  if (!open || !pool || !mounted) return null;
+
+  const now = nowSeconds();
+  const status: "upcoming" | "live" | "closed" = (() => {
+    if (pool.startTime === 0) return "upcoming";
+    if (now < pool.startTime) return "upcoming";
+    if (pool.endTime !== 0 && now > pool.endTime) return "closed";
+    return "live";
+  })();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-      <div className="relative w-full max-w-md rounded-3xl border border-white/15 bg-[#050815] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.95)]">
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute right-3 top-3 text-xs text-white/60 hover:text-white"
-        >
-          ✕
-        </button>
+    <div className="fixed inset-0 z-[9998] flex items-center justify-center px-4" role="dialog" aria-modal="true">
+      <button aria-label="Close" onClick={onClose} className="absolute inset-0 bg-black/85 backdrop-blur-md" />
 
-        <h2 className="text-sm font-semibold mb-1">Fund staking pool</h2>
-        <p className="text-[11px] text-white/60 mb-3">
-          Send reward tokens directly to the pool contract on Base.
-        </p>
+      <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-white/15 bg-[#070A16] shadow-[0_30px_90px_rgba(0,0,0,0.92)] ring-1 ring-white/10">
+        <div
+          aria-hidden
+          className="absolute inset-0 opacity-90"
+          style={{
+            background:
+              "radial-gradient(700px 280px at 15% -10%, rgba(121,255,225,0.18), transparent 60%), radial-gradient(700px 280px at 90% 0%, rgba(56,189,248,0.16), transparent 55%)",
+          }}
+        />
+        <div className="relative p-5">
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute right-3 top-3 rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[11px] text-white/70 hover:bg-white/10"
+          >
+            ✕
+          </button>
 
-        <div className="space-y-2 text-[11px] text-white/70 font-mono mb-3">
-          <div className="break-all">Pool: <span className="text-white">{target.pool}</span></div>
-          <div className="break-all">Reward token: <span className="text-white">{target.rewardToken}</span></div>
-        </div>
-
-        <label className="block mb-3 text-sm">
-          <span className="text-xs uppercase tracking-wide text-white/60">
-            Amount to send ({symbol})
-          </span>
-          <input
-            type="number"
-            min="0"
-            step="0.000001"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder={suggestedAmount || "e.g. 1000"}
-            className={inputBase}
-          />
-          {metaLoading && <p className="mt-1 text-[11px] text-white/50">Loading token info…</p>}
-          {metaErr && <p className="mt-1 text-[11px] text-amber-200">{metaErr}</p>}
-        </label>
-
-        <button type="button" onClick={handleFund} disabled={fundPending} className={primaryBtn}>
-          {fundPending ? "Sending…" : `Send ${symbol} to pool`}
-        </button>
-
-        <div className="mt-3 space-y-1 text-[11px] text-white/65">
-          {fundTxHash && (
+          <div className="flex items-center justify-between gap-3">
             <div>
-              Funding tx:{" "}
-              <Link
-                href={`https://basescan.org/tx/${fundTxHash}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[#79ffe1] underline decoration-dotted underline-offset-4"
-              >
-                view on Basescan ↗
-              </Link>
+              <h2 className="text-sm font-semibold">Enter pool</h2>
+              <p className="mt-1 text-[11px] text-white/60">
+                Pool <span className="font-mono text-white/80">{shortenAddress(pool.pool, 4)}</span> •{" "}
+                {status === "live" ? (
+                  <span className="text-emerald-300 font-semibold">Live</span>
+                ) : status === "upcoming" ? (
+                  <span className="text-sky-300 font-semibold">Upcoming</span>
+                ) : (
+                  <span className="text-rose-300 font-semibold">Closed</span>
+                )}
+              </p>
             </div>
-          )}
-          {fundMined && <div className="text-emerald-300">Funding confirmed ✔ (closing…)</div>}
-          {(fundMsg || fundErr) && <div className="text-rose-300">{fundMsg || getErrText(fundErr)}</div>}
-          {!fundMined && (
+
+            <Link
+              href={`https://basescan.org/address/${pool.pool}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-full border border-white/20 bg-white/5 px-3 py-1 text-[11px] text-white/80 hover:bg-white/10"
+            >
+              Basescan ↗
+            </Link>
+          </div>
+
+          <div className="mt-3 grid gap-2 text-[11px] text-white/70 font-mono rounded-2xl border border-white/10 bg-black/30 p-3">
+            <div className="break-all">
+              NFT: <span className="text-white">{pool.nft}</span>
+            </div>
+            <div className="break-all">
+              Reward: <span className="text-white">{pool.rewardToken}</span>
+            </div>
+            <div>
+              Pending:{" "}
+              <span className="text-white">
+                {pendingRewards === null ? "—" : pendingRewards.toString()}
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-3 rounded-2xl border border-white/10 bg-black/30 p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-white/60 uppercase tracking-wide">Approval</span>
+              <span className="text-[11px] text-white/70">
+                {approved === null ? "—" : approved ? "Approved" : "Not approved"}
+              </span>
+            </div>
+
             <button
               type="button"
-              onClick={onClose}
-              className="mt-2 inline-flex items-center justify-center rounded-full border border-white/30 bg-white/5 px-3 py-1 text-[11px] font-medium text-white/80 hover:bg-white/10 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+              onClick={doApprove}
+              disabled={txPending || approved === true}
+              className={[
+                "mt-2 w-full rounded-full px-3 py-2 text-[12px] font-semibold transition-all active:scale-[0.98]",
+                approved
+                  ? "border border-emerald-400/40 bg-emerald-500/10 text-emerald-200 cursor-not-allowed"
+                  : "border border-[#79ffe1]/40 bg-[#031c1b] text-[#79ffe1] hover:bg-[#052b29]",
+              ].join(" ")}
             >
-              Close
+              {approved ? "Approved" : txPending ? "Approving…" : "Approve pool to stake"}
             </button>
-          )}
+
+            <p className="mt-2 text-[11px] text-white/55">
+              You only need to approve once per NFT collection.
+            </p>
+          </div>
+
+          <div className="mt-3">
+            <span className="text-[11px] text-white/60 uppercase tracking-wide">tokenId</span>
+            <input
+              value={tokenId}
+              onChange={(e) => setTokenId(e.target.value)}
+              placeholder="e.g. 123"
+              className={inputBase}
+              inputMode="numeric"
+            />
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={doStake}
+              disabled={txPending}
+              className="rounded-full border border-emerald-400/50 bg-emerald-500/10 py-2 text-[12px] font-semibold text-emerald-100 hover:bg-emerald-500/20 active:scale-[0.98]"
+            >
+              {txPending ? "Working…" : "Stake"}
+            </button>
+            <button
+              type="button"
+              onClick={doUnstake}
+              disabled={txPending}
+              className="rounded-full border border-rose-400/50 bg-rose-500/10 py-2 text-[12px] font-semibold text-rose-100 hover:bg-rose-500/20 active:scale-[0.98]"
+            >
+              {txPending ? "Working…" : "Unstake"}
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={doClaim}
+            disabled={txPending}
+            className="mt-2 w-full rounded-full border border-white/15 bg-white/5 py-2 text-[12px] font-semibold text-white/85 hover:bg-white/10 active:scale-[0.98]"
+          >
+            {txPending ? "Working…" : "Claim rewards"}
+          </button>
+
+          <div className="mt-3 space-y-1 text-[11px] text-white/70">
+            {txHash && (
+              <div>
+                Tx:{" "}
+                <Link
+                  href={`https://basescan.org/tx/${txHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#79ffe1] underline decoration-dotted underline-offset-4"
+                >
+                  view ↗
+                </Link>
+              </div>
+            )}
+            {txMined && <div className="text-emerald-300">Confirmed ✔</div>}
+            {(msg || txErr) && <div className="text-rose-300">{msg || getErrText(txErr)}</div>}
+          </div>
         </div>
       </div>
     </div>
