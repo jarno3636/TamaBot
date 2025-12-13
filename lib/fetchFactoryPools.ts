@@ -1,12 +1,6 @@
 // lib/fetchFactoryPools.ts
 import "server-only";
-import {
-  createPublicClient,
-  http,
-  decodeEventLog,
-  getAbiItem,
-  type AbiEvent,
-} from "viem";
+import { createPublicClient, http, parseAbiItem } from "viem";
 import { base } from "viem/chains";
 import {
   CONFIG_STAKING_FACTORY,
@@ -14,13 +8,16 @@ import {
 } from "./stakingContracts";
 
 type Options = {
-  windowBlocks?: bigint; // default varies
-  stepBlocks?: bigint; // default 2k (less RPC spam)
-  throttleMs?: number; // default 150
+  // optional: how far back from latest to scan
+  windowBlocks?: bigint;
+  // chunk size
+  stepBlocks?: bigint;
+  // throttle between chunks (ms)
+  throttleMs?: number;
 };
 
 const RPC_URL =
-  process.env.BASE_POOLS_RPC_URL ||
+  process.env.BASE_POOLS_RPC_URL || // preferred (server-only, heavy logs)
   process.env.BASE_RPC_URL ||
   process.env.NEXT_PUBLIC_BASE_RPC_URL ||
   "https://mainnet.base.org";
@@ -40,22 +37,22 @@ function isRateLimitError(e: any) {
   );
 }
 
+// Simple in-memory cache for warm runtime
 const cache = new Map<string, { at: number; value: any }>();
 const CACHE_TTL_MS = 60_000;
 
 const client = createPublicClient({
   chain: base,
-  transport: http(RPC_URL, { timeout: 25_000, retryCount: 0 }),
+  transport: http(RPC_URL, {
+    timeout: 25_000,
+    retryCount: 0,
+  }),
 });
 
-// ✅ Get the real PoolCreated event from your factory ABI
-const poolCreatedEvent = getAbiItem({
-  abi: CONFIG_STAKING_FACTORY.abi,
-  name: "PoolCreated",
-}) as AbiEvent;
-
-const creatorInput = poolCreatedEvent.inputs?.find((i) => i.name === "creator");
-const isCreatorIndexed = Boolean((creatorInput as any)?.indexed);
+// ✅ Your event signature is correct
+const PoolCreated = parseAbiItem(
+  "event PoolCreated(address indexed pool,address indexed creator,address indexed nft,address rewardToken)",
+);
 
 export async function fetchPoolsByCreator(
   creator?: `0x${string}`,
@@ -64,13 +61,13 @@ export async function fetchPoolsByCreator(
   const stepBlocks = opts.stepBlocks ?? 2_000n;
   const throttleMs = opts.throttleMs ?? 150;
 
-  // If creator is provided and caller did NOT provide windowBlocks, scan full history
-  const defaultWindowBlocks = creator ? undefined : 200_000n;
-  const windowBlocks = opts.windowBlocks ?? defaultWindowBlocks;
+  // ✅ IMPORTANT: default is FULL HISTORY from deploy block
+  // Only use a window if explicitly provided.
+  const windowBlocks = opts.windowBlocks;
 
   const cacheKey = [
     (creator?.toLowerCase() ?? "all"),
-    (windowBlocks?.toString() ?? "full"),
+    (windowBlocks?.toString() ?? "FULL"),
     stepBlocks.toString(),
     String(throttleMs),
   ].join("|");
@@ -80,22 +77,43 @@ export async function fetchPoolsByCreator(
 
   const latest = await client.getBlockNumber();
 
-  // Guard: deploy block accidentally set above latest
-  if (CONFIG_STAKING_FACTORY_DEPLOY_BLOCK > latest) {
-    const empty: any[] = [];
-    cache.set(cacheKey, { at: Date.now(), value: empty });
-    return empty;
+  // ✅ Sanity #1: deploy block must exist on this RPC
+  if (latest < CONFIG_STAKING_FACTORY_DEPLOY_BLOCK) {
+    throw new Error(
+      [
+        "RPC/network mismatch: latest block is below factory deploy block.",
+        `latest=${latest.toString()}`,
+        `deploy=${CONFIG_STAKING_FACTORY_DEPLOY_BLOCK.toString()}`,
+        `rpc=${RPC_URL}`,
+        "This usually means BASE_RPC_URL/BASE_POOLS_RPC_URL points to the wrong chain (e.g., Base Sepolia).",
+      ].join("\n"),
+    );
   }
 
-  // Determine scan start
-  let from: bigint = CONFIG_STAKING_FACTORY_DEPLOY_BLOCK;
-  if (windowBlocks !== undefined) {
-    const minWindow = latest > windowBlocks ? latest - windowBlocks : 0n;
-    from =
-      CONFIG_STAKING_FACTORY_DEPLOY_BLOCK > minWindow
-        ? CONFIG_STAKING_FACTORY_DEPLOY_BLOCK
-        : minWindow;
+  // ✅ Sanity #2: address must have bytecode
+  const code = await client.getBytecode({ address: CONFIG_STAKING_FACTORY.address });
+  if (!code || code === "0x") {
+    throw new Error(
+      [
+        "Factory address has no bytecode on this RPC/network.",
+        `factory=${CONFIG_STAKING_FACTORY.address}`,
+        `rpc=${RPC_URL}`,
+        "Double-check the address + that your RPC is Base mainnet.",
+      ].join("\n"),
+    );
   }
+
+  // Determine scan range
+  const from = (() => {
+    if (windowBlocks === undefined) {
+      // full history
+      return CONFIG_STAKING_FACTORY_DEPLOY_BLOCK;
+    }
+    const minWindow = latest > windowBlocks ? latest - windowBlocks : 0n;
+    return CONFIG_STAKING_FACTORY_DEPLOY_BLOCK > minWindow
+      ? CONFIG_STAKING_FACTORY_DEPLOY_BLOCK
+      : minWindow;
+  })();
 
   const logs: any[] = [];
 
@@ -108,19 +126,19 @@ export async function fetchPoolsByCreator(
 
     while (true) {
       try {
-        // ✅ Only pass args.creator if it is indexed
         const chunk = await client.getLogs({
           address: CONFIG_STAKING_FACTORY.address,
-          event: poolCreatedEvent,
+          event: PoolCreated,
           fromBlock: start,
           toBlock: end,
-          ...(creator && isCreatorIndexed ? { args: { creator } } : {}),
+          ...(creator ? { args: { creator } } : {}),
         });
 
         logs.push(...chunk);
         break;
       } catch (e: any) {
         attempt++;
+
         if (isRateLimitError(e) && attempt < maxAttempts) {
           const baseDelay = 600 * Math.pow(2, attempt - 1);
           const jitter = Math.floor(Math.random() * 250);
@@ -140,53 +158,27 @@ export async function fetchPoolsByCreator(
     if (throttleMs > 0) await sleep(throttleMs);
   }
 
-  // Decode + normalize (also handles non-indexed creator filtering)
-  const decoded = logs
-    .map((l) => {
-      try {
-        const d = decodeEventLog({
-          abi: [poolCreatedEvent],
-          data: l.data,
-          topics: l.topics,
-        });
-        return { log: l, args: d.args as any };
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean) as Array<{ log: any; args: any }>;
-
-  const filtered = creator
-    ? decoded.filter(
-        (x) =>
-          String(x.args?.creator || "").toLowerCase() ===
-          creator.toLowerCase(),
-      )
-    : decoded;
-
   // newest first
-  filtered.sort((a, b) => {
-    const A = (a.log.blockNumber ?? 0n) as bigint;
-    const B = (b.log.blockNumber ?? 0n) as bigint;
+  logs.sort((a, b) => {
+    const A = (a.blockNumber ?? 0n) as bigint;
+    const B = (b.blockNumber ?? 0n) as bigint;
     if (A === B) return 0;
     return A > B ? -1 : 1;
   });
 
-  // de-dupe by pool
+  // de-dupe by pool (keep newest)
   const map = new Map<string, any>();
-  for (const x of filtered) {
-    const poolAddr = String(x.args?.pool || "").toLowerCase();
-    if (!poolAddr) continue;
-    if (!map.has(poolAddr)) map.set(poolAddr, x);
+  for (const l of logs) {
+    map.set(String(l.args.pool).toLowerCase(), l);
   }
 
-  const result = Array.from(map.values()).map((x) => ({
-    pool: x.args.pool as `0x${string}`,
-    creator: x.args.creator as `0x${string}`,
-    nft: x.args.nft as `0x${string}`,
-    rewardToken: x.args.rewardToken as `0x${string}`,
-    blockNumber: (x.log.blockNumber as bigint).toString(),
-    txHash: x.log.transactionHash as `0x${string}`,
+  const result = Array.from(map.values()).map((l) => ({
+    pool: l.args.pool as `0x${string}`,
+    creator: l.args.creator as `0x${string}`,
+    nft: l.args.nft as `0x${string}`,
+    rewardToken: l.args.rewardToken as `0x${string}`,
+    blockNumber: (l.blockNumber as bigint).toString(),
+    txHash: l.transactionHash as `0x${string}`,
   }));
 
   cache.set(cacheKey, { at: Date.now(), value: result });
