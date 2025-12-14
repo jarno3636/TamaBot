@@ -1,26 +1,7 @@
-/* app/globals.css */
+/* ===== Basebots: Alien-Blue Neon Theme ===== */
 :root {
   color-scheme: dark;
   --nav-h: 68px;
-
-  /* Basebots palette */
-  --bb-ink: #0a0b12;
-  --bb-ink-2: #0b0f18;
-  --bb-ink-3: #0f1320;
-
-  --bb-neon: #79ffe1;
-  --bb-azure: #3aa6d8;
-  --bb-cyan: #6dd3ef;
-  --bb-teal: #00c7b7;
-  --bb-violet: #8aa6ff;
-
-  --bb-warn: #ffd36b;
-  --bb-okay: #6ee7a8;
-  --bb-danger: #ff7474;
-
-  --bb-glass-border: rgba(255, 255, 255, 0.12);
-  --bb-glass-grad-1: rgba(255, 255, 255, 0.06);
-  --bb-glass-grad-2: rgba(255, 255, 255, 0.04);
 }
 
 html,
@@ -28,12 +9,39 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100%;
-  background-color: #0a0b12 !important;
+  background-color: #0a0b12 !important; /* 🔒 Force dark background everywhere */
   color: #eef3f8;
 }
 
 body {
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial,
+    "Apple Color Emoji", "Segoe UI Emoji";
+
+  /* Basebots palette */
+  --bb-ink: #0a0b12; /* page bg */
+  --bb-ink-2: #0b0f18; /* card tint */
+  --bb-ink-3: #0f1320; /* deep layers */
+
+  --bb-neon: #79ffe1; /* primary neon */
+  --bb-azure: #3AA6D8; /* brand blue */
+  --bb-cyan: #6dd3ef; /* soft cyan */
+  --bb-teal: #00c7b7; /* accent teal */
+  --bb-violet: #8aa6ff; /* subtle violet */
+
+  --bb-warn: #ffd36b;
+  --bb-okay: #6EE7A8;
+  --bb-danger: #ff7474;
+
+  --bb-glass-border: rgba(255, 255, 255, 0.12);
+  --bb-glass-bg: rgba(255, 255, 255, 0.06);
+  --bb-glass-grad-1: rgba(255, 255, 255, 0.06);
+  --bb-glass-grad-2: rgba(255, 255, 255, 0.04);
+
+  /* Legacy aliases (keep buttons/pills working) */
+  --tam-blue: var(--bb-azure);
+  --tam-green: #6CB271;
+  --tam-red: #E1634A;
+  --tam-yellow: var(--bb-warn);
 }
 
 /* ===== Backgrounds ===== */
@@ -42,6 +50,13 @@ body {
     radial-gradient(1200px 600px at -10% -20%, rgba(58, 166, 216, 0.2), transparent 60%),
     radial-gradient(1200px 700px at 110% -30%, rgba(121, 255, 225, 0.14), transparent 70%),
     linear-gradient(180deg, #0b0d12 0%, #0a0b12 40%, #0a0a0f 100%);
+}
+
+.bg-nebula {
+  background:
+    radial-gradient(1000px 520px at 10% -10%, rgba(138, 166, 255, 0.2), transparent 60%),
+    radial-gradient(800px 520px at 95% -15%, rgba(109, 211, 239, 0.16), transparent 70%),
+    linear-gradient(180deg, #0b0f18 0%, #0a0b12 35%, #0b0f18 100%);
 }
 
 /* ===== Cards ===== */
@@ -65,7 +80,7 @@ body {
   padding: 1.6rem 1.4rem;
 }
 
-/* ===== Layout helpers ===== */
+/* Vertical spacing */
 .stack > * + * {
   margin-top: 2rem;
 }
@@ -75,22 +90,161 @@ body {
   }
 }
 
+/* ===== Buttons ===== */
+.btn-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.7rem 1.1rem;
+  border-radius: 9999px;
+  font-weight: 700;
+  background: #ffffff;
+  color: #0e1117;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  box-shadow: 0 6px 18px rgba(121, 255, 225, 0.18);
+  transition: transform 0.08s ease, filter 0.15s ease, box-shadow 0.15s ease;
+}
+.btn-pill:hover {
+  filter: brightness(0.97);
+  transform: translateY(-1px);
+}
+.btn-pill:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 2px;
+}
+
+/* Brand variants */
+.btn-pill--blue {
+  background: var(--bb-neon);
+  color: #02201d;
+  box-shadow: 0 8px 22px rgba(121, 255, 225, 0.35);
+}
+.btn-pill--cyan {
+  background: var(--bb-cyan);
+  color: #032129;
+  box-shadow: 0 8px 22px rgba(109, 211, 239, 0.35);
+}
+.btn-pill--violet {
+  background: var(--bb-violet);
+  color: #0e1024;
+  box-shadow: 0 8px 22px rgba(138, 166, 255, 0.35);
+}
+.btn-pill--green {
+  background: var(--bb-okay);
+  color: #06150d;
+  box-shadow: 0 8px 22px rgba(110, 231, 168, 0.35);
+}
+.btn-pill--yellow {
+  background: var(--bb-warn);
+  color: #1e1603;
+  box-shadow: 0 8px 22px rgba(255, 211, 107, 0.35);
+}
+.btn-pill--red {
+  background: var(--bb-danger);
+  color: #1a0a08;
+  box-shadow: 0 8px 22px rgba(255, 116, 116, 0.35);
+}
+
+/* ===== Ghost button ===== */
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.65rem 1.05rem;
+  border-radius: 9999px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(8px);
+  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.08s ease;
+}
+.btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 0 0 2px rgba(121, 255, 225, 0.35), 0 0 18px 4px rgba(121, 255, 225, 0.16);
+  transform: translateY(-1px);
+}
+
+.cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 1.4rem;
+}
+
+/* ===== Pills ===== */
+.pill-note {
+  display: inline-block;
+  padding: 0.55rem 0.95rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(6px);
+}
+.pill-note--blue {
+  background: rgba(121, 255, 225, 0.1);
+  border-color: rgba(121, 255, 225, 0.3);
+  color: #d9fff8;
+}
+.pill-note--cyan {
+  background: rgba(109, 211, 239, 0.1);
+  border-color: rgba(109, 211, 239, 0.28);
+  color: #dff6ff;
+}
+.pill-note--violet {
+  background: rgba(138, 166, 255, 0.1);
+  border-color: rgba(138, 166, 255, 0.3);
+  color: #e6ebff;
+}
+.pill-note--green {
+  background: rgba(110, 231, 168, 0.1);
+  border-color: rgba(110, 231, 168, 0.28);
+  color: #e9f9ea;
+}
+.pill-note--yellow {
+  background: rgba(255, 211, 107, 0.1);
+  border-color: rgba(255, 211, 107, 0.3);
+  color: #fff3cf;
+}
+.pill-note--red {
+  background: rgba(255, 116, 116, 0.1);
+  border-color: rgba(255, 116, 116, 0.3);
+  color: #ffe4e4;
+}
+
+/* ===== Media & layout ===== */
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+  height: auto;
+}
 .container {
   max-width: 72rem;
   margin-inline: auto;
   padding-inline: 1.25rem;
 }
 
-/* ===== Spinning token ===== */
+/* ===== Spinning Basebot token ===== */
 .token-spin {
   animation: token-spin 16s linear infinite;
   transform-origin: center center;
 }
+
 @keyframes token-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
-/* ===== Safety: don’t allow a parent transform to break fixed modals =====
-   If you have any wrapper class that sets transform/filter/perspective, remove it.
-   Portals already solve most of this. */
+/* ===== Motion preferences ===== */
+@media (prefers-reduced-motion: reduce) {
+  .token-spin {
+    animation: none;
+  }
+}
