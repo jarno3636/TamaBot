@@ -1,7 +1,26 @@
-/* ===== Basebots: Alien-Blue Neon Theme ===== */
+/* app/globals.css */
 :root {
   color-scheme: dark;
   --nav-h: 68px;
+
+  /* Basebots palette */
+  --bb-ink: #0a0b12;
+  --bb-ink-2: #0b0f18;
+  --bb-ink-3: #0f1320;
+
+  --bb-neon: #79ffe1;
+  --bb-azure: #3aa6d8;
+  --bb-cyan: #6dd3ef;
+  --bb-teal: #00c7b7;
+  --bb-violet: #8aa6ff;
+
+  --bb-warn: #ffd36b;
+  --bb-okay: #6ee7a8;
+  --bb-danger: #ff7474;
+
+  --bb-glass-border: rgba(255, 255, 255, 0.12);
+  --bb-glass-grad-1: rgba(255, 255, 255, 0.06);
+  --bb-glass-grad-2: rgba(255, 255, 255, 0.04);
 }
 
 html,
@@ -9,39 +28,12 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100%;
-  background-color: #0a0b12 !important; /* 🔒 Force dark background everywhere */
+  background-color: #0a0b12 !important;
   color: #eef3f8;
 }
 
 body {
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial,
-    "Apple Color Emoji", "Segoe UI Emoji";
-
-  /* Basebots palette */
-  --bb-ink: #0a0b12; /* page bg */
-  --bb-ink-2: #0b0f18; /* card tint */
-  --bb-ink-3: #0f1320; /* deep layers */
-
-  --bb-neon: #79ffe1; /* primary neon */
-  --bb-azure: #3AA6D8; /* brand blue */
-  --bb-cyan: #6dd3ef; /* soft cyan */
-  --bb-teal: #00c7b7; /* accent teal */
-  --bb-violet: #8aa6ff; /* subtle violet */
-
-  --bb-warn: #ffd36b;
-  --bb-okay: #6EE7A8;
-  --bb-danger: #ff7474;
-
-  --bb-glass-border: rgba(255, 255, 255, 0.12);
-  --bb-glass-bg: rgba(255, 255, 255, 0.06);
-  --bb-glass-grad-1: rgba(255, 255, 255, 0.06);
-  --bb-glass-grad-2: rgba(255, 255, 255, 0.04);
-
-  /* Legacy aliases (keep buttons/pills working) */
-  --tam-blue: var(--bb-azure);
-  --tam-green: #6CB271;
-  --tam-red: #E1634A;
-  --tam-yellow: var(--bb-warn);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, "Apple Color Emoji", "Segoe UI Emoji";
 }
 
 /* ===== Backgrounds ===== */
@@ -50,13 +42,6 @@ body {
     radial-gradient(1200px 600px at -10% -20%, rgba(58, 166, 216, 0.2), transparent 60%),
     radial-gradient(1200px 700px at 110% -30%, rgba(121, 255, 225, 0.14), transparent 70%),
     linear-gradient(180deg, #0b0d12 0%, #0a0b12 40%, #0a0a0f 100%);
-}
-
-.bg-nebula {
-  background:
-    radial-gradient(1000px 520px at 10% -10%, rgba(138, 166, 255, 0.2), transparent 60%),
-    radial-gradient(800px 520px at 95% -15%, rgba(109, 211, 239, 0.16), transparent 70%),
-    linear-gradient(180deg, #0b0f18 0%, #0a0b12 35%, #0b0f18 100%);
 }
 
 /* ===== Cards ===== */
@@ -80,7 +65,7 @@ body {
   padding: 1.6rem 1.4rem;
 }
 
-/* Vertical spacing */
+/* ===== Layout helpers ===== */
 .stack > * + * {
   margin-top: 2rem;
 }
@@ -90,378 +75,22 @@ body {
   }
 }
 
-/* ===== Buttons ===== */
-.btn-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.7rem 1.1rem;
-  border-radius: 9999px;
-  font-weight: 700;
-  background: #ffffff;
-  color: #0e1117;
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  box-shadow: 0 6px 18px rgba(121, 255, 225, 0.18);
-  transition: transform 0.08s ease, filter 0.15s ease, box-shadow 0.15s ease;
-}
-.btn-pill:hover {
-  filter: brightness(0.97);
-  transform: translateY(-1px);
-}
-.btn-pill:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.5);
-  outline-offset: 2px;
-}
-
-/* Brand variants */
-.btn-pill--blue {
-  background: var(--bb-neon);
-  color: #02201d;
-  box-shadow: 0 8px 22px rgba(121, 255, 225, 0.35);
-}
-.btn-pill--cyan {
-  background: var(--bb-cyan);
-  color: #032129;
-  box-shadow: 0 8px 22px rgba(109, 211, 239, 0.35);
-}
-.btn-pill--violet {
-  background: var(--bb-violet);
-  color: #0e1024;
-  box-shadow: 0 8px 22px rgba(138, 166, 255, 0.35);
-}
-.btn-pill--green {
-  background: var(--bb-okay);
-  color: #06150d;
-  box-shadow: 0 8px 22px rgba(110, 231, 168, 0.35);
-}
-.btn-pill--yellow {
-  background: var(--bb-warn);
-  color: #1e1603;
-  box-shadow: 0 8px 22px rgba(255, 211, 107, 0.35);
-}
-.btn-pill--red {
-  background: var(--bb-danger);
-  color: #1a0a08;
-  box-shadow: 0 8px 22px rgba(255, 116, 116, 0.35);
-}
-
-/* ===== Ghost button ===== */
-.btn-ghost {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.65rem 1.05rem;
-  border-radius: 9999px;
-  font-weight: 600;
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  backdrop-filter: blur(8px);
-  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.08s ease;
-}
-.btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.16);
-  box-shadow: 0 0 0 2px rgba(121, 255, 225, 0.35), 0 0 18px 4px rgba(121, 255, 225, 0.16);
-  transform: translateY(-1px);
-}
-
-.cta-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-top: 1.4rem;
-}
-
-/* ===== Pills ===== */
-.pill-note {
-  display: inline-block;
-  padding: 0.55rem 0.95rem;
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  backdrop-filter: blur(6px);
-}
-.pill-note--blue {
-  background: rgba(121, 255, 225, 0.1);
-  border-color: rgba(121, 255, 225, 0.3);
-  color: #d9fff8;
-}
-.pill-note--cyan {
-  background: rgba(109, 211, 239, 0.1);
-  border-color: rgba(109, 211, 239, 0.28);
-  color: #dff6ff;
-}
-.pill-note--violet {
-  background: rgba(138, 166, 255, 0.1);
-  border-color: rgba(138, 166, 255, 0.3);
-  color: #e6ebff;
-}
-.pill-note--green {
-  background: rgba(110, 231, 168, 0.1);
-  border-color: rgba(110, 231, 168, 0.28);
-  color: #e9f9ea;
-}
-.pill-note--yellow {
-  background: rgba(255, 211, 107, 0.1);
-  border-color: rgba(255, 211, 107, 0.3);
-  color: #fff3cf;
-}
-.pill-note--red {
-  background: rgba(255, 116, 116, 0.1);
-  border-color: rgba(255, 116, 116, 0.3);
-  color: #ffe4e4;
-}
-
-.pill-row,
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px 16px;
-}
-@supports not (gap: 16px 16px) {
-  .pill-row > *,
-  .chips > * {
-    margin-right: 16px;
-    margin-bottom: 16px;
-  }
-  .pill-row > *:last-child,
-  .chips > *:last-child {
-    margin-right: 0;
-  }
-}
-
-/* ===== Media & layout ===== */
-img,
-svg,
-video,
-canvas {
-  max-width: 100%;
-  height: auto;
-}
 .container {
   max-width: 72rem;
   margin-inline: auto;
   padding-inline: 1.25rem;
 }
 
-/* ===== Logo boxes ===== */
-.hero-logo-card {
-  padding: 1.5rem 1.25rem 1.75rem;
-}
-.hero-logo-wrap {
-  position: relative;
-  width: 100%;
-  max-width: 180px;
-  aspect-ratio: 1/1;
-  margin-inline: auto;
-}
-@media (min-width: 768px) {
-  .hero-logo-wrap {
-    max-width: 200px;
-  }
-}
-.hero-logo {
-  position: relative;
-  width: 100%;
-  max-width: 180px;
-  margin-inline: auto;
-  aspect-ratio: 1/1;
-}
-.hero-logo img,
-.hero-logo-wrap img {
-  object-fit: contain !important;
-  pointer-events: none;
-  user-select: none;
-}
-
-/* ===== Spinning Basebot token ===== */
+/* ===== Spinning token ===== */
 .token-spin {
   animation: token-spin 16s linear infinite;
   transform-origin: center center;
 }
-
 @keyframes token-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
-/* ===== Nav pills ===== */
-.nav-pill {
-  display: inline-block;
-  padding: 0.6rem 1rem;
-  border-radius: 9999px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
-  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.08s ease;
-}
-.nav-pill:hover {
-  background: rgba(255, 255, 255, 0.16);
-  box-shadow: 0 0 0 2px rgba(121, 255, 225, 0.28), 0 0 18px 4px rgba(121, 255, 225, 0.16);
-  transform: translateY(-1px);
-}
-.nav-pill--active {
-  box-shadow: 0 0 0 2px rgba(121, 255, 225, 0.5), 0 0 18px 4px rgba(121, 255, 225, 0.22);
-}
-
-/* ===== Spacing ===== */
-.container > section + section {
-  margin-top: 2.25rem;
-}
-@media (min-width: 768px) {
-  .container > section + section {
-    margin-top: 3rem;
-  }
-}
-
-/* ===== Nav ===== */
-.nav-root {
-  height: var(--nav-h);
-}
-.nav-bar {
-  height: var(--nav-h);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  color: #fff;
-}
-.nav-burger svg rect {
-  fill: currentColor;
-}
-
-.nav-avatar {
-  position: relative;
-  width: 48px;
-  height: 48px;
-  border-radius: 9999px;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  background: rgba(255, 255, 255, 0.12);
-  display: grid;
-  place-items: center;
-  backdrop-filter: blur(6px);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  transition: transform 0.12s ease, box-shadow 0.2s ease;
-}
-.nav-avatar:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.18);
-}
-
-.nav-burger {
-  width: 48px;
-  height: 48px;
-  display: grid;
-  place-items: center;
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.12);
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05), 0 8px 26px rgba(0, 0, 0, 0.35);
-  color: #fff;
-  transition: background 0.15s ease, transform 0.12s ease;
-}
-.nav-burger:hover {
-  background: rgba(255, 255, 255, 0.18);
-  transform: translateY(-1px);
-}
-.nav-burger:focus-visible {
-  outline: 2px solid rgba(121, 255, 225, 0.5);
-  outline-offset: 3px;
-}
-
-/* --- Brand title --- */
-.brand-steel {
-  font-weight: 900;
-  letter-spacing: 0.04em;
-  background: linear-gradient(90deg, #8fb6ff 0%, #5aa7ff 45%, #79ffe1 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  text-shadow: 0 2px 10px rgba(121, 255, 225, 0.18);
-}
-
-/* --- Burger dropdown panel --- */
-.menu-panel {
-  position: fixed;
-  top: var(--nav-h);
-  left: 0;
-  right: 0;
-  z-index: 90;
-  background: rgba(11, 13, 18, 0.92);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(10px);
-  transform: translateY(-4px);
-  animation: menuDrop 0.18s ease-out both;
-}
-@keyframes menuDrop {
-  from {
-    opacity: 0;
-    transform: translateY(-6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-.menu-overlay {
-  position: fixed;
-  inset: var(--nav-h) 0 0 0;
-  background: transparent;
-  z-index: 85;
-}
-
-.menu-link {
-  display: inline-block;
-  padding: 0.7rem 1rem;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: rgba(255, 255, 255, 0.06);
-  color: #fff;
-  font-weight: 700;
-}
-.menu-link--active {
-  box-shadow: 0 0 0 2px rgba(121, 255, 225, 0.45), 0 0 18px 4px rgba(121, 255, 225, 0.18);
-}
-
-/* ===== Audio toggle ===== */
-.audio-toggle {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(8px);
-  transition: background 0.15s ease, transform 0.12s ease;
-}
-.audio-toggle:hover {
-  background: rgba(255, 255, 255, 0.16);
-  transform: translateY(-1px);
-}
-.audio-toggle:focus-visible {
-  outline: 2px solid rgba(121, 255, 225, 0.5);
-  outline-offset: 3px;
-}
-.audio-under-nav {
-  position: static;
-  top: auto;
-  right: auto;
-}
-
-/* ===== Motion preferences ===== */
-@media (prefers-reduced-motion: reduce) {
-  .brand-steel {
-    text-shadow: none;
-  }
-  .token-spin {
-    animation: none;
-  }
-}
+/* ===== Safety: don’t allow a parent transform to break fixed modals =====
+   If you have any wrapper class that sets transform/filter/perspective, remove it.
+   Portals already solve most of this. */
