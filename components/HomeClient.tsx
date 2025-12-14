@@ -214,38 +214,109 @@ export default function HomeClient() {
       <div className="container pt-6 px-5 stack">
         <AudioToggle src="/audio/basebots-loop.mp3" />
 
-        {/* Hero */}
+        {/* Hero (FIXED: no overlap, better contrast, mobile-safe layout) */}
         <section className="glass hero-logo-card relative overflow-hidden">
+          {/* background glow */}
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0"
             style={{
               background:
-                "radial-gradient(800px 400px at 10% -20%, rgba(58,166,216,0.18), transparent 60%), radial-gradient(900px 500px at 90% -30%, rgba(121,255,225,0.14), transparent 70%)",
+                "radial-gradient(900px 420px at 10% -20%, rgba(58,166,216,0.22), transparent 60%), radial-gradient(1000px 520px at 95% -25%, rgba(121,255,225,0.16), transparent 70%)",
               maskImage:
-                "radial-gradient(120% 120% at 50% 0%, #000 55%, transparent 100%)",
+                "radial-gradient(130% 120% at 50% 0%, #000 55%, transparent 100%)",
             }}
           />
-          <div className="flex flex-col items-center md:flex-row md:items-center md:gap-8">
-            <div className="hero-logo-wrap">
-              <Image
-                src="/logo.PNG"
-                alt="Basebots"
-                fill
-                sizes="200px"
-                priority
-                className="rounded-2xl object-contain"
-              />
-            </div>
-            <div className="mt-6 md:mt-0">
-              <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
-                Basebots: Couriers from the Blue Tomorrow
-              </h1>
-              <p className="mt-3 max-w-2xl text-white/90 leading-relaxed">
+
+          <div className="relative z-10 grid gap-6 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] md:items-center md:gap-10">
+            {/* Copy */}
+            <div className="min-w-0">
+              <div className="flex items-center gap-3">
+                {/* small app mark (prevents giant logo causing layout collision) */}
+                <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-2xl border border-white/15 bg-white/5">
+                  <Image
+                    src="/icon.png"
+                    alt="Basebots"
+                    fill
+                    sizes="48px"
+                    className="object-contain p-1"
+                    priority
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <div className="text-[11px] uppercase tracking-[0.22em] text-white/60">
+                    BASEBOTS
+                  </div>
+                  <h1 className="text-2xl md:text-4xl font-extrabold tracking-tight leading-tight">
+                    Couriers from the Blue Tomorrow
+                  </h1>
+                </div>
+              </div>
+
+              <p className="mt-3 max-w-2xl text-white/85 leading-relaxed">
                 In a not-so-distant future, Base is the lifeblood of the open
                 city—and the Basebots are its guides.
               </p>
-              <ShareRow url={siteUrl} className="mt-4" />
+
+              {/* Share row on its own “lane” so it never overlaps art */}
+              <div className="mt-4">
+                <div className="rounded-2xl border border-white/10 bg-black/35 p-3">
+                  <ShareRow url={siteUrl} className="" />
+                  <p className="mt-2 text-[11px] text-white/55">
+                    Share Basebots to your squad. Minting stays smooth on mobile.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Hero art card (isolated, with overlay for readability) */}
+            <div className="min-w-0">
+              <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-black/30">
+                {/* top sheen */}
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0"
+                  style={{
+                    background:
+                      "linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.02) 35%, rgba(0,0,0,0.00) 100%)",
+                  }}
+                />
+                {/* bottom fade so text above never “fights” the art */}
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0"
+                  style={{
+                    background:
+                      "radial-gradient(900px 420px at 50% 120%, rgba(0,0,0,0.55), transparent 55%)",
+                  }}
+                />
+
+                <div className="relative aspect-[16/9] w-full">
+                  <Image
+                    src="/logo.PNG"
+                    alt="Basebots hero art"
+                    fill
+                    sizes="(max-width: 768px) 100vw, 520px"
+                    className="object-cover"
+                    priority
+                  />
+                </div>
+
+                <div className="relative px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-2 text-[10px]">
+                    <span className="rounded-full border border-white/15 bg-white/5 px-2 py-[2px] text-white/75">
+                      On-chain SVG
+                    </span>
+                    <span className="rounded-full border border-white/15 bg-white/5 px-2 py-[2px] text-white/75">
+                      FID-powered traits
+                    </span>
+                    <span className="rounded-full border border-[#79ffe1]/30 bg-[#031c1b] px-2 py-[2px] text-[#79ffe1]">
+                      Base
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </section>
