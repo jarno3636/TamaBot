@@ -1,9 +1,9 @@
+// components/staking/FundPoolModal.tsx
 "use client";
 
 import type React from "react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import { useAccount, usePublicClient, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { base } from "viem/chains";
 import { parseUnits } from "viem";
@@ -237,7 +237,9 @@ export default function FundPoolModal({
 
   function setPctOfSuggested(pct: number) {
     if (!Number.isFinite(suggestedNum) || suggestedNum <= 0) return;
-    const v = (suggestedNum * pct).toLocaleString("en-US", { maximumFractionDigits: 6 }).replace(/,/g, "");
+    const v = (suggestedNum * pct)
+      .toLocaleString("en-US", { maximumFractionDigits: 6 })
+      .replace(/,/g, "");
     setAmount(v);
   }
 
@@ -286,7 +288,7 @@ export default function FundPoolModal({
 
   if (!open || !target || !mounted) return null;
 
-  const ui = (
+  return (
     <div className="fixed inset-0 z-[999999] flex items-center justify-center px-4" role="dialog" aria-modal="true">
       {/* overlay */}
       <button aria-label="Close" onClick={onClose} className="absolute inset-0 bg-black/85 backdrop-blur-md" />
@@ -311,7 +313,9 @@ export default function FundPoolModal({
                 <div className="h-9 w-9 rounded-2xl border" style={toneStyle("teal")} aria-hidden />
                 <div>
                   <h2 className="text-sm font-semibold">Fund pool</h2>
-                  <p className="mt-0.5 text-[11px] text-white/60">Send reward tokens directly to the pool contract.</p>
+                  <p className="mt-0.5 text-[11px] text-white/60">
+                    Send reward tokens directly to the pool contract.
+                  </p>
                 </div>
               </div>
 
@@ -412,16 +416,32 @@ export default function FundPoolModal({
               <Btn tone="white" onClick={() => setAmount("")} disabled={fundPending}>
                 Clear
               </Btn>
-              <Btn tone="sky" onClick={() => setPctOfSuggested(0.25)} disabled={fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0}>
+              <Btn
+                tone="sky"
+                onClick={() => setPctOfSuggested(0.25)}
+                disabled={fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0}
+              >
                 25%
               </Btn>
-              <Btn tone="sky" onClick={() => setPctOfSuggested(0.5)} disabled={fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0}>
+              <Btn
+                tone="sky"
+                onClick={() => setPctOfSuggested(0.5)}
+                disabled={fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0}
+              >
                 50%
               </Btn>
-              <Btn tone="sky" onClick={() => setPctOfSuggested(0.75)} disabled={fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0}>
+              <Btn
+                tone="sky"
+                onClick={() => setPctOfSuggested(0.75)}
+                disabled={fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0}
+              >
                 75%
               </Btn>
-              <Btn tone="teal" onClick={() => setPctOfSuggested(1)} disabled={fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0}>
+              <Btn
+                tone="teal"
+                onClick={() => setPctOfSuggested(1)}
+                disabled={fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0}
+              >
                 100%
               </Btn>
             </div>
@@ -480,6 +500,4 @@ export default function FundPoolModal({
       </div>
     </div>
   );
-
-  return createPortal(ui, document.body);
 }
