@@ -49,7 +49,6 @@ function getErrText(e: unknown): string {
     if (typeof anyE.message === "string" && anyE.message.length > 0) {
       return anyE.message;
     }
-    // wagmi / viem sometimes put the cause under .cause
     if (
       anyE.cause &&
       typeof anyE.cause.message === "string" &&
@@ -59,9 +58,7 @@ function getErrText(e: unknown): string {
     }
   }
 
-  // last resort: coerce to string, no JSON
   try {
-    // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
     return String(e);
   } catch {
     return "Unknown error";
@@ -72,7 +69,6 @@ export default function HomeClient() {
   const { address } = useAccount();
   const { fid } = useFid();
 
-  // ---- BigInt-safe defaults (no 0n literal explosions in weird runtimes) ----
   const bigintSupported = typeof BigInt !== "undefined";
 
   const { data: rawPrice } = useReadContract({
@@ -98,7 +94,6 @@ export default function HomeClient() {
     functionName: "fidGatingEnabled",
   });
 
-  // Ensure we always have *some* value even if readContract not ready
   const price = (rawPrice ??
     (bigintSupported ? (BigInt(0) as any) : (0 as any))) as bigint;
   const maxSupply = (rawMaxSupply ??
@@ -117,7 +112,6 @@ export default function HomeClient() {
       chainId: base.id,
     });
 
-  // If BigInt truly doesn’t exist (ancient WebView), bail with message
   const envBigIntMissing = !bigintSupported;
 
   const priceEth = useMemo(
@@ -131,7 +125,6 @@ export default function HomeClient() {
     ? 0
     : Math.max(0, Math.min(100, Math.round((minted / Math.max(1, cap)) * 100)));
 
-  // Autofill from Farcaster
   useEffect(() => {
     if (isValidFID(fid)) setFidInput(String(fid));
   }, [fid]);
@@ -179,7 +172,6 @@ export default function HomeClient() {
         const deadlineBig = BigInt(j.deadline);
         const priceBig = BigInt(j.price);
 
-        // ✅ FIXED: pass all three args for mintWithSig
         await writeContract({
           ...BASEBOTS,
           functionName: "mintWithSig",
@@ -214,7 +206,7 @@ export default function HomeClient() {
       <div className="container pt-6 px-5 stack">
         <AudioToggle src="/audio/basebots-loop.mp3" />
 
-        {/* Hero (FIXED: no overlap, better contrast, mobile-safe layout) */}
+        {/* Hero (logo.PNG as one big image ABOVE the text) */}
         <section className="glass hero-logo-card relative overflow-hidden">
           {/* background glow */}
           <div
@@ -228,94 +220,57 @@ export default function HomeClient() {
             }}
           />
 
-          <div className="relative z-10 grid gap-6 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] md:items-center md:gap-10">
-            {/* Copy */}
-            <div className="min-w-0">
-              <div className="flex items-center gap-3">
-                {/* small app mark (prevents giant logo causing layout collision) */}
-                <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-2xl border border-white/15 bg-white/5">
-                  <Image
-                    src="/icon.png"
-                    alt="Basebots"
-                    fill
-                    sizes="48px"
-                    className="object-contain p-1"
-                    priority
-                  />
-                </div>
+          <div className="relative z-10">
+            {/* Big hero image */}
+            <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-black/35">
+              {/* subtle top sheen */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0"
+                style={{
+                  background:
+                    "linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.02) 40%, rgba(0,0,0,0.00) 100%)",
+                }}
+              />
+              {/* bottom fade for readability */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0"
+                style={{
+                  background:
+                    "radial-gradient(900px 420px at 50% 115%, rgba(0,0,0,0.65), transparent 55%)",
+                }}
+              />
 
-                <div className="min-w-0">
-                  <div className="text-[11px] uppercase tracking-[0.22em] text-white/60">
-                    BASEBOTS
-                  </div>
-                  <h1 className="text-2xl md:text-4xl font-extrabold tracking-tight leading-tight">
-                    Couriers from the Blue Tomorrow
-                  </h1>
-                </div>
+              <div className="relative w-full aspect-[16/10] md:aspect-[16/9]">
+                <Image
+                  src="/logo.PNG"
+                  alt="Basebots hero"
+                  fill
+                  priority
+                  sizes="(max-width: 768px) 100vw, 900px"
+                  className="object-contain p-3 md:p-4"
+                />
               </div>
+            </div>
+
+            {/* Text + Share (below image) */}
+            <div className="mt-6">
+              <div className="text-[11px] uppercase tracking-[0.22em] text-white/60">
+                BASEBOTS
+              </div>
+
+              <h1 className="mt-2 text-2xl md:text-4xl font-extrabold tracking-tight leading-tight">
+                Couriers from the Blue Tomorrow
+              </h1>
 
               <p className="mt-3 max-w-2xl text-white/85 leading-relaxed">
                 In a not-so-distant future, Base is the lifeblood of the open
                 city—and the Basebots are its guides.
               </p>
 
-              {/* Share row on its own “lane” so it never overlaps art */}
-              <div className="mt-4">
-                <div className="rounded-2xl border border-white/10 bg-black/35 p-3">
-                  <ShareRow url={siteUrl} className="" />
-                  <p className="mt-2 text-[11px] text-white/55">
-                    Share Basebots to your squad. Minting stays smooth on mobile.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Hero art card (isolated, with overlay for readability) */}
-            <div className="min-w-0">
-              <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-black/30">
-                {/* top sheen */}
-                <div
-                  aria-hidden
-                  className="pointer-events-none absolute inset-0"
-                  style={{
-                    background:
-                      "linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.02) 35%, rgba(0,0,0,0.00) 100%)",
-                  }}
-                />
-                {/* bottom fade so text above never “fights” the art */}
-                <div
-                  aria-hidden
-                  className="pointer-events-none absolute inset-0"
-                  style={{
-                    background:
-                      "radial-gradient(900px 420px at 50% 120%, rgba(0,0,0,0.55), transparent 55%)",
-                  }}
-                />
-
-                <div className="relative aspect-[16/9] w-full">
-                  <Image
-                    src="/logo.PNG"
-                    alt="Basebots hero art"
-                    fill
-                    sizes="(max-width: 768px) 100vw, 520px"
-                    className="object-cover"
-                    priority
-                  />
-                </div>
-
-                <div className="relative px-4 py-3">
-                  <div className="flex flex-wrap items-center gap-2 text-[10px]">
-                    <span className="rounded-full border border-white/15 bg-white/5 px-2 py-[2px] text-white/75">
-                      On-chain SVG
-                    </span>
-                    <span className="rounded-full border border-white/15 bg-white/5 px-2 py-[2px] text-white/75">
-                      FID-powered traits
-                    </span>
-                    <span className="rounded-full border border-[#79ffe1]/30 bg-[#031c1b] px-2 py-[2px] text-[#79ffe1]">
-                      Base
-                    </span>
-                  </div>
-                </div>
+              <div className="mt-4 rounded-2xl border border-white/10 bg-black/35 p-3">
+                <ShareRow url={siteUrl} className="" />
               </div>
             </div>
           </div>
@@ -340,9 +295,7 @@ export default function HomeClient() {
                   <span className="text-[#79ffe1] font-semibold">
                     Max supply:
                   </span>{" "}
-                  {envBigIntMissing
-                    ? "–"
-                    : Number(maxSupply).toLocaleString()}
+                  {envBigIntMissing ? "–" : Number(maxSupply).toLocaleString()}
                 </li>
                 <li>
                   <span className="text-[#79ffe1] font-semibold">Minted:</span>{" "}
@@ -370,8 +323,7 @@ export default function HomeClient() {
             aria-hidden
             className="pointer-events-none absolute -top-24 -right-24 h-64 w-64 rounded-full blur-3xl"
             style={{
-              background:
-                "radial-gradient(circle, #79ffe155 0%, transparent 60%)",
+              background: "radial-gradient(circle, #79ffe155 0%, transparent 60%)",
             }}
           />
           <h2 className="text-xl md:text-2xl font-bold">
@@ -471,17 +423,14 @@ export default function HomeClient() {
           )}
         </section>
 
-        {/* Collection preview */}
         <CollectionPreview />
 
-        {/* Footer quote */}
         <section className="text-center text-white/70">
           <p className="text-sm">
             “In the chrome dawn, the city speaks in light. Basebots understand.”
           </p>
         </section>
 
-        {/* Bottom links */}
         <section className="flex flex-wrap gap-3 justify-center">
           <Link
             href="https://basescan.org/"
@@ -497,8 +446,7 @@ export default function HomeClient() {
             rel="noopener noreferrer"
             className="pill-note pill-note--blue"
           >
-            Contract: {BASEBOTS.address.slice(0, 6)}…
-            {BASEBOTS.address.slice(-4)} ↗
+            Contract: {BASEBOTS.address.slice(0, 6)}…{BASEBOTS.address.slice(-4)} ↗
           </Link>
         </section>
       </div>
