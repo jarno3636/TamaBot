@@ -49,6 +49,7 @@ function getErrText(e: unknown): string {
     if (typeof anyE.message === "string" && anyE.message.length > 0) {
       return anyE.message;
     }
+    // wagmi / viem sometimes put the cause under .cause
     if (
       anyE.cause &&
       typeof anyE.cause.message === "string" &&
@@ -58,7 +59,9 @@ function getErrText(e: unknown): string {
     }
   }
 
+  // last resort: coerce to string, no JSON
   try {
+    // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
     return String(e);
   } catch {
     return "Unknown error";
@@ -69,6 +72,7 @@ export default function HomeClient() {
   const { address } = useAccount();
   const { fid } = useFid();
 
+  // ---- BigInt-safe defaults (no 0n literal explosions in weird runtimes) ----
   const bigintSupported = typeof BigInt !== "undefined";
 
   const { data: rawPrice } = useReadContract({
@@ -94,6 +98,7 @@ export default function HomeClient() {
     functionName: "fidGatingEnabled",
   });
 
+  // Ensure we always have *some* value even if readContract not ready
   const price = (rawPrice ??
     (bigintSupported ? (BigInt(0) as any) : (0 as any))) as bigint;
   const maxSupply = (rawMaxSupply ??
@@ -112,6 +117,7 @@ export default function HomeClient() {
       chainId: base.id,
     });
 
+  // If BigInt truly doesn’t exist (ancient WebView), bail with message
   const envBigIntMissing = !bigintSupported;
 
   const priceEth = useMemo(
@@ -125,6 +131,7 @@ export default function HomeClient() {
     ? 0
     : Math.max(0, Math.min(100, Math.round((minted / Math.max(1, cap)) * 100)));
 
+  // Autofill from Farcaster
   useEffect(() => {
     if (isValidFID(fid)) setFidInput(String(fid));
   }, [fid]);
@@ -172,6 +179,7 @@ export default function HomeClient() {
         const deadlineBig = BigInt(j.deadline);
         const priceBig = BigInt(j.price);
 
+        // ✅ FIXED: pass all three args for mintWithSig
         await writeContract({
           ...BASEBOTS,
           functionName: "mintWithSig",
@@ -206,7 +214,7 @@ export default function HomeClient() {
       <div className="container pt-6 px-5 stack">
         <AudioToggle src="/audio/basebots-loop.mp3" />
 
-        {/* Hero (logo.PNG as one big image ABOVE the text) */}
+        {/* Hero (FIXED: real height so image cannot collapse; big image above text) */}
         <section className="glass hero-logo-card relative overflow-hidden">
           {/* background glow */}
           <div
@@ -221,40 +229,42 @@ export default function HomeClient() {
           />
 
           <div className="relative z-10">
-            {/* Big hero image */}
+            {/* image block */}
             <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-black/35">
-              {/* subtle top sheen */}
+              {/* subtle sheen */}
               <div
                 aria-hidden
                 className="pointer-events-none absolute inset-0"
                 style={{
                   background:
-                    "linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.02) 40%, rgba(0,0,0,0.00) 100%)",
+                    "linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.02) 45%, rgba(0,0,0,0.00) 100%)",
                 }}
               />
-              {/* bottom fade for readability */}
+              {/* bottom fade for legibility */}
               <div
                 aria-hidden
                 className="pointer-events-none absolute inset-0"
                 style={{
                   background:
-                    "radial-gradient(900px 420px at 50% 115%, rgba(0,0,0,0.65), transparent 55%)",
+                    "radial-gradient(900px 420px at 50% 115%, rgba(0,0,0,0.55), transparent 55%)",
                 }}
               />
 
-              <div className="relative w-full aspect-[16/10] md:aspect-[16/9]">
+              {/* ✅ explicit height (prevents “no image” issue) */}
+              <div className="relative w-full h-[240px] sm:h-[300px] md:h-[340px]">
                 <Image
                   src="/logo.PNG"
-                  alt="Basebots hero"
+                  alt="Basebots"
                   fill
                   priority
-                  sizes="(max-width: 768px) 100vw, 900px"
-                  className="object-contain p-3 md:p-4"
+                  quality={100}
+                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 900px, 1000px"
+                  className="object-contain p-4"
                 />
               </div>
             </div>
 
-            {/* Text + Share (below image) */}
+            {/* text block */}
             <div className="mt-6">
               <div className="text-[11px] uppercase tracking-[0.22em] text-white/60">
                 BASEBOTS
@@ -295,7 +305,9 @@ export default function HomeClient() {
                   <span className="text-[#79ffe1] font-semibold">
                     Max supply:
                   </span>{" "}
-                  {envBigIntMissing ? "–" : Number(maxSupply).toLocaleString()}
+                  {envBigIntMissing
+                    ? "–"
+                    : Number(maxSupply).toLocaleString()}
                 </li>
                 <li>
                   <span className="text-[#79ffe1] font-semibold">Minted:</span>{" "}
@@ -323,7 +335,8 @@ export default function HomeClient() {
             aria-hidden
             className="pointer-events-none absolute -top-24 -right-24 h-64 w-64 rounded-full blur-3xl"
             style={{
-              background: "radial-gradient(circle, #79ffe155 0%, transparent 60%)",
+              background:
+                "radial-gradient(circle, #79ffe155 0%, transparent 60%)",
             }}
           />
           <h2 className="text-xl md:text-2xl font-bold">
@@ -423,14 +436,17 @@ export default function HomeClient() {
           )}
         </section>
 
+        {/* Collection preview */}
         <CollectionPreview />
 
+        {/* Footer quote */}
         <section className="text-center text-white/70">
           <p className="text-sm">
             “In the chrome dawn, the city speaks in light. Basebots understand.”
           </p>
         </section>
 
+        {/* Bottom links */}
         <section className="flex flex-wrap gap-3 justify-center">
           <Link
             href="https://basescan.org/"
@@ -446,7 +462,8 @@ export default function HomeClient() {
             rel="noopener noreferrer"
             className="pill-note pill-note--blue"
           >
-            Contract: {BASEBOTS.address.slice(0, 6)}…{BASEBOTS.address.slice(-4)} ↗
+            Contract: {BASEBOTS.address.slice(0, 6)}…
+            {BASEBOTS.address.slice(-4)} ↗
           </Link>
         </section>
       </div>
