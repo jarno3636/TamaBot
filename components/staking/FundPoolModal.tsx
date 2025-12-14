@@ -1,14 +1,10 @@
-// components/staking/FundPoolModal.tsx
 "use client";
 
+import type React from "react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import {
-  useAccount,
-  useWriteContract,
-  useWaitForTransactionReceipt,
-  usePublicClient,
-} from "wagmi";
+import { createPortal } from "react-dom";
+import { useAccount, usePublicClient, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { base } from "viem/chains";
 import { parseUnits } from "viem";
 import type { FundTarget, TokenMeta } from "./stakingUtils";
@@ -25,7 +21,10 @@ const ERC20_TRANSFER_ABI = [
     name: "transfer",
     type: "function",
     stateMutability: "nonpayable",
-    inputs: [{ name: "to", type: "address" }, { name: "amount", type: "uint256" }],
+    inputs: [
+      { name: "to", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
     outputs: [{ name: "", type: "bool" }],
   },
 ] as const;
@@ -153,33 +152,45 @@ export default function FundPoolModal({
   const [fundMsg, setFundMsg] = useState("");
   const [mounted, setMounted] = useState(false);
 
-  // copy feedback
   const [copiedPool, setCopiedPool] = useState(false);
   const [copiedToken, setCopiedToken] = useState(false);
 
   useEffect(() => setMounted(true), []);
 
+  // reset on open
   useEffect(() => {
-    if (open) {
-      setFundMsg("");
-      setMetaErr(null);
-      setTokenMeta(null);
-      setAmount(suggestedAmount || "");
-      setCopiedPool(false);
-      setCopiedToken(false);
-    }
+    if (!open) return;
+    setFundMsg("");
+    setMetaErr(null);
+    setTokenMeta(null);
+    setAmount((suggestedAmount || "").replace(/,/g, ""));
+    setCopiedPool(false);
+    setCopiedToken(false);
   }, [open, suggestedAmount]);
 
+  // close shortly after mined
   useEffect(() => {
     if (!open || !fundMined) return;
-    const id = setTimeout(() => onClose(), 1500);
+    const id = setTimeout(() => onClose(), 1400);
     return () => clearTimeout(id);
   }, [open, fundMined, onClose]);
 
+  // lock scroll while open
+  useEffect(() => {
+    if (!open) return;
+    const prevHtml = document.documentElement.style.overflow;
+    const prevBody = document.body.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.documentElement.style.overflow = prevHtml;
+      document.body.style.overflow = prevBody;
+    };
+  }, [open]);
+
+  // load token meta
   useEffect(() => {
     if (!open || !target || !publicClient) return;
-    const client = publicClient;
-    const currentTarget = target;
     let cancelled = false;
 
     (async () => {
@@ -188,23 +199,22 @@ export default function FundPoolModal({
         setMetaErr(null);
 
         const [symbol, name, decimals] = await Promise.all([
-          client.readContract({ address: currentTarget.rewardToken, abi: ERC20_METADATA_ABI, functionName: "symbol" }),
-          client.readContract({ address: currentTarget.rewardToken, abi: ERC20_METADATA_ABI, functionName: "name" }),
-          client.readContract({ address: currentTarget.rewardToken, abi: ERC20_METADATA_ABI, functionName: "decimals" }),
+          publicClient.readContract({ address: target.rewardToken, abi: ERC20_METADATA_ABI, functionName: "symbol" }),
+          publicClient.readContract({ address: target.rewardToken, abi: ERC20_METADATA_ABI, functionName: "name" }),
+          publicClient.readContract({ address: target.rewardToken, abi: ERC20_METADATA_ABI, functionName: "decimals" }),
         ]);
 
-        if (!cancelled) {
-          setTokenMeta({
-            symbol: (symbol as string) || "TOKEN",
-            name: (name as string) || "Token",
-            decimals: Number(decimals ?? 18),
-          });
-        }
+        if (cancelled) return;
+
+        setTokenMeta({
+          symbol: (symbol as string) || "TOKEN",
+          name: (name as string) || "Token",
+          decimals: Number(decimals ?? 18),
+        });
       } catch {
-        if (!cancelled) {
-          setMetaErr("Could not load token metadata; using 18 decimals.");
-          setTokenMeta({ symbol: "TOKEN", name: "Token", decimals: 18 });
-        }
+        if (cancelled) return;
+        setMetaErr("Could not load token metadata; using 18 decimals.");
+        setTokenMeta({ symbol: "TOKEN", name: "Token", decimals: 18 });
       } finally {
         if (!cancelled) setMetaLoading(false);
       }
@@ -227,8 +237,8 @@ export default function FundPoolModal({
 
   function setPctOfSuggested(pct: number) {
     if (!Number.isFinite(suggestedNum) || suggestedNum <= 0) return;
-    const v = (suggestedNum * pct).toLocaleString("en-US", { maximumFractionDigits: 6 });
-    setAmount(v.replace(/,/g, "")); // keep parseUnits happy
+    const v = (suggestedNum * pct).toLocaleString("en-US", { maximumFractionDigits: 6 }).replace(/,/g, "");
+    setAmount(v);
   }
 
   async function copy(text: string, which: "pool" | "token") {
@@ -255,8 +265,6 @@ export default function FundPoolModal({
 
       const v = amount.trim();
       if (!v) return setFundMsg("Enter an amount.");
-
-      // prevent negative / weird values
       if (v.startsWith("-")) return setFundMsg("Amount must be > 0.");
 
       const amountWei = parseUnits(v, decimals);
@@ -278,14 +286,10 @@ export default function FundPoolModal({
 
   if (!open || !target || !mounted) return null;
 
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4" role="dialog" aria-modal="true">
+  const ui = (
+    <div className="fixed inset-0 z-[999999] flex items-center justify-center px-4" role="dialog" aria-modal="true">
       {/* overlay */}
-      <button
-        aria-label="Close"
-        onClick={onClose}
-        className="absolute inset-0 bg-black/85 backdrop-blur-md"
-      />
+      <button aria-label="Close" onClick={onClose} className="absolute inset-0 bg-black/85 backdrop-blur-md" />
 
       {/* modal */}
       <div className="relative w-full max-w-md overflow-hidden rounded-[28px] border border-white/15 bg-[#070A16] shadow-[0_40px_120px_rgba(0,0,0,0.95)] ring-1 ring-white/10">
@@ -304,16 +308,10 @@ export default function FundPoolModal({
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
-                <div
-                  className="h-9 w-9 rounded-2xl border"
-                  style={toneStyle("teal")}
-                  aria-hidden
-                />
+                <div className="h-9 w-9 rounded-2xl border" style={toneStyle("teal")} aria-hidden />
                 <div>
                   <h2 className="text-sm font-semibold">Fund pool</h2>
-                  <p className="mt-0.5 text-[11px] text-white/60">
-                    Send reward tokens directly to the pool contract.
-                  </p>
+                  <p className="mt-0.5 text-[11px] text-white/60">Send reward tokens directly to the pool contract.</p>
                 </div>
               </div>
 
@@ -339,7 +337,7 @@ export default function FundPoolModal({
             <div className="rounded-2xl border border-white/10 bg-black/40 p-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="text-[10px] uppercase tracking-wide text-white/55">Pool address</div>
-                <Btn tone={copiedPool ? "emerald" : "white"} onClick={() => copy(target.pool, "pool")}>
+                <Btn tone={copiedPool ? "emerald" : "white"} onClick={() => copy(target.pool, "pool")} disabled={fundPending}>
                   {copiedPool ? "Copied" : "Copy"}
                 </Btn>
               </div>
@@ -359,7 +357,11 @@ export default function FundPoolModal({
             <div className="rounded-2xl border border-white/10 bg-black/40 p-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="text-[10px] uppercase tracking-wide text-white/55">Reward token</div>
-                <Btn tone={copiedToken ? "emerald" : "white"} onClick={() => copy(target.rewardToken, "token")}>
+                <Btn
+                  tone={copiedToken ? "emerald" : "white"}
+                  onClick={() => copy(target.rewardToken, "token")}
+                  disabled={fundPending}
+                >
                   {copiedToken ? "Copied" : "Copy"}
                 </Btn>
               </div>
@@ -381,6 +383,7 @@ export default function FundPoolModal({
                   onClick={() => setAmount(String(suggestedAmount).replace(/,/g, ""))}
                   className="rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-transform active:scale-95"
                   style={toneStyle("teal")}
+                  disabled={fundPending}
                 >
                   Use suggested: {suggestedAmount}
                 </button>
@@ -388,17 +391,15 @@ export default function FundPoolModal({
             </div>
 
             <label className="mt-3 block">
-              <span className="text-[11px] uppercase tracking-wide text-white/60">
-                Amount ({symbol})
-              </span>
+              <span className="text-[11px] uppercase tracking-wide text-white/60">Amount ({symbol})</span>
               <input
-                type="number"
-                min="0"
-                step="0.000001"
+                type="text"
+                inputMode="decimal"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder={suggestedAmount || "e.g. 1000"}
+                onChange={(e) => setAmount(e.target.value.replace(/,/g, ""))}
+                placeholder={suggestedAmount ? String(suggestedAmount).replace(/,/g, "") : "e.g. 1000"}
                 className={inputBase}
+                disabled={fundPending}
               />
               {metaErr && <p className="mt-1 text-[11px] text-amber-200">{metaErr}</p>}
               <p className="mt-1 text-[11px] text-white/45">
@@ -408,43 +409,19 @@ export default function FundPoolModal({
 
             {/* quick picks */}
             <div className="mt-3 flex flex-wrap gap-2">
-              <Btn
-                tone="white"
-                onClick={() => setAmount("")}
-                disabled={fundPending}
-              >
+              <Btn tone="white" onClick={() => setAmount("")} disabled={fundPending}>
                 Clear
               </Btn>
-
-              <Btn
-                tone="sky"
-                onClick={() => setPctOfSuggested(0.25)}
-                disabled={fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0}
-              >
+              <Btn tone="sky" onClick={() => setPctOfSuggested(0.25)} disabled={fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0}>
                 25%
               </Btn>
-
-              <Btn
-                tone="sky"
-                onClick={() => setPctOfSuggested(0.5)}
-                disabled={fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0}
-              >
+              <Btn tone="sky" onClick={() => setPctOfSuggested(0.5)} disabled={fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0}>
                 50%
               </Btn>
-
-              <Btn
-                tone="sky"
-                onClick={() => setPctOfSuggested(0.75)}
-                disabled={fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0}
-              >
+              <Btn tone="sky" onClick={() => setPctOfSuggested(0.75)} disabled={fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0}>
                 75%
               </Btn>
-
-              <Btn
-                tone="teal"
-                onClick={() => setPctOfSuggested(1)}
-                disabled={fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0}
-              >
+              <Btn tone="teal" onClick={() => setPctOfSuggested(1)} disabled={fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0}>
                 100%
               </Btn>
             </div>
@@ -464,7 +441,7 @@ export default function FundPoolModal({
               style={{
                 background: "linear-gradient(90deg, rgba(121,255,225,1) 0%, rgba(56,189,248,1) 100%)",
                 color: "#07121b",
-                boxShadow: "0 14px 40px rgba(121,255,225,0.28)",
+                boxShadow: "0 14px 40px rgba(121, 255, 225, 0.28)",
               }}
             >
               {fundPending ? "Sending…" : `Send ${symbol}`}
@@ -487,26 +464,15 @@ export default function FundPoolModal({
               </div>
             )}
 
-            {fundMined && (
-              <div className="text-emerald-300 font-semibold">
-                Confirmed ✔ Closing…
-              </div>
-            )}
+            {fundMined && <div className="text-emerald-300 font-semibold">Confirmed ✔ Closing…</div>}
 
             {(fundMsg || fundErr) && (
-              <div className={fundErr ? "text-rose-300" : "text-white/80"}>
-                {fundMsg || getErrText(fundErr)}
-              </div>
+              <div className={fundErr ? "text-rose-300" : "text-white/80"}>{fundMsg || getErrText(fundErr)}</div>
             )}
 
-            {!address && (
-              <div className="text-amber-200">
-                Tip: connect your wallet to send rewards.
-              </div>
-            )}
+            {!address && <div className="text-amber-200">Tip: connect your wallet to send rewards.</div>}
           </div>
 
-          {/* footnote */}
           <div className="mt-3 text-[10px] text-white/45">
             Rewards must already be in your wallet. This sends tokens directly to the pool contract address.
           </div>
@@ -514,4 +480,6 @@ export default function FundPoolModal({
       </div>
     </div>
   );
+
+  return createPortal(ui, document.body);
 }
