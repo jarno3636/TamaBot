@@ -41,21 +41,44 @@ function nowSeconds() {
   return Math.floor(Date.now() / 1000);
 }
 
+function clampInt(n: number, min: number, max: number) {
+  if (!Number.isFinite(n)) return min;
+  return Math.max(min, Math.min(max, Math.floor(n)));
+}
+
+/** Stronger pill styles so active is VERY obvious */
 function pill(active: boolean, tone: "teal" | "amber" | "rose" | "sky" = "teal") {
-  const toneClasses =
+  const activeTone =
     tone === "teal"
-      ? "border-[#79ffe1]/70 bg-[#052b29] text-[#79ffe1] shadow-[0_0_18px_rgba(121,255,225,0.35)]"
+      ? "border-[#79ffe1] bg-[#063b37] text-[#bffdf4] shadow-[0_0_0_1px_rgba(121,255,225,0.35),0_0_24px_rgba(121,255,225,0.30)]"
       : tone === "amber"
-      ? "border-amber-400/70 bg-amber-500/15 text-amber-200 shadow-[0_0_18px_rgba(251,191,36,0.20)]"
+      ? "border-amber-300 bg-amber-500/20 text-amber-100 shadow-[0_0_0_1px_rgba(251,191,36,0.22),0_0_22px_rgba(251,191,36,0.22)]"
       : tone === "rose"
-      ? "border-rose-400/70 bg-rose-500/15 text-rose-200 shadow-[0_0_18px_rgba(251,113,133,0.20)]"
-      : "border-sky-400/70 bg-sky-500/15 text-sky-200 shadow-[0_0_18px_rgba(56,189,248,0.20)]";
+      ? "border-rose-300 bg-rose-500/20 text-rose-100 shadow-[0_0_0_1px_rgba(251,113,133,0.22),0_0_22px_rgba(251,113,133,0.22)]"
+      : "border-sky-300 bg-sky-500/20 text-sky-100 shadow-[0_0_0_1px_rgba(56,189,248,0.22),0_0_22px_rgba(56,189,248,0.22)]";
+
+  const inactive =
+    "border-white/10 bg-white/5 text-white/70 hover:bg-white/10 hover:border-white/20";
 
   return [
     "inline-flex items-center justify-center px-4 py-2 rounded-full border",
     "text-[12px] font-semibold transition-all active:scale-[0.98]",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/60",
-    active ? toneClasses : "border-white/10 bg-white/5 text-white/70 hover:bg-white/10",
+    active ? activeTone : inactive,
+  ].join(" ");
+}
+
+/** Small chips for quick fee picks */
+function feeChip(active: boolean, disabled: boolean) {
+  if (disabled) {
+    return "px-3 py-1.5 rounded-full border border-white/10 bg-white/5 text-[12px] font-semibold text-white/35 cursor-not-allowed";
+  }
+  return [
+    "px-3 py-1.5 rounded-full border text-[12px] font-semibold transition-all active:scale-[0.98]",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/60",
+    active
+      ? "border-[#79ffe1] bg-[#063b37] text-[#bffdf4] shadow-[0_0_0_1px_rgba(121,255,225,0.30),0_0_18px_rgba(121,255,225,0.22)]"
+      : "border-white/10 bg-white/5 text-white/70 hover:bg-white/10 hover:border-white/20",
   ].join(" ");
 }
 
@@ -82,7 +105,7 @@ export default function CreatePoolCard({
   const [rewardRate, setRewardRate] = useState("0");
   const [rewardDecimals, setRewardDecimals] = useState("18");
 
-  // Friendly schedule controls (instead of unix seconds)
+  // Friendly schedule controls
   const [startMode, setStartMode] = useState<StartMode>("now");
   const [startOffset, setStartOffset] = useState("0"); // hours or days based on startMode
   const [durationValue, setDurationValue] = useState("7");
@@ -93,7 +116,7 @@ export default function CreatePoolCard({
   // Fee mode toggles
   const [feeMode, setFeeMode] = useState<FeeMode>("feeOnClaim");
 
-  // Simple percent selector (1-10). 0 means none.
+  // Creator fee percent (0-10) — now via slider + chips
   const [creatorFeePct, setCreatorFeePct] = useState<number>(0);
 
   const [msg, setMsg] = useState("");
@@ -103,14 +126,12 @@ export default function CreatePoolCard({
   const takeFeeOnClaim = feeMode === "feeOnClaim" || feeMode === "feeOnBoth";
   const takeFeeOnUnstake = feeMode === "feeOnUnstake" || feeMode === "feeOnBoth";
 
-  // Convert percent (1-10) to BPS
   const creatorFeeBpsU16 = useMemo(() => {
     if (feeMode === "noCreatorFee") return 0;
-    const pct = Math.max(0, Math.min(10, Math.floor(creatorFeePct)));
+    const pct = clampInt(creatorFeePct, 0, 10);
     return clampU16(pct * 100);
   }, [creatorFeePct, feeMode]);
 
-  // Compute start/end times from friendly selectors
   const computedTimes = useMemo(() => {
     const now = nowSeconds();
 
@@ -142,7 +163,7 @@ export default function CreatePoolCard({
   }, [rewardRate, computedTimes.seconds]);
 
   const feeSummary = useMemo(() => {
-    if (feeMode === "noCreatorFee" || creatorFeeBpsU16 === 0) return "No creator fee.";
+    if (feeMode === "noCreatorFee" || creatorFeeBpsU16 === 0) return "No creator fee";
     const pct = (creatorFeeBpsU16 / 100).toFixed(0);
     const where =
       feeMode === "feeOnClaim"
@@ -150,7 +171,7 @@ export default function CreatePoolCard({
         : feeMode === "feeOnUnstake"
         ? "on unstake"
         : "on claim + unstake";
-    return `${pct}% creator fee ${where}.`;
+    return `${pct}% creator fee ${where}`;
   }, [creatorFeeBpsU16, feeMode]);
 
   async function onCreate() {
@@ -171,7 +192,6 @@ export default function CreatePoolCard({
 
       if (endTime <= startTime) return setMsg("Duration must be > 0.");
 
-      // ABI EXACT: createPool((nft,rewardToken,rewardRate,startTime,endTime,maxStaked,creatorFeeBps,takeFeeOnClaim,takeFeeOnUnstake))
       const p = {
         nft: nft as `0x${string}`,
         rewardToken: rewardToken as `0x${string}`,
@@ -196,6 +216,8 @@ export default function CreatePoolCard({
       setMsg(getErrText(e));
     }
   }
+
+  const feeDisabled = feeMode === "noCreatorFee";
 
   return (
     <section className="glass glass-pad relative overflow-hidden rounded-3xl border border-white/10 bg-[#020617]/85">
@@ -241,12 +263,12 @@ export default function CreatePoolCard({
 
         <div className="mt-4 grid gap-3">
           <label>
-            <span className="text-[11px] uppercase tracking-wide text-white/60">NFT address (ERC-721)</span>
+            <span className="text-[11px] uppercase tracking-wide text-white/60">NFT address</span>
             <input value={nft} onChange={(e) => setNft(e.target.value)} className={inputBase} placeholder="0x…" />
           </label>
 
           <label>
-            <span className="text-[11px] uppercase tracking-wide text-white/60">Reward token (ERC-20)</span>
+            <span className="text-[11px] uppercase tracking-wide text-white/60">Reward token</span>
             <input
               value={rewardToken}
               onChange={(e) => setRewardToken(e.target.value)}
@@ -266,8 +288,7 @@ export default function CreatePoolCard({
               />
               {suggestedFund && (
                 <p className="mt-1 text-[11px] text-white/55">
-                  Suggested funding (rate × duration):{" "}
-                  <span className="text-[#79ffe1] font-semibold">{suggestedFund}</span>
+                  Suggested funding: <span className="text-[#79ffe1] font-semibold">{suggestedFund}</span>
                 </p>
               )}
             </label>
@@ -281,7 +302,6 @@ export default function CreatePoolCard({
                 placeholder="18"
                 inputMode="numeric"
               />
-              <p className="mt-1 text-[11px] text-white/50">Used to convert “tokens/sec” into wei.</p>
             </label>
           </div>
 
@@ -291,9 +311,11 @@ export default function CreatePoolCard({
               <div>
                 <div className="text-[11px] uppercase tracking-wide text-white/60">Schedule</div>
                 <div className="mt-1 text-[11px] text-white/70">
-                  Starts in{" "}
+                  Starts{" "}
                   <span className="font-semibold text-white">
-                    {startMode === "now" ? "now" : `${startOffset || 0} ${startMode === "inHours" ? "hour(s)" : "day(s)"}`}
+                    {startMode === "now"
+                      ? "now"
+                      : `in ${startOffset || 0} ${startMode === "inHours" ? "hour(s)" : "day(s)"}`}
                   </span>{" "}
                   • Duration{" "}
                   <span className="font-semibold text-white">
@@ -309,24 +331,16 @@ export default function CreatePoolCard({
             </div>
 
             <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
+              <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
                 <span className="text-[11px] uppercase tracking-wide text-white/60">Start</span>
                 <div className="mt-2 flex flex-wrap gap-2">
                   <button type="button" onClick={() => setStartMode("now")} className={pill(startMode === "now", "teal")}>
                     Now
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setStartMode("inHours")}
-                    className={pill(startMode === "inHours", "sky")}
-                  >
+                  <button type="button" onClick={() => setStartMode("inHours")} className={pill(startMode === "inHours", "sky")}>
                     In hours
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setStartMode("inDays")}
-                    className={pill(startMode === "inDays", "amber")}
-                  >
+                  <button type="button" onClick={() => setStartMode("inDays")} className={pill(startMode === "inDays", "amber")}>
                     In days
                   </button>
                 </div>
@@ -342,21 +356,13 @@ export default function CreatePoolCard({
                 )}
               </div>
 
-              <div>
+              <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
                 <span className="text-[11px] uppercase tracking-wide text-white/60">Duration</span>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setDurationUnit("hours")}
-                    className={pill(durationUnit === "hours", "sky")}
-                  >
+                  <button type="button" onClick={() => setDurationUnit("hours")} className={pill(durationUnit === "hours", "sky")}>
                     Hours
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setDurationUnit("days")}
-                    className={pill(durationUnit === "days", "teal")}
-                  >
+                  <button type="button" onClick={() => setDurationUnit("days")} className={pill(durationUnit === "days", "teal")}>
                     Days
                   </button>
                 </div>
@@ -374,63 +380,95 @@ export default function CreatePoolCard({
 
           <label>
             <span className="text-[11px] uppercase tracking-wide text-white/60">Max staked (0 = no cap)</span>
-            <input value={maxStaked} onChange={(e) => setMaxStaked(e.target.value)} className={inputBase} placeholder="0" inputMode="numeric" />
+            <input
+              value={maxStaked}
+              onChange={(e) => setMaxStaked(e.target.value)}
+              className={inputBase}
+              placeholder="0"
+              inputMode="numeric"
+            />
           </label>
 
           {/* Fee settings */}
           <div className="rounded-2xl border border-white/10 bg-black/45 p-3">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <div className="text-[11px] uppercase tracking-wide text-white/60">Creator fee + when to charge</div>
-                <div className="text-[11px] text-white/60 mt-1">{feeSummary}</div>
+                <div className="text-[11px] uppercase tracking-wide text-white/60">Fees</div>
+                <div className="text-[12px] text-white/80 mt-1 font-semibold">{feeSummary}</div>
+              </div>
+              <div className="text-[11px] text-white/50">
+                (Protocol fee {protocolFeePercent}%)
               </div>
             </div>
 
-            {/* Fee mode pills */}
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button type="button" onClick={() => { setFeeMode("noCreatorFee"); setCreatorFeePct(0); }} className={pill(feeMode === "noCreatorFee", "sky")}>
-                No fee
-              </button>
-              <button type="button" onClick={() => setFeeMode("feeOnClaim")} className={pill(feeMode === "feeOnClaim", "teal")}>
-                Fee on claim
-              </button>
-              <button type="button" onClick={() => setFeeMode("feeOnUnstake")} className={pill(feeMode === "feeOnUnstake", "amber")}>
-                Fee on unstake
-              </button>
-              <button type="button" onClick={() => setFeeMode("feeOnBoth")} className={pill(feeMode === "feeOnBoth", "rose")}>
-                Fee on both
-              </button>
+            {/* Fee mode pills (stronger selected state) */}
+            <div className="mt-3 rounded-2xl border border-white/10 bg-black/25 p-2">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFeeMode("noCreatorFee");
+                    setCreatorFeePct(0);
+                  }}
+                  className={pill(feeMode === "noCreatorFee", "sky")}
+                >
+                  No fee
+                </button>
+                <button type="button" onClick={() => setFeeMode("feeOnClaim")} className={pill(feeMode === "feeOnClaim", "teal")}>
+                  Fee on claim
+                </button>
+                <button type="button" onClick={() => setFeeMode("feeOnUnstake")} className={pill(feeMode === "feeOnUnstake", "amber")}>
+                  Fee on unstake
+                </button>
+                <button type="button" onClick={() => setFeeMode("feeOnBoth")} className={pill(feeMode === "feeOnBoth", "rose")}>
+                  Fee on both
+                </button>
+              </div>
             </div>
 
-            {/* Percent selector 1–10% */}
-            <div className="mt-3">
-              <span className="text-[11px] uppercase tracking-wide text-white/60">Creator fee percent</span>
+            {/* Percent selector: chips + slider (NO BPS wording) */}
+            <div className={classNames("mt-3 rounded-2xl border border-white/10 bg-black/25 p-3", feeDisabled && "opacity-60")}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-[11px] uppercase tracking-wide text-white/60">Creator fee percent</div>
+                <div className="text-[12px] font-semibold text-white/85">
+                  {feeDisabled ? "—" : `${clampInt(creatorFeePct, 0, 10)}%`}
+                </div>
+              </div>
 
               <div className="mt-2 flex flex-wrap gap-2">
-                {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((p) => (
+                {[0, 1, 2, 5, 10].map((p) => (
                   <button
                     key={p}
                     type="button"
+                    disabled={feeDisabled}
                     onClick={() => setCreatorFeePct(p)}
-                    disabled={feeMode === "noCreatorFee"}
-                    className={[
-                      "px-3 py-2 rounded-full border text-[12px] font-semibold transition-all active:scale-[0.98]",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/60",
-                      feeMode === "noCreatorFee"
-                        ? "border-white/10 bg-white/5 text-white/35 cursor-not-allowed"
-                        : p === creatorFeePct
-                        ? "border-[#79ffe1]/70 bg-[#052b29] text-[#79ffe1] shadow-[0_0_18px_rgba(121,255,225,0.35)]"
-                        : "border-white/10 bg-white/5 text-white/70 hover:bg-white/10",
-                    ].join(" ")}
+                    className={feeChip(!feeDisabled && creatorFeePct === p, feeDisabled)}
                   >
                     {p === 0 ? "0%" : `${p}%`}
                   </button>
                 ))}
               </div>
 
-              <p className="mt-2 text-[11px] text-white/50">
-                Stored on-chain as <span className="text-white/70 font-semibold">{creatorFeeBpsU16}</span> bps.
-              </p>
+              <div className="mt-3">
+                <input
+                  type="range"
+                  min={0}
+                  max={10}
+                  step={1}
+                  disabled={feeDisabled}
+                  value={clampInt(creatorFeePct, 0, 10)}
+                  onChange={(e) => setCreatorFeePct(clampInt(Number(e.target.value), 0, 10))}
+                  className={classNames(
+                    "w-full accent-[#79ffe1]",
+                    feeDisabled && "cursor-not-allowed",
+                  )}
+                />
+                <div className="mt-1 flex justify-between text-[10px] text-white/45">
+                  <span>0%</span>
+                  <span>5%</span>
+                  <span>10%</span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -463,7 +501,11 @@ export default function CreatePoolCard({
                 </a>
               </div>
             )}
-            {txMined && <div className="text-emerald-300">Confirmed ✔ Pool created. Now fund it from the Pools list (Creator badge → Fund).</div>}
+            {txMined && (
+              <div className="text-emerald-300">
+                Confirmed ✔ Pool created. Now fund it from the Pools list (Creator badge → Fund).
+              </div>
+            )}
           </div>
         </div>
       </div>
