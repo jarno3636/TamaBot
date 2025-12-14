@@ -29,57 +29,131 @@ const inputBase =
   "mt-1 w-full max-w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-[13px] md:text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60";
 
 type FeeMode = "noCreatorFee" | "feeOnClaim" | "feeOnUnstake" | "feeOnBoth";
-
 type StartMode = "now" | "inHours" | "inDays";
 type DurUnit = "hours" | "days";
 
 function clampU16(n: number) {
   return Math.max(0, Math.min(10_000, Math.floor(n)));
 }
-
 function nowSeconds() {
   return Math.floor(Date.now() / 1000);
 }
-
 function clampInt(n: number, min: number, max: number) {
   if (!Number.isFinite(n)) return min;
   return Math.max(min, Math.min(max, Math.floor(n)));
 }
 
-/** Stronger pill styles so active is VERY obvious */
-function pill(active: boolean, tone: "teal" | "amber" | "rose" | "sky" = "teal") {
-  const activeTone =
-    tone === "teal"
-      ? "border-[#79ffe1] bg-[#063b37] text-[#bffdf4] shadow-[0_0_0_1px_rgba(121,255,225,0.35),0_0_24px_rgba(121,255,225,0.30)]"
-      : tone === "amber"
-      ? "border-amber-300 bg-amber-500/20 text-amber-100 shadow-[0_0_0_1px_rgba(251,191,36,0.22),0_0_22px_rgba(251,191,36,0.22)]"
-      : tone === "rose"
-      ? "border-rose-300 bg-rose-500/20 text-rose-100 shadow-[0_0_0_1px_rgba(251,113,133,0.22),0_0_22px_rgba(251,113,133,0.22)]"
-      : "border-sky-300 bg-sky-500/20 text-sky-100 shadow-[0_0_0_1px_rgba(56,189,248,0.22),0_0_22px_rgba(56,189,248,0.22)]";
+type Tone = "teal" | "amber" | "rose" | "sky";
 
-  const inactive =
-    "border-white/10 bg-white/5 text-white/70 hover:bg-white/10 hover:border-white/20";
-
-  return [
-    "inline-flex items-center justify-center px-4 py-2 rounded-full border",
-    "text-[12px] font-semibold transition-all active:scale-[0.98]",
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/60",
-    active ? activeTone : inactive,
-  ].join(" ");
+function toneStyle(tone: Tone): React.CSSProperties {
+  if (tone === "teal") {
+    return {
+      background: "linear-gradient(135deg, rgba(121,255,225,0.35), rgba(56,189,248,0.18))",
+      borderColor: "rgba(121,255,225,0.95)",
+      color: "rgba(240,253,250,0.98)",
+      boxShadow: "0 0 0 1px rgba(121,255,225,0.25), 0 0 22px rgba(121,255,225,0.28)",
+    };
+  }
+  if (tone === "amber") {
+    return {
+      background: "linear-gradient(135deg, rgba(251,191,36,0.30), rgba(245,158,11,0.14))",
+      borderColor: "rgba(251,191,36,0.92)",
+      color: "rgba(255,251,235,0.98)",
+      boxShadow: "0 0 0 1px rgba(251,191,36,0.20), 0 0 20px rgba(251,191,36,0.22)",
+    };
+  }
+  if (tone === "rose") {
+    return {
+      background: "linear-gradient(135deg, rgba(251,113,133,0.30), rgba(244,63,94,0.14))",
+      borderColor: "rgba(251,113,133,0.92)",
+      color: "rgba(255,241,242,0.98)",
+      boxShadow: "0 0 0 1px rgba(251,113,133,0.20), 0 0 20px rgba(251,113,133,0.22)",
+    };
+  }
+  // sky
+  return {
+    background: "linear-gradient(135deg, rgba(56,189,248,0.28), rgba(14,165,233,0.14))",
+    borderColor: "rgba(56,189,248,0.92)",
+    color: "rgba(240,249,255,0.98)",
+    boxShadow: "0 0 0 1px rgba(56,189,248,0.18), 0 0 20px rgba(56,189,248,0.20)",
+  };
 }
 
-/** Small chips for quick fee picks */
-function feeChip(active: boolean, disabled: boolean) {
-  if (disabled) {
-    return "px-3 py-1.5 rounded-full border border-white/10 bg-white/5 text-[12px] font-semibold text-white/35 cursor-not-allowed";
-  }
-  return [
-    "px-3 py-1.5 rounded-full border text-[12px] font-semibold transition-all active:scale-[0.98]",
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/60",
-    active
-      ? "border-[#79ffe1] bg-[#063b37] text-[#bffdf4] shadow-[0_0_0_1px_rgba(121,255,225,0.30),0_0_18px_rgba(121,255,225,0.22)]"
-      : "border-white/10 bg-white/5 text-white/70 hover:bg-white/10 hover:border-white/20",
-  ].join(" ");
+function baseBtnStyle(): React.CSSProperties {
+  return {
+    background: "rgba(255,255,255,0.05)",
+    borderColor: "rgba(255,255,255,0.12)",
+    color: "rgba(255,255,255,0.78)",
+  };
+}
+
+function PillButton({
+  active,
+  tone,
+  disabled,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  tone: Tone;
+  disabled?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={!!disabled}
+      onClick={onClick}
+      className={[
+        "inline-flex items-center justify-center rounded-full border px-4 py-2",
+        "text-[12px] font-semibold transition-transform active:scale-[0.98]",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/60",
+        disabled ? "opacity-50 cursor-not-allowed" : "hover:brightness-110",
+      ].join(" ")}
+      style={active ? toneStyle(tone) : baseBtnStyle()}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ChipButton({
+  active,
+  disabled,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={!!disabled}
+      onClick={onClick}
+      className={[
+        "rounded-full border px-3 py-1.5 text-[12px] font-semibold",
+        "transition-transform active:scale-[0.98]",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/60",
+        disabled ? "opacity-50 cursor-not-allowed" : "hover:brightness-110",
+      ].join(" ")}
+      style={
+        active
+          ? {
+              background: "linear-gradient(135deg, rgba(121,255,225,0.32), rgba(56,189,248,0.16))",
+              borderColor: "rgba(121,255,225,0.90)",
+              color: "rgba(240,253,250,0.98)",
+              boxShadow: "0 0 0 1px rgba(121,255,225,0.22), 0 0 16px rgba(121,255,225,0.20)",
+            }
+          : baseBtnStyle()
+      }
+    >
+      {children}
+    </button>
+  );
 }
 
 export default function CreatePoolCard({
@@ -101,22 +175,17 @@ export default function CreatePoolCard({
   const [nft, setNft] = useState("");
   const [rewardToken, setRewardToken] = useState("");
 
-  // tokens/sec entry
   const [rewardRate, setRewardRate] = useState("0");
   const [rewardDecimals, setRewardDecimals] = useState("18");
 
-  // Friendly schedule controls
   const [startMode, setStartMode] = useState<StartMode>("now");
-  const [startOffset, setStartOffset] = useState("0"); // hours or days based on startMode
+  const [startOffset, setStartOffset] = useState("0");
   const [durationValue, setDurationValue] = useState("7");
   const [durationUnit, setDurationUnit] = useState<DurUnit>("days");
 
   const [maxStaked, setMaxStaked] = useState("0");
 
-  // Fee mode toggles
   const [feeMode, setFeeMode] = useState<FeeMode>("feeOnClaim");
-
-  // Creator fee percent (0-10) — now via slider + chips
   const [creatorFeePct, setCreatorFeePct] = useState<number>(0);
 
   const [msg, setMsg] = useState("");
@@ -189,17 +258,16 @@ export default function CreatePoolCard({
 
       const startTime = computedTimes.start;
       const endTime = computedTimes.end;
-
       if (endTime <= startTime) return setMsg("Duration must be > 0.");
 
       const p = {
         nft: nft as `0x${string}`,
         rewardToken: rewardToken as `0x${string}`,
         rewardRate: rateWei,
-        startTime: startTime as any, // uint64
-        endTime: endTime as any, // uint64
-        maxStaked: Number(maxS) as any, // uint64
-        creatorFeeBps: creatorFeeBpsU16 as any, // uint16
+        startTime: startTime as any,
+        endTime: endTime as any,
+        maxStaked: Number(maxS) as any,
+        creatorFeeBps: creatorFeeBpsU16 as any,
         takeFeeOnClaim,
         takeFeeOnUnstake,
       };
@@ -229,6 +297,7 @@ export default function CreatePoolCard({
             "radial-gradient(900px 420px at 10% -20%, rgba(121,255,225,0.14), transparent 60%), radial-gradient(900px 520px at 90% 0%, rgba(56,189,248,0.12), transparent 55%)",
         }}
       />
+
       <div className="relative">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -269,23 +338,13 @@ export default function CreatePoolCard({
 
           <label>
             <span className="text-[11px] uppercase tracking-wide text-white/60">Reward token</span>
-            <input
-              value={rewardToken}
-              onChange={(e) => setRewardToken(e.target.value)}
-              className={inputBase}
-              placeholder="0x…"
-            />
+            <input value={rewardToken} onChange={(e) => setRewardToken(e.target.value)} className={inputBase} placeholder="0x…" />
           </label>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <label>
               <span className="text-[11px] uppercase tracking-wide text-white/60">Reward rate (tokens / sec)</span>
-              <input
-                value={rewardRate}
-                onChange={(e) => setRewardRate(e.target.value)}
-                className={inputBase}
-                placeholder="e.g. 0.01"
-              />
+              <input value={rewardRate} onChange={(e) => setRewardRate(e.target.value)} className={inputBase} placeholder="e.g. 0.01" />
               {suggestedFund && (
                 <p className="mt-1 text-[11px] text-white/55">
                   Suggested funding: <span className="text-[#79ffe1] font-semibold">{suggestedFund}</span>
@@ -295,17 +354,11 @@ export default function CreatePoolCard({
 
             <label>
               <span className="text-[11px] uppercase tracking-wide text-white/60">Reward decimals</span>
-              <input
-                value={rewardDecimals}
-                onChange={(e) => setRewardDecimals(e.target.value)}
-                className={inputBase}
-                placeholder="18"
-                inputMode="numeric"
-              />
+              <input value={rewardDecimals} onChange={(e) => setRewardDecimals(e.target.value)} className={inputBase} placeholder="18" inputMode="numeric" />
             </label>
           </div>
 
-          {/* Friendly Start + Duration */}
+          {/* Schedule */}
           <div className="rounded-2xl border border-white/10 bg-black/45 p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
@@ -313,9 +366,7 @@ export default function CreatePoolCard({
                 <div className="mt-1 text-[11px] text-white/70">
                   Starts{" "}
                   <span className="font-semibold text-white">
-                    {startMode === "now"
-                      ? "now"
-                      : `in ${startOffset || 0} ${startMode === "inHours" ? "hour(s)" : "day(s)"}`}
+                    {startMode === "now" ? "now" : `in ${startOffset || 0} ${startMode === "inHours" ? "hour(s)" : "day(s)"}`}
                   </span>{" "}
                   • Duration{" "}
                   <span className="font-semibold text-white">
@@ -334,15 +385,15 @@ export default function CreatePoolCard({
               <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
                 <span className="text-[11px] uppercase tracking-wide text-white/60">Start</span>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <button type="button" onClick={() => setStartMode("now")} className={pill(startMode === "now", "teal")}>
+                  <PillButton active={startMode === "now"} tone="teal" onClick={() => setStartMode("now")}>
                     Now
-                  </button>
-                  <button type="button" onClick={() => setStartMode("inHours")} className={pill(startMode === "inHours", "sky")}>
+                  </PillButton>
+                  <PillButton active={startMode === "inHours"} tone="sky" onClick={() => setStartMode("inHours")}>
                     In hours
-                  </button>
-                  <button type="button" onClick={() => setStartMode("inDays")} className={pill(startMode === "inDays", "amber")}>
+                  </PillButton>
+                  <PillButton active={startMode === "inDays"} tone="amber" onClick={() => setStartMode("inDays")}>
                     In days
-                  </button>
+                  </PillButton>
                 </div>
 
                 {startMode !== "now" && (
@@ -359,12 +410,12 @@ export default function CreatePoolCard({
               <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
                 <span className="text-[11px] uppercase tracking-wide text-white/60">Duration</span>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <button type="button" onClick={() => setDurationUnit("hours")} className={pill(durationUnit === "hours", "sky")}>
+                  <PillButton active={durationUnit === "hours"} tone="sky" onClick={() => setDurationUnit("hours")}>
                     Hours
-                  </button>
-                  <button type="button" onClick={() => setDurationUnit("days")} className={pill(durationUnit === "days", "teal")}>
+                  </PillButton>
+                  <PillButton active={durationUnit === "days"} tone="teal" onClick={() => setDurationUnit("days")}>
                     Days
-                  </button>
+                  </PillButton>
                 </div>
 
                 <input
@@ -380,72 +431,64 @@ export default function CreatePoolCard({
 
           <label>
             <span className="text-[11px] uppercase tracking-wide text-white/60">Max staked (0 = no cap)</span>
-            <input
-              value={maxStaked}
-              onChange={(e) => setMaxStaked(e.target.value)}
-              className={inputBase}
-              placeholder="0"
-              inputMode="numeric"
-            />
+            <input value={maxStaked} onChange={(e) => setMaxStaked(e.target.value)} className={inputBase} placeholder="0" inputMode="numeric" />
           </label>
 
-          {/* Fee settings */}
+          {/* Fees */}
           <div className="rounded-2xl border border-white/10 bg-black/45 p-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="text-[11px] uppercase tracking-wide text-white/60">Fees</div>
                 <div className="text-[12px] text-white/80 mt-1 font-semibold">{feeSummary}</div>
               </div>
-              <div className="text-[11px] text-white/50">
-                (Protocol fee {protocolFeePercent}%)
-              </div>
+              <div className="text-[11px] text-white/50">(Protocol fee {protocolFeePercent}%)</div>
             </div>
 
-            {/* Fee mode pills (stronger selected state) */}
+            {/* Fee mode pills (INLINE color guaranteed) */}
             <div className="mt-3 rounded-2xl border border-white/10 bg-black/25 p-2">
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
+                <PillButton
+                  active={feeMode === "noCreatorFee"}
+                  tone="sky"
                   onClick={() => {
                     setFeeMode("noCreatorFee");
                     setCreatorFeePct(0);
                   }}
-                  className={pill(feeMode === "noCreatorFee", "sky")}
                 >
                   No fee
-                </button>
-                <button type="button" onClick={() => setFeeMode("feeOnClaim")} className={pill(feeMode === "feeOnClaim", "teal")}>
+                </PillButton>
+
+                <PillButton active={feeMode === "feeOnClaim"} tone="teal" onClick={() => setFeeMode("feeOnClaim")}>
                   Fee on claim
-                </button>
-                <button type="button" onClick={() => setFeeMode("feeOnUnstake")} className={pill(feeMode === "feeOnUnstake", "amber")}>
+                </PillButton>
+
+                <PillButton active={feeMode === "feeOnUnstake"} tone="amber" onClick={() => setFeeMode("feeOnUnstake")}>
                   Fee on unstake
-                </button>
-                <button type="button" onClick={() => setFeeMode("feeOnBoth")} className={pill(feeMode === "feeOnBoth", "rose")}>
+                </PillButton>
+
+                <PillButton active={feeMode === "feeOnBoth"} tone="rose" onClick={() => setFeeMode("feeOnBoth")}>
                   Fee on both
-                </button>
+                </PillButton>
               </div>
             </div>
 
-            {/* Percent selector: chips + slider (NO BPS wording) */}
-            <div className={classNames("mt-3 rounded-2xl border border-white/10 bg-black/25 p-3", feeDisabled && "opacity-60")}>
+            {/* Percent selector */}
+            <div className={"mt-3 rounded-2xl border border-white/10 bg-black/25 p-3" + (feeDisabled ? " opacity-60" : "")}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-[11px] uppercase tracking-wide text-white/60">Creator fee percent</div>
-                <div className="text-[12px] font-semibold text-white/85">
-                  {feeDisabled ? "—" : `${clampInt(creatorFeePct, 0, 10)}%`}
-                </div>
+                <div className="text-[12px] font-semibold text-white/85">{feeDisabled ? "—" : `${clampInt(creatorFeePct, 0, 10)}%`}</div>
               </div>
 
               <div className="mt-2 flex flex-wrap gap-2">
                 {[0, 1, 2, 5, 10].map((p) => (
-                  <button
+                  <ChipButton
                     key={p}
-                    type="button"
                     disabled={feeDisabled}
+                    active={!feeDisabled && creatorFeePct === p}
                     onClick={() => setCreatorFeePct(p)}
-                    className={feeChip(!feeDisabled && creatorFeePct === p, feeDisabled)}
                   >
                     {p === 0 ? "0%" : `${p}%`}
-                  </button>
+                  </ChipButton>
                 ))}
               </div>
 
@@ -458,10 +501,11 @@ export default function CreatePoolCard({
                   disabled={feeDisabled}
                   value={clampInt(creatorFeePct, 0, 10)}
                   onChange={(e) => setCreatorFeePct(clampInt(Number(e.target.value), 0, 10))}
-                  className={classNames(
-                    "w-full accent-[#79ffe1]",
-                    feeDisabled && "cursor-not-allowed",
-                  )}
+                  className="w-full"
+                  style={{
+                    accentColor: "#79ffe1",
+                    opacity: feeDisabled ? 0.5 : 1,
+                  }}
                 />
                 <div className="mt-1 flex justify-between text-[10px] text-white/45">
                   <span>0%</span>
@@ -491,21 +535,12 @@ export default function CreatePoolCard({
             {txHash && (
               <div className="text-white/70">
                 Tx:{" "}
-                <a
-                  href={`https://basescan.org/tx/${txHash}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-[#79ffe1] underline decoration-dotted underline-offset-4"
-                >
+                <a href={`https://basescan.org/tx/${txHash}`} target="_blank" rel="noreferrer" className="text-[#79ffe1] underline decoration-dotted underline-offset-4">
                   view ↗
                 </a>
               </div>
             )}
-            {txMined && (
-              <div className="text-emerald-300">
-                Confirmed ✔ Pool created. Now fund it from the Pools list (Creator badge → Fund).
-              </div>
-            )}
+            {txMined && <div className="text-emerald-300">Confirmed ✔ Pool created. Now fund it from the Pools list (Creator badge → Fund).</div>}
           </div>
         </div>
       </div>
