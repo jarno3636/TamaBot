@@ -4,7 +4,12 @@
 import type React from "react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useAccount, usePublicClient, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import {
+  useAccount,
+  usePublicClient,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+} from "wagmi";
 import { base } from "viem/chains";
 import { parseUnits } from "viem";
 import type { FundTarget, TokenMeta } from "./stakingUtils";
@@ -87,7 +92,10 @@ function Chip({
   children: React.ReactNode;
 }) {
   return (
-    <span className="inline-flex items-center rounded-full border px-2 py-[1px] text-[10px] font-semibold" style={toneStyle(tone)}>
+    <span
+      className="inline-flex items-center rounded-full border px-2 py-[1px] text-[10px] font-semibold"
+      style={toneStyle(tone)}
+    >
       {children}
     </span>
   );
@@ -289,13 +297,17 @@ export default function FundPoolModal({
   if (!open || !target || !mounted) return null;
 
   return (
-    <div className="fixed inset-0 z-[999999] flex items-center justify-center px-4" role="dialog" aria-modal="true">
-      {/* overlay */}
-      <button aria-label="Close" onClick={onClose} className="absolute inset-0 bg-black/85 backdrop-blur-md" />
+    <div className="fixed inset-0 z-[2147483647] flex items-center justify-center px-4" role="dialog" aria-modal="true">
+      {/* ✅ FULLY OPAQUE OVERLAY */}
+      <button
+        aria-label="Close"
+        onClick={onClose}
+        className="absolute inset-0 bg-black"
+      />
 
-      {/* modal */}
+      {/* ✅ FULLY OPAQUE MODAL SHELL */}
       <div className="relative w-full max-w-md overflow-hidden rounded-[28px] border border-white/15 bg-[#070A16] shadow-[0_40px_120px_rgba(0,0,0,0.95)] ring-1 ring-white/10">
-        {/* glow */}
+        {/* glow (safe: inside modal only) */}
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 opacity-95"
@@ -305,7 +317,8 @@ export default function FundPoolModal({
           }}
         />
 
-        <div className="relative p-5 bg-[#070A16]/92">
+        {/* ✅ remove /92 transparency */}
+        <div className="relative p-5 bg-[#070A16]">
           {/* top bar */}
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -361,11 +374,7 @@ export default function FundPoolModal({
             <div className="rounded-2xl border border-white/10 bg-black/40 p-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="text-[10px] uppercase tracking-wide text-white/55">Reward token</div>
-                <Btn
-                  tone={copiedToken ? "emerald" : "white"}
-                  onClick={() => copy(target.rewardToken, "token")}
-                  disabled={fundPending}
-                >
+                <Btn tone={copiedToken ? "emerald" : "white"} onClick={() => copy(target.rewardToken, "token")} disabled={fundPending}>
                   {copiedToken ? "Copied" : "Copy"}
                 </Btn>
               </div>
@@ -411,7 +420,6 @@ export default function FundPoolModal({
               </p>
             </label>
 
-            {/* quick picks */}
             <div className="mt-3 flex flex-wrap gap-2">
               <Btn tone="white" onClick={() => setAmount("")} disabled={fundPending}>
                 Clear
@@ -447,7 +455,6 @@ export default function FundPoolModal({
             </div>
           </div>
 
-          {/* primary action */}
           <div className="mt-4">
             <button
               type="button"
@@ -468,7 +475,6 @@ export default function FundPoolModal({
             </button>
           </div>
 
-          {/* status */}
           <div className="mt-3 space-y-1 text-[11px] text-white/75">
             {fundTxHash && (
               <div>
