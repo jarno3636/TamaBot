@@ -85,30 +85,12 @@ const inputBase =
   "mt-1 w-full max-w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-[13px] md:text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60";
 
 /* ──────────────────────────────────────────────────────────────
- * Minimal ERC-20 metadata ABI (token-info fallback for modal)
+ * Minimal ERC-20 metadata ABI
  * ──────────────────────────────────────────────────────────── */
 const ERC20_METADATA_ABI = [
-  {
-    name: "name",
-    type: "function",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ type: "string", name: "" }],
-  },
-  {
-    name: "symbol",
-    type: "function",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ type: "string", name: "" }],
-  },
-  {
-    name: "decimals",
-    type: "function",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ type: "uint8", name: "" }],
-  },
+  { name: "name", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "string", name: "" }] },
+  { name: "symbol", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "string", name: "" }] },
+  { name: "decimals", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "uint8", name: "" }] },
 ] as const;
 
 /* ──────────────────────────────────────────────────────────────
@@ -139,20 +121,8 @@ const ERC721_APPROVAL_ABI = [
 
 const POOL_ACTIONS_ABI = [
   { name: "claim", type: "function", stateMutability: "nonpayable", inputs: [], outputs: [] },
-  {
-    name: "stake",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [{ name: "tokenId", type: "uint256" }],
-    outputs: [],
-  },
-  {
-    name: "unstake",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [{ name: "tokenId", type: "uint256" }],
-    outputs: [],
-  },
+  { name: "stake", type: "function", stateMutability: "nonpayable", inputs: [{ name: "tokenId", type: "uint256" }], outputs: [] },
+  { name: "unstake", type: "function", stateMutability: "nonpayable", inputs: [{ name: "tokenId", type: "uint256" }], outputs: [] },
   {
     name: "pendingRewards",
     type: "function",
@@ -244,18 +214,20 @@ export default function StakingPage() {
     };
   }, [refreshNonce, activeFilter, address]);
 
-  /* ───────────────── Pool details (multicall) ───────────────── */
+  /* ───────────────── Pool details (multicall) ─────────────────
+     ✅ FIX: no param typed as possibly undefined.
+     We capture pc in the closure after a guard.
+  ──────────────────────────────────────────────────────────── */
   useEffect(() => {
-    // ✅ hard narrow: after this line, pcNonNull is NOT undefined
-    const pcNonNull = publicClient;
-    if (!pcNonNull || factoryPools.length === 0) {
+    const pc = publicClient; // capture
+    if (!pc || factoryPools.length === 0) {
       setFactoryPoolDetails([]);
       return;
     }
 
     let cancelled = false;
 
-    async function loadDetails(pc: typeof pcNonNull) {
+    (async () => {
       try {
         const contractsBase = factoryPools.map((p) => ({
           address: p.pool,
@@ -311,20 +283,19 @@ export default function StakingPage() {
         console.error("Error loading pool details", err);
         if (!cancelled) setPoolsError(`Failed to load pool details. ${getErrText(err)}`);
       }
-    }
+    })();
 
-    void loadDetails(pcNonNull);
     return () => {
       cancelled = true;
     };
   }, [publicClient, factoryPools, address]);
 
-  /* ───────────────── Token meta map (reward token) ───────────────── */
+  /* ───────────────── Token meta map ───────────────── */
   const [tokenMetaMap, setTokenMetaMap] = useState<Record<string, TokenMeta>>({});
 
   useEffect(() => {
-    const pcNonNull = publicClient;
-    if (!pcNonNull) return;
+    const pc = publicClient;
+    if (!pc) return;
     if (factoryPoolDetails.length === 0) return;
 
     let cancelled = false;
@@ -340,21 +311,9 @@ export default function StakingPage() {
         for (const addr of missing) {
           try {
             const [symbol, name, decimals] = await Promise.all([
-              pcNonNull.readContract({
-                address: addr as `0x${string}`,
-                abi: ERC20_METADATA_ABI,
-                functionName: "symbol",
-              }),
-              pcNonNull.readContract({
-                address: addr as `0x${string}`,
-                abi: ERC20_METADATA_ABI,
-                functionName: "name",
-              }),
-              pcNonNull.readContract({
-                address: addr as `0x${string}`,
-                abi: ERC20_METADATA_ABI,
-                functionName: "decimals",
-              }),
+              pc.readContract({ address: addr as `0x${string}`, abi: ERC20_METADATA_ABI, functionName: "symbol" }),
+              pc.readContract({ address: addr as `0x${string}`, abi: ERC20_METADATA_ABI, functionName: "name" }),
+              pc.readContract({ address: addr as `0x${string}`, abi: ERC20_METADATA_ABI, functionName: "decimals" }),
             ]);
 
             updates[addr] = {
@@ -431,7 +390,6 @@ export default function StakingPage() {
     return factoryPoolDetails.find((p) => p.pool.toLowerCase() === activePoolAddr.toLowerCase()) ?? null;
   }, [activePoolAddr, factoryPoolDetails]);
 
-  // read ?pool= from URL (same-page modal behavior)
   useEffect(() => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
@@ -459,7 +417,6 @@ export default function StakingPage() {
     }
   }
 
-  /* ───────────────── Render ───────────────── */
   return (
     <main className="min-h-[100svh] bg-deep text-white pb-16 page-layer overflow-x-hidden">
       <div className="container pt-6 px-5 stack space-y-6">
@@ -582,11 +539,7 @@ export default function StakingPage() {
             <p className="text-xs text-white/60">No pools yet. Create one above.</p>
           )}
 
-          {factoryPools.length > 0 && filteredPools.length === 0 && !poolsLoading && !poolsError && (
-            <p className="text-xs text-white/60">No pools match your filter/search.</p>
-          )}
-
-          {filteredPools.length > 0 && (
+          {factoryPools.length > 0 && factoryPoolDetails.length > 0 && (
             <div className="mt-1 grid gap-3 text-xs">
               {filteredPools.map((pool) => {
                 const now = nowSeconds();
@@ -684,7 +637,6 @@ export default function StakingPage() {
         </section>
       </div>
 
-      {/* Fund Pool Modal (portal-based) */}
       <FundPoolModal
         open={fundModalOpen}
         onClose={() => setFundModalOpen(false)}
@@ -692,20 +644,13 @@ export default function StakingPage() {
         suggestedAmount={fundSuggestedAmount || undefined}
       />
 
-      {/* Enter Pool Modal (same-page) */}
       <EnterPoolModal open={!!activePool} onClose={closePoolModal} pool={activePool} address={address} />
     </main>
   );
 }
 
 /* ──────────────────────────────────────────────────────────────
- * ENTER POOL MODAL (same page)
- * - approve NFT (setApprovalForAll)
- * - stake tokenId
- * - unstake tokenId
- * - claim
- * - shows pending rewards
- * - ✅ step indicator + gated buttons
+ * ENTER POOL MODAL
  * ──────────────────────────────────────────────────────────── */
 function EnterPoolModal({
   open,
@@ -920,7 +865,6 @@ function EnterPoolModal({
             </Link>
           </div>
 
-          {/* Step indicator */}
           <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-3">
             <div className="flex items-center justify-between">
               <span className="text-[11px] uppercase tracking-wide text-white/60">Steps</span>
@@ -928,75 +872,14 @@ function EnterPoolModal({
                 {step === 1 ? "Connect" : step === 2 ? "Approve" : "Stake / Claim"}
               </span>
             </div>
-
-            <div className="mt-2 grid grid-cols-3 gap-2">
-              {[
-                { n: 1, label: "Connect" },
-                { n: 2, label: "Approve" },
-                { n: 3, label: "Stake" },
-              ].map((s) => {
-                const done = step > s.n;
-                const active = step === s.n;
-                return (
-                  <div
-                    key={s.n}
-                    className={[
-                      "rounded-xl border px-2 py-2 text-center",
-                      done
-                        ? "border-emerald-400/40 bg-emerald-500/10"
-                        : active
-                        ? "border-[#79ffe1]/40 bg-[#031c1b]"
-                        : "border-white/10 bg-white/5",
-                    ].join(" ")}
-                  >
-                    <div
-                      className={[
-                        "text-[10px] font-semibold",
-                        done ? "text-emerald-200" : active ? "text-[#79ffe1]" : "text-white/60",
-                      ].join(" ")}
-                    >
-                      {done ? "✓" : s.n}. {s.label}
-                    </div>
-                    <div className="mt-1 h-[2px] w-full rounded-full bg-white/5">
-                      <div
-                        className={[
-                          "h-[2px] rounded-full transition-all",
-                          done ? "w-full bg-emerald-400/60" : active ? "w-2/3 bg-[#79ffe1]/60" : "w-0",
-                        ].join(" ")}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {!isConnected && <p className="mt-2 text-[11px] text-amber-200/80">Connect a wallet to continue.</p>}
-            {isConnected && approved !== true && (
-              <p className="mt-2 text-[11px] text-white/60">
-                Approve this pool to move NFTs in/out for staking (one-time per NFT collection).
-              </p>
-            )}
-            {isConnected && approved === true && (
-              <p className="mt-2 text-[11px] text-emerald-200/80">Approved — you can stake, unstake, and claim.</p>
-            )}
-          </div>
-
-          <div className="mt-3 grid gap-2 text-[11px] text-white/70 font-mono rounded-2xl border border-white/10 bg-black/30 p-3">
-            <div className="break-all">
-              NFT: <span className="text-white">{pool.nft}</span>
-            </div>
-            <div className="break-all">
-              Reward: <span className="text-white">{pool.rewardToken}</span>
-            </div>
-            <div>
-              Pending: <span className="text-white">{pendingRewards === null ? "—" : pendingRewards.toString()}</span>
-            </div>
           </div>
 
           <div className="mt-3 rounded-2xl border border-white/10 bg-black/30 p-3">
             <div className="flex items-center justify-between">
               <span className="text-[11px] text-white/60 uppercase tracking-wide">Approval</span>
-              <span className="text-[11px] text-white/70">{approved === null ? "—" : approved ? "Approved" : "Not approved"}</span>
+              <span className="text-[11px] text-white/70">
+                {approved === null ? "—" : approved ? "Approved" : "Not approved"}
+              </span>
             </div>
 
             <button
@@ -1012,7 +895,13 @@ function EnterPoolModal({
                   : "border border-[#79ffe1]/40 bg-[#031c1b] text-[#79ffe1] hover:bg-[#052b29]",
               ].join(" ")}
             >
-              {!isConnected ? "Connect wallet to approve" : approved ? "Approved" : txPending ? "Approving…" : "Approve pool to stake"}
+              {!isConnected
+                ? "Connect wallet to approve"
+                : approved
+                ? "Approved"
+                : txPending
+                ? "Approving…"
+                : "Approve pool to stake"}
             </button>
           </div>
 
@@ -1066,7 +955,9 @@ function EnterPoolModal({
             disabled={!canAct}
             className={[
               "mt-2 w-full rounded-full border py-2 text-[12px] font-semibold transition-all active:scale-[0.98]",
-              canAct ? "border-white/15 bg-white/5 text-white/85 hover:bg-white/10" : "border-white/10 bg-white/5 text-white/35 cursor-not-allowed",
+              canAct
+                ? "border-white/15 bg-white/5 text-white/85 hover:bg-white/10"
+                : "border-white/10 bg-white/5 text-white/35 cursor-not-allowed",
             ].join(" ")}
             title={approved === true ? "" : "Approve first"}
           >
@@ -1094,4 +985,4 @@ function EnterPoolModal({
       </div>
     </div>
   );
-    }
+}
