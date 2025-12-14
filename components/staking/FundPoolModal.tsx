@@ -90,11 +90,7 @@ export default function FundPoolModal({
         const [symbol, name, decimals] = await Promise.all([
           client.readContract({ address: currentTarget.rewardToken, abi: ERC20_METADATA_ABI, functionName: "symbol" }),
           client.readContract({ address: currentTarget.rewardToken, abi: ERC20_METADATA_ABI, functionName: "name" }),
-          client.readContract({
-            address: currentTarget.rewardToken,
-            abi: ERC20_METADATA_ABI,
-            functionName: "decimals",
-          }),
+          client.readContract({ address: currentTarget.rewardToken, abi: ERC20_METADATA_ABI, functionName: "decimals" }),
         ]);
 
         if (!cancelled) {
@@ -119,7 +115,7 @@ export default function FundPoolModal({
     };
   }, [open, target, publicClient]);
 
-  async function handleFund() {
+  function handleFund() {
     try {
       setFundMsg("");
       if (!target) return setFundMsg("Missing pool info.");
@@ -151,9 +147,11 @@ export default function FundPoolModal({
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4" role="dialog" aria-modal="true">
-      <button aria-label="Close" onClick={onClose} className="absolute inset-0 bg-black/85 backdrop-blur-md" />
+      {/* overlay */}
+      <button aria-label="Close" onClick={onClose} className="absolute inset-0 bg-black/80 backdrop-blur-md" />
 
-      <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-white/15 bg-[#070A16] shadow-[0_30px_90px_rgba(0,0,0,0.92)] ring-1 ring-white/10">
+      {/* modal card (solid) */}
+      <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-white/15 bg-[#070A16] shadow-[0_30px_90px_rgba(0,0,0,0.95)] ring-1 ring-white/10">
         <div
           aria-hidden
           className="absolute inset-0 opacity-90"
@@ -163,11 +161,11 @@ export default function FundPoolModal({
           }}
         />
 
-        <div className="relative p-5">
+        <div className="relative p-5 bg-[#070A16]/95">
           <button
             type="button"
             onClick={onClose}
-            className="absolute right-3 top-3 rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[11px] text-white/70 hover:bg-white/10"
+            className="absolute right-3 top-3 rounded-full border border-white/15 bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/15"
           >
             ✕
           </button>
@@ -175,7 +173,7 @@ export default function FundPoolModal({
           <h2 className="text-sm font-semibold">Fund pool</h2>
           <p className="mt-1 text-[11px] text-white/60">Send reward tokens directly to the pool contract.</p>
 
-          <div className="mt-3 rounded-2xl border border-white/10 bg-black/30 p-3 text-[11px] text-white/75 font-mono space-y-2">
+          <div className="mt-3 rounded-2xl border border-white/10 bg-black/45 p-3 text-[11px] text-white/75 font-mono space-y-2">
             <div className="break-all">
               Pool: <span className="text-white">{target.pool}</span>
             </div>
@@ -205,7 +203,7 @@ export default function FundPoolModal({
             </button>
           </div>
 
-          <div className="mt-3 space-y-1 text-[11px] text-white/70">
+          <div className="mt-3 space-y-1 text-[11px] text-white/75">
             {fundTxHash && (
               <div>
                 Tx:{" "}
