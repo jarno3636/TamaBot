@@ -3,7 +3,6 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, usePublicClient } from "wagmi";
 import { base } from "viem/chains";
 import { parseUnits } from "viem";
@@ -91,7 +90,11 @@ export default function FundPoolModal({
         const [symbol, name, decimals] = await Promise.all([
           client.readContract({ address: currentTarget.rewardToken, abi: ERC20_METADATA_ABI, functionName: "symbol" }),
           client.readContract({ address: currentTarget.rewardToken, abi: ERC20_METADATA_ABI, functionName: "name" }),
-          client.readContract({ address: currentTarget.rewardToken, abi: ERC20_METADATA_ABI, functionName: "decimals" }),
+          client.readContract({
+            address: currentTarget.rewardToken,
+            abi: ERC20_METADATA_ABI,
+            functionName: "decimals",
+          }),
         ]);
 
         if (!cancelled) {
@@ -129,7 +132,7 @@ export default function FundPoolModal({
       const amountWei = parseUnits(v, decimals);
       if (amountWei <= 0n) return setFundMsg("Amount must be > 0.");
 
-      await writeContract({
+      writeContract({
         address: target.rewardToken,
         abi: ERC20_TRANSFER_ABI,
         functionName: "transfer",
@@ -146,7 +149,7 @@ export default function FundPoolModal({
   if (!open || !target || !mounted) return null;
   const symbol = tokenMeta?.symbol ?? "TOKEN";
 
-  const modal = (
+  return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4" role="dialog" aria-modal="true">
       <button aria-label="Close" onClick={onClose} className="absolute inset-0 bg-black/85 backdrop-blur-md" />
 
@@ -223,6 +226,4 @@ export default function FundPoolModal({
       </div>
     </div>
   );
-
-  return createPortal(modal, document.body);
 }
