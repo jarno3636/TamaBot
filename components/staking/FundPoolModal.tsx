@@ -115,7 +115,7 @@ function Btn({
       onClick={onClick}
       disabled={disabled}
       className={cx(
-        "inline-flex items-center justify-center rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-transform active:scale-95",
+        "inline-flex items-center justify-center rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-transform active:scale-95 shrink-0",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/60",
         disabled && "opacity-60 cursor-not-allowed",
       )}
@@ -290,37 +290,20 @@ export default function FundPoolModal({
   if (!open || !target || !mounted) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-[2147483647] flex items-center justify-center"
-      role="dialog"
-      aria-modal="true"
-      style={{
-        paddingTop: "max(16px, env(safe-area-inset-top))",
-        paddingBottom: "max(16px, env(safe-area-inset-bottom))",
-        paddingLeft: "max(16px, env(safe-area-inset-left))",
-        paddingRight: "max(16px, env(safe-area-inset-right))",
-        minHeight: "100svh",
-      }}
-    >
-      {/* fully opaque overlay */}
-      <button
-        aria-label="Close"
-        onClick={onClose}
-        className="absolute inset-0 bg-black"
-      />
+    <div className="fixed inset-0 z-[2147483647] grid place-items-center p-4" role="dialog" aria-modal="true">
+      {/* OPAQUE overlay */}
+      <button aria-label="Close" onClick={onClose} className="absolute inset-0 bg-black" />
 
-      {/* ✅ viewport-clamped modal, flex column, single scroll region */}
+      {/* Modal (hard clamped width/height, always centered) */}
       <div
         className={cx(
-          "relative w-full max-w-md rounded-[28px] border border-white/15 bg-[#070A16] shadow-[0_40px_120px_rgba(0,0,0,0.95)] ring-1 ring-white/10",
-          "overflow-hidden",
-          "flex flex-col",
+          "relative overflow-hidden rounded-[28px] border border-white/15 bg-[#070A16]",
+          "shadow-[0_40px_120px_rgba(0,0,0,0.95)] ring-1 ring-white/10",
+          "w-[min(92vw,28rem)]",
+          "max-h-[calc(100svh-2rem)]",
         )}
-        style={{
-          maxHeight: "calc(100svh - 32px)",
-        }}
       >
-        {/* glow inside modal only */}
+        {/* glow inside */}
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 opacity-95"
@@ -330,13 +313,13 @@ export default function FundPoolModal({
           }}
         />
 
-        {/* header (fixed) */}
+        {/* Header */}
         <div className="relative px-5 pt-5 pb-4 border-b border-white/10 bg-[#070A16]">
           <div className="flex items-start justify-between gap-3">
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <div className="h-9 w-9 rounded-2xl border" style={toneStyle("teal")} aria-hidden />
-                <div>
+                <div className="min-w-0">
                   <h2 className="text-sm font-semibold">Fund pool</h2>
                   <p className="mt-0.5 text-[11px] text-white/60">
                     Send reward tokens directly to the pool contract.
@@ -355,20 +338,22 @@ export default function FundPoolModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[11px] font-semibold text-white/85 hover:bg-white/15 transition-transform active:scale-95"
+              className="shrink-0 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[11px] font-semibold text-white/85 hover:bg-white/15 transition-transform active:scale-95"
             >
               ✕
             </button>
           </div>
         </div>
 
-        {/* ✅ body (the ONLY scroll area) */}
-        <div className="relative flex-1 min-h-0 px-5 py-4 overflow-y-auto overscroll-contain">
-          {/* pool + token */}
+        {/* Scrollable body */}
+        <div className="relative px-5 py-4 overflow-y-auto overflow-x-hidden overscroll-contain max-h-[calc(100svh-2rem-84px)]">
+          {/* pool + token boxes */}
           <div className="grid gap-2">
             <div className="rounded-2xl border border-white/10 bg-black/40 p-3">
               <div className="flex items-center justify-between gap-2">
-                <div className="text-[10px] uppercase tracking-wide text-white/55">Pool address</div>
+                <div className="min-w-0 text-[10px] uppercase tracking-wide text-white/55">
+                  Pool address
+                </div>
                 <Btn tone={copiedPool ? "emerald" : "white"} onClick={() => copy(target.pool, "pool")} disabled={fundPending}>
                   {copiedPool ? "Copied" : "Copy"}
                 </Btn>
@@ -388,7 +373,9 @@ export default function FundPoolModal({
 
             <div className="rounded-2xl border border-white/10 bg-black/40 p-3">
               <div className="flex items-center justify-between gap-2">
-                <div className="text-[10px] uppercase tracking-wide text-white/55">Reward token</div>
+                <div className="min-w-0 text-[10px] uppercase tracking-wide text-white/55">
+                  Reward token
+                </div>
                 <Btn tone={copiedToken ? "emerald" : "white"} onClick={() => copy(target.rewardToken, "token")} disabled={fundPending}>
                   {copiedToken ? "Copied" : "Copy"}
                 </Btn>
@@ -400,7 +387,7 @@ export default function FundPoolModal({
           {/* amount */}
           <div className="mt-4 rounded-3xl border border-white/10 bg-black/35 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
+              <div className="min-w-0">
                 <div className="text-[11px] font-semibold text-white/85">Amount</div>
                 <div className="text-[11px] text-white/55">Choose how many {symbol} to send.</div>
               </div>
@@ -409,7 +396,7 @@ export default function FundPoolModal({
                 <button
                   type="button"
                   onClick={() => setAmount(String(suggestedAmount).replace(/,/g, ""))}
-                  className="rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-transform active:scale-95"
+                  className="shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-transform active:scale-95"
                   style={toneStyle("teal")}
                   disabled={fundPending}
                 >
@@ -454,7 +441,7 @@ export default function FundPoolModal({
             </div>
           </div>
 
-          {/* action */}
+          {/* primary action */}
           <div className="mt-4">
             <button
               type="button"
@@ -494,9 +481,7 @@ export default function FundPoolModal({
             {fundMined && <div className="text-emerald-300 font-semibold">Confirmed ✔ Closing…</div>}
 
             {(fundMsg || fundErr) && (
-              <div className={fundErr ? "text-rose-300" : "text-white/80"}>
-                {fundMsg || getErrText(fundErr)}
-              </div>
+              <div className={fundErr ? "text-rose-300" : "text-white/80"}>{fundMsg || getErrText(fundErr)}</div>
             )}
 
             {!address && <div className="text-amber-200">Tip: connect your wallet to send rewards.</div>}
