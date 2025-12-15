@@ -1,4 +1,3 @@
-// components/HomeClient.tsx
 "use client";
 
 import Image from "next/image";
@@ -59,7 +58,6 @@ function getErrText(e: unknown): string {
   }
 
   try {
-    // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
     return String(e);
   } catch {
     return "Unknown error";
@@ -82,10 +80,7 @@ export default function HomeClient() {
     functionName: "MAX_SUPPLY",
   });
 
-  const {
-    data: rawTotalMinted,
-    refetch: refetchMinted,
-  } = useReadContract({
+  const { data: rawTotalMinted, refetch: refetchMinted } = useReadContract({
     ...BASEBOTS,
     functionName: "totalMinted",
   });
@@ -107,11 +102,10 @@ export default function HomeClient() {
   const [err, setErr] = useState<string>("");
 
   const { writeContract, data: txHash, error: writeErr } = useWriteContract();
-  const { isLoading: pending, isSuccess: mined } =
-    useWaitForTransactionReceipt({
-      hash: txHash,
-      chainId: base.id,
-    });
+  const { isLoading: pending, isSuccess: mined } = useWaitForTransactionReceipt({
+    hash: txHash,
+    chainId: base.id,
+  });
 
   const envBigIntMissing = !bigintSupported;
 
@@ -203,13 +197,16 @@ export default function HomeClient() {
       "https://basebots.vercel.app"
     ).replace(/\/$/, "");
 
+  // ✅ robust: if the wordmark fails for any reason, we can hide it gracefully
+  const [wordmarkOk, setWordmarkOk] = useState(true);
+
   return (
     <section className="min-h-[100svh] bg-deep text-white pb-16">
       <div className="container pt-6 px-5 stack">
         <AudioToggle src="/audio/basebots-loop.mp3" />
 
-        {/* ✅ HERO: big logo above text, no overlap, mobile-safe */}
-        <section className="glass hero-logo-card relative overflow-hidden">
+        {/* ✅ HERO: always looks good on mobile, and uses /logo.PNG */}
+        <section className="glass glass-pad relative overflow-hidden rounded-3xl">
           {/* background glow */}
           <div
             aria-hidden
@@ -222,57 +219,66 @@ export default function HomeClient() {
             }}
           />
 
-          <div className="relative z-10">
-            {/* Image panel */}
-            <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-black/25">
-              {/* subtle sheen */}
-              <div
-                aria-hidden
-                className="pointer-events-none absolute inset-0"
-                style={{
-                  background:
-                    "linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.02) 45%, rgba(0,0,0,0) 100%)",
-                }}
-              />
-              {/* bottom fade (keeps it cinematic) */}
-              <div
-                aria-hidden
-                className="pointer-events-none absolute inset-0"
-                style={{
-                  background:
-                    "radial-gradient(900px 420px at 50% 120%, rgba(0,0,0,0.55), transparent 58%)",
-                }}
-              />
+          <div className="relative grid gap-6 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] items-center">
+            {/* LEFT */}
+            <div className="min-w-0">
+              <div className="flex items-center gap-3">
+                <div
+                  className="relative flex h-14 w-14 items-center justify-center rounded-2xl border"
+                  style={{
+                    borderColor: "rgba(255,255,255,0.14)",
+                    background:
+                      "linear-gradient(135deg, rgba(121,255,225,0.16), rgba(58,166,216,0.10))",
+                    boxShadow:
+                      "0 0 0 1px rgba(121,255,225,0.10), 0 0 26px rgba(121,255,225,0.16)",
+                  }}
+                >
+                  <Image
+                    src="/icon.png"
+                    alt="Basebots icon"
+                    width={40}
+                    height={40}
+                    priority
+                    className="object-contain"
+                  />
+                </div>
 
-              {/* IMPORTANT: real height so the image can't collapse */}
-              <div className="relative w-full h-[220px] sm:h-[280px] md:h-[320px]">
-                <Image
-                  src="/logo.PNG"
-                  alt="Basebots"
-                  fill
-                  priority
-                  quality={100}
-                  sizes="100vw"
-                  className="object-contain p-4"
-                  // This helps in some mini-app webviews; remove later if you want
-                  unoptimized
-                />
+                <div className="min-w-0">
+                  <div className="text-[11px] uppercase tracking-[0.22em] text-white/60">
+                    BASEBOTS
+                  </div>
+
+                  {/* wordmark */}
+                  {wordmarkOk ? (
+                    <div className="mt-1 relative h-7 w-[190px] max-w-full">
+                      <Image
+                        src="/logo.PNG"
+                        alt="Basebots wordmark"
+                        fill
+                        priority
+                        sizes="200px"
+                        className="object-contain"
+                        onError={() => setWordmarkOk(false)}
+                        unoptimized
+                      />
+                    </div>
+                  ) : (
+                    <div className="mt-1 text-sm font-semibold text-white/90">
+                      Basebots
+                      <span className="ml-2 pill-note pill-note--blue text-[10px]">
+                        logo.PNG missing
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
 
-            {/* Copy */}
-            <div className="mt-6">
-              <div className="text-[11px] uppercase tracking-[0.22em] text-white/60">
-                BASEBOTS
-              </div>
-
-              <h1 className="mt-2 text-2xl md:text-4xl font-extrabold tracking-tight leading-tight">
+              <h1 className="mt-4 text-2xl md:text-4xl font-extrabold tracking-tight leading-tight">
                 Couriers from the Blue Tomorrow
               </h1>
 
               <p className="mt-3 max-w-2xl text-white/85 leading-relaxed">
-                In a not-so-distant future, Base is the lifeblood of the open
-                city—and the Basebots are its guides.
+                In a not-so-distant future, Base is the lifeblood of the open city—and the Basebots are its guides.
               </p>
 
               <div className="mt-4 rounded-2xl border border-white/10 bg-black/35 p-3">
@@ -280,6 +286,63 @@ export default function HomeClient() {
                 <p className="mt-2 text-[11px] text-white/55">
                   Share Basebots with your squad.
                 </p>
+              </div>
+            </div>
+
+            {/* RIGHT: hero panel (never looks empty) */}
+            <div className="relative">
+              <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-black/25">
+                <div
+                  aria-hidden
+                  className="absolute inset-0 opacity-90"
+                  style={{
+                    background:
+                      "radial-gradient(700px 260px at 20% 10%, rgba(121,255,225,0.22), transparent 60%), radial-gradient(800px 360px at 80% 0%, rgba(58,166,216,0.24), transparent 60%), linear-gradient(180deg, rgba(255,255,255,0.08), rgba(0,0,0,0))",
+                  }}
+                />
+                <div
+                  aria-hidden
+                  className="absolute inset-0"
+                  style={{
+                    backgroundImage:
+                      "linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px)",
+                    backgroundSize: "28px 28px",
+                    maskImage:
+                      "radial-gradient(120% 120% at 50% 45%, #000 45%, transparent 72%)",
+                    opacity: 0.25,
+                  }}
+                />
+                <div className="relative w-full h-[220px] sm:h-[280px] md:h-[320px]">
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="text-center px-6">
+                      <div
+                        className="mx-auto h-20 w-20 rounded-3xl border flex items-center justify-center"
+                        style={{
+                          borderColor: "rgba(121,255,225,0.25)",
+                          background: "rgba(3,28,27,0.55)",
+                          boxShadow:
+                            "0 0 0 1px rgba(121,255,225,0.10), 0 0 40px rgba(121,255,225,0.14)",
+                        }}
+                      >
+                        <Image
+                          src="/icon.png"
+                          alt="Basebots"
+                          width={56}
+                          height={56}
+                          className="object-contain"
+                        />
+                      </div>
+                      <div className="mt-3 text-[11px] text-white/65">
+                        Add hero art later as{" "}
+                        <span className="font-mono text-white/85">/hero.PNG</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-2 text-[11px] text-white/55">
+                Neon-blue courier tech • mint-ready • Warpcast friendly
               </div>
             </div>
           </div>
@@ -295,15 +358,11 @@ export default function HomeClient() {
               <h2 className="text-xl md:text-2xl font-bold">Minting & Supply</h2>
               <ul className="mt-2 space-y-1 text-white/85">
                 <li>
-                  <span className="text-[#79ffe1] font-semibold">
-                    Mint price:
-                  </span>{" "}
+                  <span className="text-[#79ffe1] font-semibold">Mint price:</span>{" "}
                   {priceEth} Base ETH
                 </li>
                 <li>
-                  <span className="text-[#79ffe1] font-semibold">
-                    Max supply:
-                  </span>{" "}
+                  <span className="text-[#79ffe1] font-semibold">Max supply:</span>{" "}
                   {envBigIntMissing ? "–" : Number(maxSupply).toLocaleString()}
                 </li>
                 <li>
@@ -335,18 +394,14 @@ export default function HomeClient() {
               background: "radial-gradient(circle, #79ffe155 0%, transparent 60%)",
             }}
           />
-          <h2 className="text-xl md:text-2xl font-bold">
-            Bring forth your Basebot
-          </h2>
+          <h2 className="text-xl md:text-2xl font-bold">Bring forth your Basebot</h2>
           <p className="mt-1 text-white/85">
-            Enter your Farcaster FID and HQ will sign your passage. One
-            transaction, and your Basebot steps through.
+            Enter your Farcaster FID and HQ will sign your passage. One transaction, and your Basebot steps through.
           </p>
 
           {envBigIntMissing && (
             <p className="mt-3 text-sm text-yellow-300">
-              Your in-app browser doesn&apos;t fully support the tech this dapp
-              needs. You can still mint from a regular browser (Chrome / Safari)
+              Your in-app browser doesn&apos;t fully support the tech this dapp needs. You can still mint from a regular browser (Chrome / Safari)
               or via the Warpcast mini app.
             </p>
           )}
@@ -378,8 +433,7 @@ export default function HomeClient() {
               />
               {fidLocked ? (
                 <p className="mt-1 text-[11px] text-emerald-300">
-                  Your Farcaster FID is loaded from the mini app and can’t be
-                  edited here.
+                  Your Farcaster FID is loaded from the mini app and can’t be edited here.
                 </p>
               ) : (
                 <p className="mt-1 text-[11px] text-white/60">
@@ -388,7 +442,7 @@ export default function HomeClient() {
               )}
             </label>
 
-            <div className="flex items-end gap-3">
+            <div className="flex items-end gap-3 flex-wrap">
               <button
                 type="button"
                 onClick={handleMint}
