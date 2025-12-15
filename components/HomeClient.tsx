@@ -1,3 +1,4 @@
+// components/HomeClient.tsx
 "use client";
 
 import Image from "next/image";
@@ -197,17 +198,13 @@ export default function HomeClient() {
       "https://basebots.vercel.app"
     ).replace(/\/$/, "");
 
-  // ✅ robust: if the wordmark fails for any reason, we can hide it gracefully
-  const [wordmarkOk, setWordmarkOk] = useState(true);
-
   return (
     <section className="min-h-[100svh] bg-deep text-white pb-16">
       <div className="container pt-6 px-5 stack">
         <AudioToggle src="/audio/basebots-loop.mp3" />
 
-        {/* ✅ HERO: always looks good on mobile, and uses /logo.PNG */}
+        {/* ✅ HERO: single centered logo.PNG (no icon, no second image, no stretch) */}
         <section className="glass glass-pad relative overflow-hidden rounded-3xl">
-          {/* background glow */}
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0"
@@ -219,131 +216,41 @@ export default function HomeClient() {
             }}
           />
 
-          <div className="relative grid gap-6 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] items-center">
-            {/* LEFT */}
-            <div className="min-w-0">
-              <div className="flex items-center gap-3">
-                <div
-                  className="relative flex h-14 w-14 items-center justify-center rounded-2xl border"
-                  style={{
-                    borderColor: "rgba(255,255,255,0.14)",
-                    background:
-                      "linear-gradient(135deg, rgba(121,255,225,0.16), rgba(58,166,216,0.10))",
-                    boxShadow:
-                      "0 0 0 1px rgba(121,255,225,0.10), 0 0 26px rgba(121,255,225,0.16)",
-                  }}
-                >
-                  <Image
-                    src="/icon.png"
-                    alt="Basebots icon"
-                    width={40}
-                    height={40}
-                    priority
-                    className="object-contain"
-                  />
-                </div>
-
-                <div className="min-w-0">
-                  <div className="text-[11px] uppercase tracking-[0.22em] text-white/60">
-                    BASEBOTS
-                  </div>
-
-                  {/* wordmark */}
-                  {wordmarkOk ? (
-                    <div className="mt-1 relative h-7 w-[190px] max-w-full">
-                      <Image
-                        src="/logo.PNG"
-                        alt="Basebots wordmark"
-                        fill
-                        priority
-                        sizes="200px"
-                        className="object-contain"
-                        onError={() => setWordmarkOk(false)}
-                        unoptimized
-                      />
-                    </div>
-                  ) : (
-                    <div className="mt-1 text-sm font-semibold text-white/90">
-                      Basebots
-                      <span className="ml-2 pill-note pill-note--blue text-[10px]">
-                        logo.PNG missing
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <h1 className="mt-4 text-2xl md:text-4xl font-extrabold tracking-tight leading-tight">
-                Couriers from the Blue Tomorrow
-              </h1>
-
-              <p className="mt-3 max-w-2xl text-white/85 leading-relaxed">
-                In a not-so-distant future, Base is the lifeblood of the open city—and the Basebots are its guides.
-              </p>
-
-              <div className="mt-4 rounded-2xl border border-white/10 bg-black/35 p-3">
-                <ShareRow url={siteUrl} className="" />
-                <p className="mt-2 text-[11px] text-white/55">
-                  Share Basebots with your squad.
-                </p>
+          <div className="relative z-10">
+            <div className="flex justify-center">
+              <div className="w-full max-w-[620px]">
+                <Image
+                  src="/logo.PNG"
+                  alt="Basebots"
+                  width={1200}
+                  height={420}
+                  priority
+                  quality={100}
+                  sizes="(max-width: 768px) 92vw, 620px"
+                  className="h-auto w-[92%] sm:w-[520px] md:w-[620px] mx-auto select-none"
+                  unoptimized
+                />
               </div>
             </div>
 
-            {/* RIGHT: hero panel (never looks empty) */}
-            <div className="relative">
-              <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-black/25">
-                <div
-                  aria-hidden
-                  className="absolute inset-0 opacity-90"
-                  style={{
-                    background:
-                      "radial-gradient(700px 260px at 20% 10%, rgba(121,255,225,0.22), transparent 60%), radial-gradient(800px 360px at 80% 0%, rgba(58,166,216,0.24), transparent 60%), linear-gradient(180deg, rgba(255,255,255,0.08), rgba(0,0,0,0))",
-                  }}
-                />
-                <div
-                  aria-hidden
-                  className="absolute inset-0"
-                  style={{
-                    backgroundImage:
-                      "linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px)",
-                    backgroundSize: "28px 28px",
-                    maskImage:
-                      "radial-gradient(120% 120% at 50% 45%, #000 45%, transparent 72%)",
-                    opacity: 0.25,
-                  }}
-                />
-                <div className="relative w-full h-[220px] sm:h-[280px] md:h-[320px]">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-center px-6">
-                      <div
-                        className="mx-auto h-20 w-20 rounded-3xl border flex items-center justify-center"
-                        style={{
-                          borderColor: "rgba(121,255,225,0.25)",
-                          background: "rgba(3,28,27,0.55)",
-                          boxShadow:
-                            "0 0 0 1px rgba(121,255,225,0.10), 0 0 40px rgba(121,255,225,0.14)",
-                        }}
-                      >
-                        <Image
-                          src="/icon.png"
-                          alt="Basebots"
-                          width={56}
-                          height={56}
-                          className="object-contain"
-                        />
-                      </div>
-                      <div className="mt-3 text-[11px] text-white/65">
-                        Add hero art later as{" "}
-                        <span className="font-mono text-white/85">/hero.PNG</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <h1 className="mt-5 text-2xl md:text-4xl font-extrabold tracking-tight leading-tight text-center">
+              Couriers from the Blue Tomorrow
+            </h1>
 
-              <div className="mt-2 text-[11px] text-white/55">
-                Neon-blue courier tech • mint-ready • Warpcast friendly
-              </div>
+            <p className="mt-3 text-white/85 leading-relaxed text-center max-w-2xl mx-auto">
+              In a not-so-distant future, Base is the lifeblood of the open city—and
+              the Basebots are its guides.
+            </p>
+
+            <div className="mt-4 rounded-2xl border border-white/10 bg-black/35 p-3 max-w-xl mx-auto">
+              <ShareRow url={siteUrl} className="" />
+              <p className="mt-2 text-[11px] text-white/55 text-center">
+                Share Basebots with your squad.
+              </p>
+            </div>
+
+            <div className="mt-3 text-[11px] text-white/55 text-center">
+              Neon-blue courier tech • mint-ready • Warpcast friendly
             </div>
           </div>
         </section>
@@ -373,6 +280,7 @@ export default function HomeClient() {
                 </li>
               </ul>
             </div>
+
             <div className="w-full md:w-1/2">
               <div className="h-3 w-full rounded-full bg-white/10 overflow-hidden">
                 <div
@@ -396,13 +304,15 @@ export default function HomeClient() {
           />
           <h2 className="text-xl md:text-2xl font-bold">Bring forth your Basebot</h2>
           <p className="mt-1 text-white/85">
-            Enter your Farcaster FID and HQ will sign your passage. One transaction, and your Basebot steps through.
+            Enter your Farcaster FID and HQ will sign your passage. One transaction,
+            and your Basebot steps through.
           </p>
 
           {envBigIntMissing && (
             <p className="mt-3 text-sm text-yellow-300">
-              Your in-app browser doesn&apos;t fully support the tech this dapp needs. You can still mint from a regular browser (Chrome / Safari)
-              or via the Warpcast mini app.
+              Your in-app browser doesn&apos;t fully support the tech this dapp needs.
+              You can still mint from a regular browser (Chrome / Safari) or via the
+              Warpcast mini app.
             </p>
           )}
 
@@ -416,6 +326,7 @@ export default function HomeClient() {
                   </span>
                 )}
               </span>
+
               <input
                 inputMode="numeric"
                 pattern="[0-9]*"
@@ -431,6 +342,7 @@ export default function HomeClient() {
                     : "bg-white/10 border-white/20 focus:ring-[#79ffe1]/60"
                 }`}
               />
+
               {fidLocked ? (
                 <p className="mt-1 text-[11px] text-emerald-300">
                   Your Farcaster FID is loaded from the mini app and can’t be edited here.
@@ -452,6 +364,7 @@ export default function HomeClient() {
               >
                 {busy || pending ? "Summoning…" : "Mint Basebot"}
               </button>
+
               <Link href="/my" className="btn-ghost">
                 See my bot
               </Link>
@@ -459,10 +372,9 @@ export default function HomeClient() {
           </div>
 
           {(err || writeErr) && (
-            <p className="mt-3 text-sm text-red-300">
-              {err || getErrText(writeErr)}
-            </p>
+            <p className="mt-3 text-sm text-red-300">{err || getErrText(writeErr)}</p>
           )}
+
           {txHash && !mined && (
             <p className="mt-3 text-sm text-white/80">
               Tx sent:{" "}
@@ -476,6 +388,7 @@ export default function HomeClient() {
               </Link>
             </p>
           )}
+
           {mined && (
             <p className="mt-3 text-sm text-green-300">
               Arrival confirmed. Your Basebot awaits. ✨
@@ -500,6 +413,7 @@ export default function HomeClient() {
           >
             Chain: Base ↗
           </Link>
+
           <Link
             href={`https://base.blockscout.com/address/${BASEBOTS.address}`}
             target="_blank"
