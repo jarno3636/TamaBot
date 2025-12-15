@@ -49,7 +49,6 @@ function getErrText(e: unknown): string {
     if (typeof anyE.message === "string" && anyE.message.length > 0) {
       return anyE.message;
     }
-    // wagmi / viem sometimes put the cause under .cause
     if (
       anyE.cause &&
       typeof anyE.cause.message === "string" &&
@@ -59,7 +58,6 @@ function getErrText(e: unknown): string {
     }
   }
 
-  // last resort: coerce to string, no JSON
   try {
     // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
     return String(e);
@@ -72,7 +70,6 @@ export default function HomeClient() {
   const { address } = useAccount();
   const { fid } = useFid();
 
-  // ---- BigInt-safe defaults (no 0n literal explosions in weird runtimes) ----
   const bigintSupported = typeof BigInt !== "undefined";
 
   const { data: rawPrice } = useReadContract({
@@ -98,7 +95,6 @@ export default function HomeClient() {
     functionName: "fidGatingEnabled",
   });
 
-  // Ensure we always have *some* value even if readContract not ready
   const price = (rawPrice ??
     (bigintSupported ? (BigInt(0) as any) : (0 as any))) as bigint;
   const maxSupply = (rawMaxSupply ??
@@ -117,7 +113,6 @@ export default function HomeClient() {
       chainId: base.id,
     });
 
-  // If BigInt truly doesn’t exist (ancient WebView), bail with message
   const envBigIntMissing = !bigintSupported;
 
   const priceEth = useMemo(
@@ -131,7 +126,6 @@ export default function HomeClient() {
     ? 0
     : Math.max(0, Math.min(100, Math.round((minted / Math.max(1, cap)) * 100)));
 
-  // Autofill from Farcaster
   useEffect(() => {
     if (isValidFID(fid)) setFidInput(String(fid));
   }, [fid]);
@@ -173,13 +167,13 @@ export default function HomeClient() {
           body: JSON.stringify({ to: address, fid: Number(fidBig) }),
         });
         const j: SignResp = await r.json();
-        if (!j.ok || !j.sig || !j.deadline || !j.price)
+        if (!j.ok || !j.sig || !j.deadline || !j.price) {
           throw new Error(j.error || "Signing failed");
+        }
 
         const deadlineBig = BigInt(j.deadline);
         const priceBig = BigInt(j.price);
 
-        // ✅ FIXED: pass all three args for mintWithSig
         await writeContract({
           ...BASEBOTS,
           functionName: "mintWithSig",
@@ -214,7 +208,7 @@ export default function HomeClient() {
       <div className="container pt-6 px-5 stack">
         <AudioToggle src="/audio/basebots-loop.mp3" />
 
-        {/* Hero (FIXED: real height so image cannot collapse; big image above text) */}
+        {/* ✅ HERO: big logo above text, no overlap, mobile-safe */}
         <section className="glass hero-logo-card relative overflow-hidden">
           {/* background glow */}
           <div
@@ -229,42 +223,44 @@ export default function HomeClient() {
           />
 
           <div className="relative z-10">
-            {/* image block */}
-            <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-black/35">
+            {/* Image panel */}
+            <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-black/25">
               {/* subtle sheen */}
               <div
                 aria-hidden
                 className="pointer-events-none absolute inset-0"
                 style={{
                   background:
-                    "linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.02) 45%, rgba(0,0,0,0.00) 100%)",
+                    "linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.02) 45%, rgba(0,0,0,0) 100%)",
                 }}
               />
-              {/* bottom fade for legibility */}
+              {/* bottom fade (keeps it cinematic) */}
               <div
                 aria-hidden
                 className="pointer-events-none absolute inset-0"
                 style={{
                   background:
-                    "radial-gradient(900px 420px at 50% 115%, rgba(0,0,0,0.55), transparent 55%)",
+                    "radial-gradient(900px 420px at 50% 120%, rgba(0,0,0,0.55), transparent 58%)",
                 }}
               />
 
-              {/* ✅ explicit height (prevents “no image” issue) */}
-              <div className="relative w-full h-[240px] sm:h-[300px] md:h-[340px]">
+              {/* IMPORTANT: real height so the image can't collapse */}
+              <div className="relative w-full h-[220px] sm:h-[280px] md:h-[320px]">
                 <Image
                   src="/logo.PNG"
                   alt="Basebots"
                   fill
                   priority
                   quality={100}
-                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 900px, 1000px"
+                  sizes="100vw"
                   className="object-contain p-4"
+                  // This helps in some mini-app webviews; remove later if you want
+                  unoptimized
                 />
               </div>
             </div>
 
-            {/* text block */}
+            {/* Copy */}
             <div className="mt-6">
               <div className="text-[11px] uppercase tracking-[0.22em] text-white/60">
                 BASEBOTS
@@ -281,6 +277,9 @@ export default function HomeClient() {
 
               <div className="mt-4 rounded-2xl border border-white/10 bg-black/35 p-3">
                 <ShareRow url={siteUrl} className="" />
+                <p className="mt-2 text-[11px] text-white/55">
+                  Share Basebots with your squad.
+                </p>
               </div>
             </div>
           </div>
@@ -305,9 +304,7 @@ export default function HomeClient() {
                   <span className="text-[#79ffe1] font-semibold">
                     Max supply:
                   </span>{" "}
-                  {envBigIntMissing
-                    ? "–"
-                    : Number(maxSupply).toLocaleString()}
+                  {envBigIntMissing ? "–" : Number(maxSupply).toLocaleString()}
                 </li>
                 <li>
                   <span className="text-[#79ffe1] font-semibold">Minted:</span>{" "}
@@ -335,8 +332,7 @@ export default function HomeClient() {
             aria-hidden
             className="pointer-events-none absolute -top-24 -right-24 h-64 w-64 rounded-full blur-3xl"
             style={{
-              background:
-                "radial-gradient(circle, #79ffe155 0%, transparent 60%)",
+              background: "radial-gradient(circle, #79ffe155 0%, transparent 60%)",
             }}
           />
           <h2 className="text-xl md:text-2xl font-bold">
@@ -370,9 +366,7 @@ export default function HomeClient() {
                 pattern="[0-9]*"
                 value={effectiveFid}
                 onChange={(e) =>
-                  fidLocked
-                    ? null
-                    : setFidInput(e.target.value.replace(/[^\d]/g, ""))
+                  fidLocked ? null : setFidInput(e.target.value.replace(/[^\d]/g, ""))
                 }
                 placeholder="e.g. 12345"
                 disabled={fidLocked}
@@ -385,8 +379,7 @@ export default function HomeClient() {
               {fidLocked ? (
                 <p className="mt-1 text-[11px] text-emerald-300">
                   Your Farcaster FID is loaded from the mini app and can’t be
-                  edited here. Open Basebots from a different profile to mint
-                  for another FID.
+                  edited here.
                 </p>
               ) : (
                 <p className="mt-1 text-[11px] text-white/60">
@@ -436,17 +429,14 @@ export default function HomeClient() {
           )}
         </section>
 
-        {/* Collection preview */}
         <CollectionPreview />
 
-        {/* Footer quote */}
         <section className="text-center text-white/70">
           <p className="text-sm">
             “In the chrome dawn, the city speaks in light. Basebots understand.”
           </p>
         </section>
 
-        {/* Bottom links */}
         <section className="flex flex-wrap gap-3 justify-center">
           <Link
             href="https://basescan.org/"
@@ -462,8 +452,7 @@ export default function HomeClient() {
             rel="noopener noreferrer"
             className="pill-note pill-note--blue"
           >
-            Contract: {BASEBOTS.address.slice(0, 6)}…
-            {BASEBOTS.address.slice(-4)} ↗
+            Contract: {BASEBOTS.address.slice(0, 6)}…{BASEBOTS.address.slice(-4)} ↗
           </Link>
         </section>
       </div>
