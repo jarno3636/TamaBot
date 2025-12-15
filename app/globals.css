@@ -11,6 +11,12 @@ body {
   min-height: 100%;
   background-color: #0a0b12 !important; /* 🔒 Force dark background everywhere */
   color: #eef3f8;
+
+  /* ✅ critical: prevent mobile sideways scroll (makes modals appear “off center”) */
+  overflow-x: hidden;
+
+  /* ✅ helps iOS/Warpcast reduce weird bounce layout shifts */
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -23,13 +29,13 @@ body {
   --bb-ink-3: #0f1320; /* deep layers */
 
   --bb-neon: #79ffe1; /* primary neon */
-  --bb-azure: #3AA6D8; /* brand blue */
+  --bb-azure: #3aa6d8; /* brand blue */
   --bb-cyan: #6dd3ef; /* soft cyan */
   --bb-teal: #00c7b7; /* accent teal */
   --bb-violet: #8aa6ff; /* subtle violet */
 
   --bb-warn: #ffd36b;
-  --bb-okay: #6EE7A8;
+  --bb-okay: #6ee7a8;
   --bb-danger: #ff7474;
 
   --bb-glass-border: rgba(255, 255, 255, 0.12);
@@ -39,8 +45,8 @@ body {
 
   /* Legacy aliases (keep buttons/pills working) */
   --tam-blue: var(--bb-azure);
-  --tam-green: #6CB271;
-  --tam-red: #E1634A;
+  --tam-green: #6cb271;
+  --tam-red: #e1634a;
   --tam-yellow: var(--bb-warn);
 }
 
@@ -68,6 +74,7 @@ body {
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(10px);
 }
+
 .glass::after {
   content: "";
   pointer-events: none;
@@ -76,6 +83,7 @@ body {
   border-radius: 20px;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 0 50px rgba(121, 255, 225, 0.06);
 }
+
 .glass-pad {
   padding: 1.6rem 1.4rem;
 }
@@ -104,10 +112,12 @@ body {
   box-shadow: 0 6px 18px rgba(121, 255, 225, 0.18);
   transition: transform 0.08s ease, filter 0.15s ease, box-shadow 0.15s ease;
 }
+
 .btn-pill:hover {
   filter: brightness(0.97);
   transform: translateY(-1px);
 }
+
 .btn-pill:focus-visible {
   outline: 2px solid rgba(255, 255, 255, 0.5);
   outline-offset: 2px;
@@ -159,6 +169,7 @@ body {
   backdrop-filter: blur(8px);
   transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.08s ease;
 }
+
 .btn-ghost:hover {
   background: rgba(255, 255, 255, 0.16);
   box-shadow: 0 0 0 2px rgba(121, 255, 225, 0.35), 0 0 18px 4px rgba(121, 255, 225, 0.16);
@@ -182,6 +193,7 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.18);
   backdrop-filter: blur(6px);
 }
+
 .pill-note--blue {
   background: rgba(121, 255, 225, 0.1);
   border-color: rgba(121, 255, 225, 0.3);
@@ -214,13 +226,23 @@ body {
 }
 
 /* ===== Media & layout ===== */
-img,
+
+/* ✅ Keep normal media responsive */
+img:not([data-nimg]),
 svg,
 video,
 canvas {
   max-width: 100%;
   height: auto;
 }
+
+/* ✅ CRITICAL: Next/Image "fill" needs real dimensions, not height:auto */
+img[data-nimg="fill"] {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+}
+
 .container {
   max-width: 72rem;
   margin-inline: auto;
@@ -234,15 +256,10 @@ canvas {
 }
 
 @keyframes token-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
-/* ===== Motion preferences ===== */
 @media (prefers-reduced-motion: reduce) {
   .token-spin {
     animation: none;
