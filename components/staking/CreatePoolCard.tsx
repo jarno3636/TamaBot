@@ -181,11 +181,14 @@ function ChipButton({
  * ✅ IMPORTANT FIX:
  * viem's decodeEventLog requires:
  * topics: [] | [signature, ...topics]
+ *
+ * Receipt logs give: Hex[] (possibly empty)
+ * We convert to a non-empty tuple when possible.
  */
-function asTopicsTuple(topics: readonly Hex[] | undefined | null): readonly [Hex, ...Hex[]] | null {
-  if (!topics || topics.length === 0) return null;
-  // force tuple type (first element must exist)
-  return topics as unknown as readonly [Hex, ...Hex[]];
+function asTopicsTuple(topics: unknown): readonly [Hex, ...Hex[]] | null {
+  if (!Array.isArray(topics)) return null;
+  if (topics.length === 0) return null;
+  return topics as readonly [Hex, ...Hex[]];
 }
 
 function extractPoolCreatedFromReceipt(params: {
@@ -200,10 +203,12 @@ function extractPoolCreatedFromReceipt(params: {
   const creatorLc = expectedCreator?.toLowerCase();
 
   for (const log of logs) {
+    // must be from the factory address
     const logAddr = String(log.address || "").toLowerCase();
     if (!logAddr || logAddr !== factoryLc) continue;
 
-    const topicsTuple = asTopicsTuple(log.topics as readonly Hex[] | undefined);
+    // ✅ FIX: tuple topics for viem typing
+    const topicsTuple = asTopicsTuple(log.topics);
     if (!topicsTuple) continue;
 
     try {
@@ -330,6 +335,7 @@ export default function CreatePoolCard({
     return `${pct}% creator fee ${where}`;
   }, [creatorFeeBpsU16, feeMode]);
 
+  // Decode PoolCreated from receipt after mined (exact)
   useEffect(() => {
     if (!txMined || !receipt) return;
 
@@ -342,6 +348,7 @@ export default function CreatePoolCard({
     if (hit?.pool) setCreatedPool(hit.pool);
   }, [txMined, receipt, address]);
 
+  // Notify parent + open fund modal once
   useEffect(() => {
     if (!createdPool) return;
     const key = createdPool.toLowerCase();
@@ -413,8 +420,6 @@ export default function CreatePoolCard({
     }
   }
 
-  const feeDisabled = feeMode === "noCreatorFee";
-
   return (
     <section className="glass glass-pad relative overflow-hidden rounded-3xl border border-white/10 bg-[#020617]/85">
       <div
@@ -460,12 +465,184 @@ export default function CreatePoolCard({
           </button>
         </div>
 
-        {/* (rest of your JSX unchanged) */}
-        {/* KEEP EVERYTHING BELOW EXACTLY AS YOU HAD IT */}
-        {/* ... */}
         <div className="mt-4 grid gap-3">
-          {/* your existing form UI here (unchanged) */}
-          {/* ... */}
+          <label>
+            <span className="text-[11px] uppercase tracking-wide text-white/60">NFT address</span>
+            <input value={nft} onChange={(e) => setNft(e.target.value)} className={inputBase} placeholder="0x…" />
+          </label>
+
+          <label>
+            <span className="text-[11px] uppercase tracking-wide text-white/60">Reward token</span>
+            <input value={rewardToken} onChange={(e) => setRewardToken(e.target.value)} className={inputBase} placeholder="0x…" />
+          </label>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <label>
+              <span className="text-[11px] uppercase tracking-wide text-white/60">Reward rate (tokens / sec)</span>
+              <input value={rewardRate} onChange={(e) => setRewardRate(e.target.value)} className={inputBase} placeholder="e.g. 0.01" />
+              {suggestedFund && (
+                <p className="mt-1 text-[11px] text-white/55">
+                  Suggested funding: <span className="text-[#79ffe1] font-semibold">{suggestedFund}</span>
+                </p>
+              )}
+            </label>
+
+            <label>
+              <span className="text-[11px] uppercase tracking-wide text-white/60">Reward decimals</span>
+              <input value={rewardDecimals} onChange={(e) => setRewardDecimals(e.target.value)} className={inputBase} placeholder="18" inputMode="numeric" />
+            </label>
+          </div>
+
+          {/* Schedule */}
+          <div className="rounded-2xl border border-white/10 bg-black/45 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div className="text-[11px] uppercase tracking-wide text-white/60">Schedule</div>
+                <div className="mt-1 text-[11px] text-white/70">
+                  Starts{" "}
+                  <span className="font-semibold text-white">
+                    {startMode === "now" ? "now" : `in ${startOffset || 0} ${startMode === "inHours" ? "hour(s)" : "day(s)"}`}
+                  </span>{" "}
+                  • Duration{" "}
+                  <span className="font-semibold text-white">
+                    {durationValue} {durationUnit}
+                  </span>
+                </div>
+              </div>
+
+              <div className="text-[11px] text-white/55">
+                Start: <span className="text-white/70">{computedTimes.start.toString()}</span> • End:{" "}
+                <span className="text-white/70">{computedTimes.end.toString()}</span>
+              </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
+                <span className="text-[11px] uppercase tracking-wide text-white/60">Start</span>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <PillButton active={startMode === "now"} tone="teal" onClick={() => setStartMode("now")}>
+                    Now
+                  </PillButton>
+                  <PillButton active={startMode === "inHours"} tone="sky" onClick={() => setStartMode("inHours")}>
+                    In hours
+                  </PillButton>
+                  <PillButton active={startMode === "inDays"} tone="amber" onClick={() => setStartMode("inDays")}>
+                    In days
+                  </PillButton>
+                </div>
+
+                {startMode !== "now" && (
+                  <input
+                    value={startOffset}
+                    onChange={(e) => setStartOffset(e.target.value)}
+                    className={inputBase}
+                    placeholder={startMode === "inHours" ? "e.g. 2" : "e.g. 1"}
+                    inputMode="numeric"
+                  />
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
+                <span className="text-[11px] uppercase tracking-wide text-white/60">Duration</span>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <PillButton active={durationUnit === "hours"} tone="sky" onClick={() => setDurationUnit("hours")}>
+                    Hours
+                  </PillButton>
+                  <PillButton active={durationUnit === "days"} tone="teal" onClick={() => setDurationUnit("days")}>
+                    Days
+                  </PillButton>
+                </div>
+
+                <input
+                  value={durationValue}
+                  onChange={(e) => setDurationValue(e.target.value)}
+                  className={inputBase}
+                  placeholder={durationUnit === "hours" ? "e.g. 12" : "e.g. 7"}
+                  inputMode="numeric"
+                />
+              </div>
+            </div>
+          </div>
+
+          <label>
+            <span className="text-[11px] uppercase tracking-wide text-white/60">Max staked (0 = no cap)</span>
+            <input value={maxStaked} onChange={(e) => setMaxStaked(e.target.value)} className={inputBase} placeholder="0" inputMode="numeric" />
+          </label>
+
+          {/* Fees */}
+          <div className="rounded-2xl border border-white/10 bg-black/45 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-[11px] uppercase tracking-wide text-white/60">Fees</div>
+                <div className="text-[12px] text-white/80 mt-1 font-semibold">{feeSummary}</div>
+              </div>
+              <div className="text-[11px] text-white/50">(Protocol fee {protocolFeePercent}%)</div>
+            </div>
+
+            <div className="mt-3 rounded-2xl border border-white/10 bg-black/25 p-2">
+              <div className="flex flex-wrap gap-2">
+                <PillButton
+                  active={feeMode === "noCreatorFee"}
+                  tone="sky"
+                  onClick={() => {
+                    setFeeMode("noCreatorFee");
+                    setCreatorFeePct(0);
+                  }}
+                >
+                  No fee
+                </PillButton>
+
+                <PillButton active={feeMode === "feeOnClaim"} tone="teal" onClick={() => setFeeMode("feeOnClaim")}>
+                  Fee on claim
+                </PillButton>
+
+                <PillButton active={feeMode === "feeOnUnstake"} tone="amber" onClick={() => setFeeMode("feeOnUnstake")}>
+                  Fee on unstake
+                </PillButton>
+
+                <PillButton active={feeMode === "feeOnBoth"} tone="rose" onClick={() => setFeeMode("feeOnBoth")}>
+                  Fee on both
+                </PillButton>
+              </div>
+            </div>
+
+            <div className={"mt-3 rounded-2xl border border-white/10 bg-black/25 p-3" + (feeMode === "noCreatorFee" ? " opacity-60" : "")}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-[11px] uppercase tracking-wide text-white/60">Creator fee percent</div>
+                <div className="text-[12px] font-semibold text-white/85">
+                  {feeMode === "noCreatorFee" ? "—" : `${clampInt(creatorFeePct, 0, 10)}%`}
+                </div>
+              </div>
+
+              <div className="mt-2 flex flex-wrap gap-2">
+                {[0, 1, 2, 5, 10].map((p) => (
+                  <ChipButton key={p} disabled={feeMode === "noCreatorFee"} active={feeMode !== "noCreatorFee" && creatorFeePct === p} onClick={() => setCreatorFeePct(p)}>
+                    {p === 0 ? "0%" : `${p}%`}
+                  </ChipButton>
+                ))}
+              </div>
+
+              <div className="mt-3">
+                <input
+                  type="range"
+                  min={0}
+                  max={10}
+                  step={1}
+                  disabled={feeMode === "noCreatorFee"}
+                  value={clampInt(creatorFeePct, 0, 10)}
+                  onChange={(e) => setCreatorFeePct(clampInt(Number(e.target.value), 0, 10))}
+                  className="w-full"
+                  style={{ accentColor: "#79ffe1", opacity: feeMode === "noCreatorFee" ? 0.5 : 1 }}
+                />
+                <div className="mt-1 flex justify-between text-[10px] text-white/45">
+                  <span>0%</span>
+                  <span>5%</span>
+                  <span>10%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <button
             type="button"
             onClick={onCreate}
@@ -479,6 +656,23 @@ export default function CreatePoolCard({
           >
             {txPending ? "Creating…" : "Create pool"}
           </button>
+
+          {createdPool && (
+            <div className="mt-2 rounded-2xl border border-white/10 bg-black/35 p-3 text-[11px] text-white/75">
+              <div className="font-semibold text-white/90">Pool created</div>
+              <div className="mt-1 break-all font-mono text-white/80">{createdPool}</div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <a
+                  href={`https://basescan.org/address/${createdPool}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-full border border-white/20 bg-white/5 px-3 py-1.5 text-[11px] text-white/80 hover:bg-white/10 transition-all active:scale-95"
+                >
+                  Basescan ↗
+                </a>
+              </div>
+            </div>
+          )}
 
           <div className="text-[11px] text-white/70 space-y-1">
             {(msg || txErr) && <div className={txErr ? "text-rose-300" : "text-white/70"}>{msg || getErrText(txErr)}</div>}
