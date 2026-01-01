@@ -1,4 +1,3 @@
-// components/staking/FundPoolModal.tsx
 "use client";
 
 import type React from "react";
@@ -11,7 +10,7 @@ import {
   useWaitForTransactionReceipt,
 } from "wagmi";
 import { base } from "viem/chains";
-import { parseUnits } from "viem";
+import { formatUnits, isAddress, parseUnits } from "viem";
 import type { FundTarget, TokenMeta } from "./stakingUtils";
 import { getErrText } from "./stakingUtils";
 
@@ -19,6 +18,10 @@ const ERC20_METADATA_ABI = [
   { name: "name", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "string", name: "" }] },
   { name: "symbol", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "string", name: "" }] },
   { name: "decimals", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "uint8", name: "" }] },
+] as const;
+
+const ERC20_BALANCE_ABI = [
+  { name: "balanceOf", type: "function", stateMutability: "view", inputs: [{ name: "owner", type: "address" }], outputs: [{ type: "uint256", name: "" }] },
 ] as const;
 
 const ERC20_TRANSFER_ABI = [
@@ -129,6 +132,21 @@ function Btn({
 const inputBase =
   "mt-1 w-full max-w-full rounded-2xl border border-white/15 bg-white/5 px-3 py-2 text-[13px] md:text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60";
 
+function sanitizeAmountInput(v: string) {
+  // keep digits + single dot, strip commas/spaces
+  const raw = v.replace(/,/g, "").replace(/\s+/g, "");
+  let out = "";
+  let seenDot = false;
+  for (const ch of raw) {
+    if (ch >= "0" && ch <= "9") out += ch;
+    else if (ch === "." && !seenDot) {
+      out += ".";
+      seenDot = true;
+    }
+  }
+  return out;
+}
+
 export default function FundPoolModal({
   open,
   onClose,
@@ -147,6 +165,10 @@ export default function FundPoolModal({
   const [tokenMeta, setTokenMeta] = useState<TokenMeta | null>(null);
   const [metaLoading, setMetaLoading] = useState(false);
   const [metaErr, setMetaErr] = useState<string | null>(null);
+
+  const [balanceWei, setBalanceWei] = useState<bigint | null>(null);
+  const [balLoading, setBalLoading] = useState(false);
+  const [balErr, setBalErr] = useState<string | null>(null);
 
   const { writeContract, data: fundTxHash, error: fundErr } = useWriteContract();
   const { isLoading: fundPending, isSuccess: fundMined } = useWaitForTransactionReceipt({
@@ -167,7 +189,11 @@ export default function FundPoolModal({
     setFundMsg("");
     setMetaErr(null);
     setTokenMeta(null);
-    setAmount((suggestedAmount || "").replace(/,/g, ""));
+    setBalErr(null);
+    setBalanceWei(null);
+
+    setAmount(sanitizeAmountInput((suggestedAmount || "").toString()));
+
     setCopiedPool(false);
     setCopiedToken(false);
   }, [open, suggestedAmount]);
@@ -190,6 +216,7 @@ export default function FundPoolModal({
     };
   }, [open]);
 
+  // Load metadata
   useEffect(() => {
     if (!open || !target || !publicClient) return;
     let cancelled = false;
@@ -207,10 +234,13 @@ export default function FundPoolModal({
 
         if (cancelled) return;
 
+        const d = Number(decimals ?? 18);
+        const safeD = Number.isFinite(d) ? Math.max(0, Math.min(36, d)) : 18;
+
         setTokenMeta({
           symbol: (symbol as string) || "TOKEN",
           name: (name as string) || "Token",
-          decimals: Number(decimals ?? 18),
+          decimals: safeD,
         });
       } catch {
         if (cancelled) return;
@@ -229,6 +259,48 @@ export default function FundPoolModal({
   const symbol = tokenMeta?.symbol ?? "TOKEN";
   const decimals = tokenMeta?.decimals ?? 18;
 
+  // Load balance (after metadata so decimals formatting is right)
+  useEffect(() => {
+    if (!open || !target || !publicClient || !address) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setBalLoading(true);
+        setBalErr(null);
+
+        const bal = await publicClient.readContract({
+          address: target.rewardToken,
+          abi: ERC20_BALANCE_ABI,
+          functionName: "balanceOf",
+          args: [address],
+        });
+
+        if (cancelled) return;
+        setBalanceWei(bal as bigint);
+      } catch {
+        if (cancelled) return;
+        setBalErr("Could not load wallet balance.");
+        setBalanceWei(null);
+      } finally {
+        if (!cancelled) setBalLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, target, publicClient, address]);
+
+  const balanceText = useMemo(() => {
+    if (balanceWei === null) return "";
+    try {
+      return formatUnits(balanceWei, decimals);
+    } catch {
+      return "";
+    }
+  }, [balanceWei, decimals]);
+
   const suggestedNum = useMemo(() => {
     const s = (suggestedAmount || "").trim();
     if (!s) return NaN;
@@ -238,9 +310,7 @@ export default function FundPoolModal({
 
   function setPctOfSuggested(pct: number) {
     if (!Number.isFinite(suggestedNum) || suggestedNum <= 0) return;
-    const v = (suggestedNum * pct)
-      .toLocaleString("en-US", { maximumFractionDigits: 6 })
-      .replace(/,/g, "");
+    const v = (suggestedNum * pct).toLocaleString("en-US", { maximumFractionDigits: 6 }).replace(/,/g, "");
     setAmount(v);
   }
 
@@ -259,19 +329,58 @@ export default function FundPoolModal({
     }
   }
 
+  function setMaxFromBalance() {
+    if (balanceWei === null) return;
+    try {
+      const v = formatUnits(balanceWei, decimals);
+      setAmount(sanitizeAmountInput(v));
+    } catch {
+      // ignore
+    }
+  }
+
+  const targetOk = useMemo(() => {
+    if (!target) return false;
+    return isAddress(target.pool) && isAddress(target.rewardToken);
+  }, [target]);
+
+  const amountWeiPreview = useMemo(() => {
+    const v = sanitizeAmountInput(amount);
+    if (!v) return null;
+    try {
+      const wei = parseUnits(v, decimals);
+      return wei > 0n ? wei : null;
+    } catch {
+      return null;
+    }
+  }, [amount, decimals]);
+
+  const exceedsBalance = useMemo(() => {
+    if (balanceWei === null) return false;
+    if (!amountWeiPreview) return false;
+    return amountWeiPreview > balanceWei;
+  }, [amountWeiPreview, balanceWei]);
+
   function handleFund() {
     try {
       setFundMsg("");
 
-      if (!target) return setFundMsg("Missing pool info.");
+      if (!targetOk || !target) return setFundMsg("Missing or invalid pool/token info.");
       if (!address) return setFundMsg("Connect your wallet.");
 
-      const v = amount.trim();
+      const v = sanitizeAmountInput(amount);
       if (!v) return setFundMsg("Enter an amount.");
       if (v.startsWith("-")) return setFundMsg("Amount must be > 0.");
 
-      const amountWei = parseUnits(v, decimals);
+      let amountWei: bigint;
+      try {
+        amountWei = parseUnits(v, decimals);
+      } catch {
+        return setFundMsg("Invalid amount format.");
+      }
+
       if (amountWei <= 0n) return setFundMsg("Amount must be > 0.");
+      if (balanceWei !== null && amountWei > balanceWei) return setFundMsg("Amount exceeds wallet balance.");
 
       writeContract({
         address: target.rewardToken,
@@ -291,10 +400,8 @@ export default function FundPoolModal({
 
   return (
     <div className="fixed inset-0 z-[2147483647] grid place-items-center p-4" role="dialog" aria-modal="true">
-      {/* OPAQUE overlay */}
       <button aria-label="Close" onClick={onClose} className="absolute inset-0 bg-black" />
 
-      {/* Modal (hard clamped width/height, always centered) */}
       <div
         className={cx(
           "relative overflow-hidden rounded-[28px] border border-white/15 bg-[#070A16]",
@@ -303,7 +410,6 @@ export default function FundPoolModal({
           "max-h-[calc(100svh-2rem)]",
         )}
       >
-        {/* glow inside */}
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 opacity-95"
@@ -313,7 +419,6 @@ export default function FundPoolModal({
           }}
         />
 
-        {/* Header */}
         <div className="relative px-5 pt-5 pb-4 border-b border-white/10 bg-[#070A16]">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -345,9 +450,7 @@ export default function FundPoolModal({
           </div>
         </div>
 
-        {/* Scrollable body */}
         <div className="relative px-5 py-4 overflow-y-auto overflow-x-hidden overscroll-contain max-h-[calc(100svh-2rem-84px)]">
-          {/* pool + token boxes */}
           <div className="grid gap-2">
             <div className="rounded-2xl border border-white/10 bg-black/40 p-3">
               <div className="flex items-center justify-between gap-2">
@@ -381,10 +484,23 @@ export default function FundPoolModal({
                 </Btn>
               </div>
               <div className="mt-1 break-all font-mono text-[11px] text-white/80">{target.rewardToken}</div>
+
+              {address && (
+                <div className="mt-2 text-[11px] text-white/60">
+                  Balance:{" "}
+                  {balLoading ? (
+                    <span className="text-white/70 font-semibold">loading…</span>
+                  ) : balanceWei !== null ? (
+                    <span className="text-white/80 font-semibold">{balanceText}</span>
+                  ) : (
+                    <span className="text-amber-200">{balErr || "unknown"}</span>
+                  )}{" "}
+                  <span className="text-white/50">{symbol}</span>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* amount */}
           <div className="mt-4 rounded-3xl border border-white/10 bg-black/35 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
@@ -392,17 +508,23 @@ export default function FundPoolModal({
                 <div className="text-[11px] text-white/55">Choose how many {symbol} to send.</div>
               </div>
 
-              {suggestedAmount && (
-                <button
-                  type="button"
-                  onClick={() => setAmount(String(suggestedAmount).replace(/,/g, ""))}
-                  className="shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-transform active:scale-95"
-                  style={toneStyle("teal")}
-                  disabled={fundPending}
-                >
-                  Use: {suggestedAmount}
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {suggestedAmount && (
+                  <button
+                    type="button"
+                    onClick={() => setAmount(sanitizeAmountInput(String(suggestedAmount)))}
+                    className="shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-transform active:scale-95"
+                    style={toneStyle("teal")}
+                    disabled={fundPending}
+                  >
+                    Use: {suggestedAmount}
+                  </button>
+                )}
+
+                <Btn tone="white" onClick={setMaxFromBalance} disabled={fundPending || balanceWei === null}>
+                  Max
+                </Btn>
+              </div>
             </div>
 
             <label className="mt-3 block">
@@ -411,12 +533,19 @@ export default function FundPoolModal({
                 type="text"
                 inputMode="decimal"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value.replace(/,/g, ""))}
-                placeholder={suggestedAmount ? String(suggestedAmount).replace(/,/g, "") : "e.g. 1000"}
+                onChange={(e) => setAmount(sanitizeAmountInput(e.target.value))}
+                placeholder={suggestedAmount ? sanitizeAmountInput(String(suggestedAmount)) : "e.g. 1000"}
                 className={inputBase}
                 disabled={fundPending}
               />
               {metaErr && <p className="mt-1 text-[11px] text-amber-200">{metaErr}</p>}
+
+              {exceedsBalance && (
+                <p className="mt-1 text-[11px] text-rose-200">
+                  Amount exceeds your wallet balance.
+                </p>
+              )}
+
               <p className="mt-1 text-[11px] text-white/45">
                 Uses <span className="text-white/70 font-semibold">{decimals}</span> decimals.
               </p>
@@ -441,16 +570,17 @@ export default function FundPoolModal({
             </div>
           </div>
 
-          {/* primary action */}
           <div className="mt-4">
             <button
               type="button"
               onClick={handleFund}
-              disabled={fundPending}
+              disabled={fundPending || !targetOk || exceedsBalance || !amountWeiPreview}
               className={cx(
                 "w-full inline-flex items-center justify-center rounded-full py-3 text-sm font-semibold transition-transform active:scale-[0.98]",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/70",
-                fundPending ? "opacity-60 cursor-not-allowed" : "hover:brightness-110",
+                fundPending || !targetOk || exceedsBalance || !amountWeiPreview
+                  ? "opacity-60 cursor-not-allowed"
+                  : "hover:brightness-110",
               )}
               style={{
                 background: "linear-gradient(90deg, rgba(121,255,225,1) 0%, rgba(56,189,248,1) 100%)",
@@ -462,7 +592,6 @@ export default function FundPoolModal({
             </button>
           </div>
 
-          {/* status */}
           <div className="mt-3 space-y-1 text-[11px] text-white/75">
             {fundTxHash && (
               <div>
@@ -484,6 +613,7 @@ export default function FundPoolModal({
               <div className={fundErr ? "text-rose-300" : "text-white/80"}>{fundMsg || getErrText(fundErr)}</div>
             )}
 
+            {!targetOk && <div className="text-rose-200">Invalid target addresses.</div>}
             {!address && <div className="text-amber-200">Tip: connect your wallet to send rewards.</div>}
           </div>
 
