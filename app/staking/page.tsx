@@ -1,6 +1,7 @@
 // app/staking/page.tsx
 "use client";
 
+import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -196,7 +197,7 @@ const POOL_ACTIONS_ABI = [
   { name: "rewardRate", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
 ] as const;
 
-// ✅ NEW: pull user stake amount from pool.users(address)
+// ✅ pull user stake amount from pool.users(address)
 const POOL_USERS_ABI = [
   {
     name: "users",
@@ -215,8 +216,13 @@ export default function StakingPage() {
   const { address } = useAccount();
   const publicClient = usePublicClient({ chainId: base.id });
 
-  // ✅ Use your existing fid hook (already used in Nav)
-  const { fid } = useFid();
+  // ✅ FIX: normalize fid from hook (string -> number) so TS matches EnterPoolModal
+  const { fid: fidRaw } = useFid();
+  const fid = useMemo<number | null>(() => {
+    if (fidRaw === null || fidRaw === undefined) return null;
+    const n = typeof fidRaw === "number" ? fidRaw : Number(fidRaw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }, [fidRaw]);
 
   const [activeFilter, setActiveFilter] = useState<FilterTab>("all");
   const [poolSearch, setPoolSearch] = useState("");
@@ -620,7 +626,6 @@ export default function StakingPage() {
           protocolFeePercent={protocolFeePercent}
           onOpenFundModal={(target, suggestedAmount) => openFundModal(target, suggestedAmount)}
           onLastCreatedPoolResolved={(poolAddr) => openPoolModal(poolAddr)}
-          // ✅ IMPORTANT: ensure CreatePoolCard upserts to Supabase after create (snippet provided below)
         />
 
         {/* Filters */}
@@ -679,7 +684,9 @@ export default function StakingPage() {
               disabled={poolsLoading}
               className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/5 px-3 py-1.5 text-[11px] font-medium text-white/80 hover:bg-white/10 disabled:opacity-60 disabled:cursor-not-allowed transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/60"
             >
-              {poolsLoading && <span className="h-3 w-3 animate-spin rounded-full border border-t-transparent border-white/70" />}
+              {poolsLoading && (
+                <span className="h-3 w-3 animate-spin rounded-full border border-t-transparent border-white/70" />
+              )}
               <span>{poolsLoading ? "Refreshing…" : "Refresh"}</span>
             </button>
           </div>
@@ -729,7 +736,9 @@ export default function StakingPage() {
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                       <div className="space-y-2 min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-semibold text-white/90">{isBasebotsNft ? "Basebots NFT Pool" : "NFT Pool"}</span>
+                          <span className="font-semibold text-white/90">
+                            {isBasebotsNft ? "Basebots NFT Pool" : "NFT Pool"}
+                          </span>
 
                           <span
                             className={[
@@ -768,7 +777,11 @@ export default function StakingPage() {
                           <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
                             <div className="text-[10px] uppercase tracking-wide text-white/55">Time left</div>
                             <div className="mt-1 text-[12px] font-semibold text-white/90">
-                              {status === "live" ? fmtTimeLeft(timeLeftSec) : status === "upcoming" ? "Not started" : "Ended"}
+                              {status === "live"
+                                ? fmtTimeLeft(timeLeftSec)
+                                : status === "upcoming"
+                                ? "Not started"
+                                : "Ended"}
                             </div>
                           </div>
 
@@ -858,7 +871,7 @@ export default function StakingPage() {
         pool={activePool}
         address={address}
         tokenMetaMap={tokenMetaMap}
-        fid={fid ?? null}
+        fid={fid} // ✅ number|null
       />
     </main>
   );
@@ -866,7 +879,7 @@ export default function StakingPage() {
 
 /* ──────────────────────────────────────────────────────────────
  * ENTER POOL MODAL (NO PORTAL)
- * - now auto-defaults tokenId to user FID (editable)
+ * - auto-defaults tokenId to user FID (editable)
  * - shows staked amount + pending
  * ──────────────────────────────────────────────────────────── */
 function EnterPoolModal({
@@ -998,27 +1011,22 @@ function EnterPoolModal({
 
       setOwnedTokenIds(ids);
 
-      // ✅ Default tokenId logic:
-      // 1) if user already typed something, keep it
-      // 2) else if fid exists and is owned, pick fid
+      // Default tokenId logic:
+      // 1) keep user's typed tokenId
+      // 2) if fid exists and is owned, pick fid
       // 3) else if fid exists, default to fid (editable)
       // 4) else default to first owned (if any)
       const fidStr = fid ? String(fid) : "";
       setTokenId((prev) => {
         if (prev.trim()) return prev;
-
         if (fidStr && ids.includes(fidStr)) return fidStr;
         if (fidStr) return fidStr;
-
         return ids[0] ?? "";
       });
     } catch {
       setOwnedTokenIds([]);
-      setOwnedErr(
-        "Could not auto-detect tokenIds (collection may not be enumerable). You can still type a tokenId.",
-      );
+      setOwnedErr("Could not auto-detect tokenIds (collection may not be enumerable). You can still type a tokenId.");
 
-      // If not enumerable, still default to fid if present and empty
       if (fid) {
         setTokenId((prev) => (prev.trim() ? prev : String(fid)));
       }
@@ -1208,11 +1216,7 @@ function EnterPoolModal({
                   )}
                 </p>
 
-                {isStakedNow && (
-                  <p className="mt-1 text-[11px] text-emerald-200/90">
-                    You’re currently staked in this pool.
-                  </p>
-                )}
+                {isStakedNow && <p className="mt-1 text-[11px] text-emerald-200/90">You’re currently staked in this pool.</p>}
               </div>
 
               <button
@@ -1309,7 +1313,11 @@ function EnterPoolModal({
                           className="h-[2px] rounded-full transition-all"
                           style={{
                             width: done ? "100%" : active ? "66%" : "0%",
-                            background: done ? "rgba(52,211,153,0.55)" : active ? "rgba(121,255,225,0.55)" : "transparent",
+                            background: done
+                              ? "rgba(52,211,153,0.55)"
+                              : active
+                              ? "rgba(121,255,225,0.55)"
+                              : "transparent",
                           }}
                         />
                       </div>
@@ -1335,8 +1343,12 @@ function EnterPoolModal({
                 background: "rgba(0,0,0,0.38)",
               }}
             >
-              <div className="break-all">NFT: <span className="text-white">{pool.nft}</span></div>
-              <div className="break-all">Reward: <span className="text-white">{pool.rewardToken}</span></div>
+              <div className="break-all">
+                NFT: <span className="text-white">{pool.nft}</span>
+              </div>
+              <div className="break-all">
+                Reward: <span className="text-white">{pool.rewardToken}</span>
+              </div>
             </div>
 
             {/* Approval */}
@@ -1381,7 +1393,13 @@ function EnterPoolModal({
                     : "0 0 0 1px rgba(121,255,225,0.10), 0 0 16px rgba(121,255,225,0.14)",
                 }}
               >
-                {!isConnected ? "Connect wallet to approve" : approved ? "Approved" : txPending ? "Approving…" : "Approve pool to stake"}
+                {!isConnected
+                  ? "Connect wallet to approve"
+                  : approved
+                  ? "Approved"
+                  : txPending
+                  ? "Approving…"
+                  : "Approve pool to stake"}
               </button>
             </div>
 
@@ -1411,7 +1429,6 @@ function EnterPoolModal({
                 </button>
               </div>
 
-              {/* ✅ FID helper row */}
               {!!fid && (
                 <div
                   className="mt-2 flex items-center justify-between gap-2 rounded-xl border px-3 py-2"
@@ -1459,7 +1476,9 @@ function EnterPoolModal({
                     disabled={!isConnected}
                   >
                     {ownedTokenIds.map((id) => (
-                      <option key={id} value={id}>#{id}</option>
+                      <option key={id} value={id}>
+                        #{id}
+                      </option>
                     ))}
                   </select>
                   <p className="mt-1 text-[11px] text-white/55">
