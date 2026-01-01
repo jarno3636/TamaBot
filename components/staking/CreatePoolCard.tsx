@@ -182,13 +182,18 @@ function ChipButton({
  * viem's decodeEventLog requires:
  * topics: [] | [signature, ...topics]
  *
- * Receipt logs give: Hex[] (possibly empty)
- * We convert to a non-empty tuple when possible.
+ * Receipt logs give: unknown / any[]
+ * We must:
+ * 1) validate it's an array
+ * 2) ensure non-empty
+ * 3) cast via unknown first (TS strict requirement)
  */
 function asTopicsTuple(topics: unknown): readonly [Hex, ...Hex[]] | null {
   if (!Array.isArray(topics)) return null;
   if (topics.length === 0) return null;
-  return topics as readonly [Hex, ...Hex[]];
+
+  // TS wants unknown first because any[] doesn't "overlap" the tuple type enough.
+  return topics as unknown as readonly [Hex, ...Hex[]];
 }
 
 function extractPoolCreatedFromReceipt(params: {
@@ -203,11 +208,9 @@ function extractPoolCreatedFromReceipt(params: {
   const creatorLc = expectedCreator?.toLowerCase();
 
   for (const log of logs) {
-    // must be from the factory address
     const logAddr = String(log.address || "").toLowerCase();
     if (!logAddr || logAddr !== factoryLc) continue;
 
-    // ✅ FIX: tuple topics for viem typing
     const topicsTuple = asTopicsTuple(log.topics);
     if (!topicsTuple) continue;
 
@@ -335,7 +338,6 @@ export default function CreatePoolCard({
     return `${pct}% creator fee ${where}`;
   }, [creatorFeeBpsU16, feeMode]);
 
-  // Decode PoolCreated from receipt after mined (exact)
   useEffect(() => {
     if (!txMined || !receipt) return;
 
@@ -348,7 +350,6 @@ export default function CreatePoolCard({
     if (hit?.pool) setCreatedPool(hit.pool);
   }, [txMined, receipt, address]);
 
-  // Notify parent + open fund modal once
   useEffect(() => {
     if (!createdPool) return;
     const key = createdPool.toLowerCase();
@@ -419,6 +420,8 @@ export default function CreatePoolCard({
       setMsg(getErrText(e));
     }
   }
+
+  const feeDisabled = feeMode === "noCreatorFee";
 
   return (
     <section className="glass glass-pad relative overflow-hidden rounded-3xl border border-white/10 bg-[#020617]/85">
@@ -501,7 +504,9 @@ export default function CreatePoolCard({
                 <div className="mt-1 text-[11px] text-white/70">
                   Starts{" "}
                   <span className="font-semibold text-white">
-                    {startMode === "now" ? "now" : `in ${startOffset || 0} ${startMode === "inHours" ? "hour(s)" : "day(s)"}`}
+                    {startMode === "now"
+                      ? "now"
+                      : `in ${startOffset || 0} ${startMode === "inHours" ? "hour(s)" : "day(s)"}`}
                   </span>{" "}
                   • Duration{" "}
                   <span className="font-semibold text-white">
@@ -606,17 +611,17 @@ export default function CreatePoolCard({
               </div>
             </div>
 
-            <div className={"mt-3 rounded-2xl border border-white/10 bg-black/25 p-3" + (feeMode === "noCreatorFee" ? " opacity-60" : "")}>
+            <div className={"mt-3 rounded-2xl border border-white/10 bg-black/25 p-3" + (feeDisabled ? " opacity-60" : "")}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-[11px] uppercase tracking-wide text-white/60">Creator fee percent</div>
                 <div className="text-[12px] font-semibold text-white/85">
-                  {feeMode === "noCreatorFee" ? "—" : `${clampInt(creatorFeePct, 0, 10)}%`}
+                  {feeDisabled ? "—" : `${clampInt(creatorFeePct, 0, 10)}%`}
                 </div>
               </div>
 
               <div className="mt-2 flex flex-wrap gap-2">
                 {[0, 1, 2, 5, 10].map((p) => (
-                  <ChipButton key={p} disabled={feeMode === "noCreatorFee"} active={feeMode !== "noCreatorFee" && creatorFeePct === p} onClick={() => setCreatorFeePct(p)}>
+                  <ChipButton key={p} disabled={feeDisabled} active={!feeDisabled && creatorFeePct === p} onClick={() => setCreatorFeePct(p)}>
                     {p === 0 ? "0%" : `${p}%`}
                   </ChipButton>
                 ))}
@@ -628,11 +633,11 @@ export default function CreatePoolCard({
                   min={0}
                   max={10}
                   step={1}
-                  disabled={feeMode === "noCreatorFee"}
+                  disabled={feeDisabled}
                   value={clampInt(creatorFeePct, 0, 10)}
                   onChange={(e) => setCreatorFeePct(clampInt(Number(e.target.value), 0, 10))}
                   className="w-full"
-                  style={{ accentColor: "#79ffe1", opacity: feeMode === "noCreatorFee" ? 0.5 : 1 }}
+                  style={{ accentColor: "#79ffe1", opacity: feeDisabled ? 0.5 : 1 }}
                 />
                 <div className="mt-1 flex justify-between text-[10px] text-white/45">
                   <span>0%</span>
