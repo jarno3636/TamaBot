@@ -17,11 +17,7 @@ import { formatUnits } from "viem";
 
 import useFid from "@/hooks/useFid";
 
-import {
-  CONFIG_STAKING_FACTORY,
-  BASEBOTS_STAKING_POOL,
-  BASEBOTS_NFT,
-} from "@/lib/stakingContracts";
+import { CONFIG_STAKING_FACTORY, BASEBOTS_STAKING_POOL, BASEBOTS_NFT } from "@/lib/stakingContracts";
 
 import CreatePoolCard from "@/components/staking/CreatePoolCard";
 import FundPoolModal from "@/components/staking/FundPoolModal";
@@ -61,6 +57,9 @@ type PoolExtra = {
   rewardRate: bigint;
 };
 
+// ✅ viem returns tuples for multi-output functions (even if outputs are named)
+type PoolUserRow = readonly [bigint, bigint, bigint]; // [amount, rewardDebt, pending]
+
 /* ──────────────────────────────────────────────────────────────
  * Helpers
  * ──────────────────────────────────────────────────────────── */
@@ -82,8 +81,7 @@ function getErrText(e: unknown): string {
     const anyE = e as any;
     if (typeof anyE.shortMessage === "string" && anyE.shortMessage) return anyE.shortMessage;
     if (typeof anyE.message === "string" && anyE.message) return anyE.message;
-    if (anyE.cause && typeof anyE.cause.message === "string" && anyE.cause.message)
-      return anyE.cause.message;
+    if (anyE.cause && typeof anyE.cause.message === "string" && anyE.cause.message) return anyE.cause.message;
   }
   try {
     return String(e);
@@ -197,7 +195,6 @@ const POOL_ACTIONS_ABI = [
   { name: "rewardRate", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
 ] as const;
 
-// ✅ pull user stake amount from pool.users(address)
 const POOL_USERS_ABI = [
   {
     name: "users",
@@ -216,7 +213,7 @@ export default function StakingPage() {
   const { address } = useAccount();
   const publicClient = usePublicClient({ chainId: base.id });
 
-  // ✅ FIX: normalize fid from hook (string -> number) so TS matches EnterPoolModal
+  // normalize fid into number|null
   const { fid: fidRaw } = useFid();
   const fid = useMemo<number | null>(() => {
     if (fidRaw === null || fidRaw === undefined) return null;
@@ -237,7 +234,7 @@ export default function StakingPage() {
   const protocolFeeBps = Number(protocolFeeBpsRaw ?? 0);
   const protocolFeePercent = protocolFeeBps / 100;
 
-  /* ───────────────── Pools discovery from /api/pools (Supabase-backed) ───────────────── */
+  /* ───────────────── Pools discovery from /api/pools ───────────────── */
   const [factoryPools, setFactoryPools] = useState<FactoryPoolMeta[]>([]);
   const [factoryPoolDetails, setFactoryPoolDetails] = useState<FactoryPoolDetails[]>([]);
   const [poolsLoading, setPoolsLoading] = useState(false);
@@ -349,8 +346,9 @@ export default function StakingPage() {
 
           let hasMyStake = false;
           if (address && userRes) {
-            const u = (userRes as any)[i]?.result as any;
-            const amt = u?.amount as bigint | undefined;
+            // ✅ FIX: users() result is a tuple [amount, rewardDebt, pending]
+            const u = (userRes as any)[i]?.result as PoolUserRow | undefined;
+            const amt = u?.[0];
             hasMyStake = !!amt && amt > 0n;
           }
 
@@ -600,8 +598,7 @@ export default function StakingPage() {
                   Create pools for any ERC-721 on Base and stream rewards in any ERC-20.
                 </p>
                 <p className="mt-2 text-[11px] text-white/60 max-w-md">
-                  Creating a pool sets the schedule —{" "}
-                  <span className="font-semibold text-[#79ffe1]">you must fund it after</span>.
+                  Creating a pool sets the schedule — <span className="font-semibold text-[#79ffe1]">you must fund it after</span>.
                 </p>
               </div>
             </div>
@@ -613,8 +610,7 @@ export default function StakingPage() {
                   <span className="font-semibold text-[#79ffe1]">{protocolFeePercent}%</span>
                 </div>
                 <p className="mt-2 text-[11px] text-white/60">
-                  Tip: after creation, click <span className="text-white/80 font-semibold">Fund</span> to send reward
-                  tokens to the pool address.
+                  Tip: after creation, click <span className="text-white/80 font-semibold">Fund</span> to send reward tokens to the pool address.
                 </p>
               </div>
             </div>
@@ -672,8 +668,7 @@ export default function StakingPage() {
             <div>
               <h3 className="text-sm md:text-base font-semibold">Staking Pools</h3>
               <p className="text-[11px] md:text-xs text-white/55">
-                Tap <span className="text-white/75 font-semibold">Enter</span> to stake / unstake / claim. Creators can
-                fund.
+                Tap <span className="text-white/75 font-semibold">Enter</span> to stake / unstake / claim. Creators can fund.
               </p>
               {extrasLoading && <p className="mt-1 text-[11px] text-white/45">Loading pool stats…</p>}
             </div>
@@ -684,18 +679,14 @@ export default function StakingPage() {
               disabled={poolsLoading}
               className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/5 px-3 py-1.5 text-[11px] font-medium text-white/80 hover:bg-white/10 disabled:opacity-60 disabled:cursor-not-allowed transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/60"
             >
-              {poolsLoading && (
-                <span className="h-3 w-3 animate-spin rounded-full border border-t-transparent border-white/70" />
-              )}
+              {poolsLoading && <span className="h-3 w-3 animate-spin rounded-full border border-t-transparent border-white/70" />}
               <span>{poolsLoading ? "Refreshing…" : "Refresh"}</span>
             </button>
           </div>
 
           {poolsError && <p className="text-xs text-rose-300 break-words">{poolsError}</p>}
 
-          {factoryPools.length === 0 && !poolsLoading && !poolsError && (
-            <p className="text-xs text-white/60">No pools yet. Create one above.</p>
-          )}
+          {factoryPools.length === 0 && !poolsLoading && !poolsError && <p className="text-xs text-white/60">No pools yet. Create one above.</p>}
 
           {factoryPools.length > 0 && filteredPools.length === 0 && !poolsLoading && !poolsError && (
             <p className="text-xs text-white/60">No pools match your filter/search.</p>
@@ -728,17 +719,14 @@ export default function StakingPage() {
                 const stakedCount = Number(pool.totalStaked ?? 0n);
                 const perNftPerHour = stakedCount > 0 ? ratePerHour / stakedCount : NaN;
 
-                const timeLeftSec =
-                  status === "live" && pool.endTime && pool.endTime > 0 ? Math.max(0, pool.endTime - now) : NaN;
+                const timeLeftSec = status === "live" && pool.endTime && pool.endTime > 0 ? Math.max(0, pool.endTime - now) : NaN;
 
                 return (
                   <div key={pool.pool} className="rounded-2xl border border-white/12 bg-black/45 px-4 py-3">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                       <div className="space-y-2 min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-semibold text-white/90">
-                            {isBasebotsNft ? "Basebots NFT Pool" : "NFT Pool"}
-                          </span>
+                          <span className="font-semibold text-white/90">{isBasebotsNft ? "Basebots NFT Pool" : "NFT Pool"}</span>
 
                           <span
                             className={[
@@ -777,11 +765,7 @@ export default function StakingPage() {
                           <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
                             <div className="text-[10px] uppercase tracking-wide text-white/55">Time left</div>
                             <div className="mt-1 text-[12px] font-semibold text-white/90">
-                              {status === "live"
-                                ? fmtTimeLeft(timeLeftSec)
-                                : status === "upcoming"
-                                ? "Not started"
-                                : "Ended"}
+                              {status === "live" ? fmtTimeLeft(timeLeftSec) : status === "upcoming" ? "Not started" : "Ended"}
                             </div>
                           </div>
 
@@ -799,9 +783,7 @@ export default function StakingPage() {
                             </div>
                             <div className="mt-1 text-[10px] text-white/55">
                               Per NFT/hr:{" "}
-                              <span className="text-white/75 font-medium">
-                                {extra ? (stakedCount > 0 ? fmtNumber(perNftPerHour, 6) : "be first") : "—"}
-                              </span>
+                              <span className="text-white/75 font-medium">{extra ? (stakedCount > 0 ? fmtNumber(perNftPerHour, 6) : "be first") : "—"}</span>
                             </div>
                           </div>
                         </div>
@@ -865,14 +847,7 @@ export default function StakingPage() {
       />
 
       {/* Enter Pool Modal */}
-      <EnterPoolModal
-        open={!!activePool}
-        onClose={closePoolModal}
-        pool={activePool}
-        address={address}
-        tokenMetaMap={tokenMetaMap}
-        fid={fid} // ✅ number|null
-      />
+      <EnterPoolModal open={!!activePool} onClose={closePoolModal} pool={activePool} address={address} tokenMetaMap={tokenMetaMap} fid={fid} />
     </main>
   );
 }
@@ -961,17 +936,20 @@ function EnterPoolModal({
           args: [address],
         }) as Promise<bigint>,
 
+        // ✅ FIX: users() returns a tuple [amount, rewardDebt, pending]
         pc.readContract({
           address: pool.pool,
           abi: POOL_USERS_ABI,
           functionName: "users",
           args: [address],
-        }) as Promise<{ amount: bigint; rewardDebt: bigint; pending: bigint }>,
+        }) as Promise<PoolUserRow>,
       ]);
+
+      const amount = userRow?.[0] ?? 0n;
 
       setApproved(!!isApproved);
       setPendingRewards(pending ?? 0n);
-      setMyStakedAmount(userRow?.amount ?? 0n);
+      setMyStakedAmount(amount);
     } catch {
       setApproved(null);
       setPendingRewards(null);
@@ -1011,11 +989,6 @@ function EnterPoolModal({
 
       setOwnedTokenIds(ids);
 
-      // Default tokenId logic:
-      // 1) keep user's typed tokenId
-      // 2) if fid exists and is owned, pick fid
-      // 3) else if fid exists, default to fid (editable)
-      // 4) else default to first owned (if any)
       const fidStr = fid ? String(fid) : "";
       setTokenId((prev) => {
         if (prev.trim()) return prev;
@@ -1026,10 +999,7 @@ function EnterPoolModal({
     } catch {
       setOwnedTokenIds([]);
       setOwnedErr("Could not auto-detect tokenIds (collection may not be enumerable). You can still type a tokenId.");
-
-      if (fid) {
-        setTokenId((prev) => (prev.trim() ? prev : String(fid)));
-      }
+      if (fid) setTokenId((prev) => (prev.trim() ? prev : String(fid)));
     } finally {
       setOwnedLoading(false);
     }
@@ -1148,9 +1118,7 @@ function EnterPoolModal({
   const rewardSymbol = rewardMeta?.symbol ?? shortenAddress(pool.rewardToken, 4);
   const rewardDecimals = rewardMeta?.decimals ?? 18;
 
-  const pendingPretty =
-    pendingRewards === null ? "—" : fmtNumber(Number(formatUnits(pendingRewards, rewardDecimals)), 6);
-
+  const pendingPretty = pendingRewards === null ? "—" : fmtNumber(Number(formatUnits(pendingRewards, rewardDecimals)), 6);
   const stakedPretty = myStakedAmount === null ? "—" : myStakedAmount.toString();
   const isStakedNow = (myStakedAmount ?? 0n) > 0n;
 
@@ -1158,13 +1126,7 @@ function EnterPoolModal({
   const cardBg = "#070A16";
 
   return (
-    <div
-      className="fixed inset-0 z-[999999] grid place-items-center px-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Enter pool modal"
-      style={{ WebkitTapHighlightColor: "transparent" as any }}
-    >
+    <div className="fixed inset-0 z-[999999] grid place-items-center px-4" role="dialog" aria-modal="true" aria-label="Enter pool modal" style={{ WebkitTapHighlightColor: "transparent" as any }}>
       <button
         aria-label="Close"
         onClick={onClose}
@@ -1274,18 +1236,10 @@ function EnterPoolModal({
             </div>
 
             {/* Steps */}
-            <div
-              className="mt-4 rounded-2xl border p-3"
-              style={{
-                borderColor: "rgba(255,255,255,0.10)",
-                background: "rgba(0,0,0,0.38)",
-              }}
-            >
+            <div className="mt-4 rounded-2xl border p-3" style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.38)" }}>
               <div className="flex items-center justify-between">
                 <span className="text-[11px] uppercase tracking-wide text-white/60">Steps</span>
-                <span className="text-[11px] text-white/70">
-                  {step === 1 ? "Connect" : step === 2 ? "Approve" : "Stake / Claim"}
-                </span>
+                <span className="text-[11px] text-white/70">{step === 1 ? "Connect" : step === 2 ? "Approve" : "Stake / Claim"}</span>
               </div>
 
               <div className="mt-2 grid grid-cols-3 gap-2">
@@ -1300,12 +1254,7 @@ function EnterPoolModal({
 
                   return (
                     <div key={s.n} className="rounded-xl border px-2 py-2 text-center" style={boxStyle}>
-                      <div
-                        className={[
-                          "text-[10px] font-semibold",
-                          done ? "text-emerald-200" : active ? "text-[#79ffe1]" : "text-white/60",
-                        ].join(" ")}
-                      >
+                      <div className={["text-[10px] font-semibold", done ? "text-emerald-200" : active ? "text-[#79ffe1]" : "text-white/60"].join(" ")}>
                         {done ? "✓" : s.n}. {s.label}
                       </div>
                       <div className="mt-1 h-[2px] w-full rounded-full bg-white/5">
@@ -1313,11 +1262,7 @@ function EnterPoolModal({
                           className="h-[2px] rounded-full transition-all"
                           style={{
                             width: done ? "100%" : active ? "66%" : "0%",
-                            background: done
-                              ? "rgba(52,211,153,0.55)"
-                              : active
-                              ? "rgba(121,255,225,0.55)"
-                              : "transparent",
+                            background: done ? "rgba(52,211,153,0.55)" : active ? "rgba(121,255,225,0.55)" : "transparent",
                           }}
                         />
                       </div>
@@ -1327,22 +1272,12 @@ function EnterPoolModal({
               </div>
 
               {!isConnected && <p className="mt-2 text-[11px] text-amber-200/80">Connect a wallet to continue.</p>}
-              {isConnected && approved !== true && (
-                <p className="mt-2 text-[11px] text-white/60">Approve once so the pool can move NFTs for staking.</p>
-              )}
-              {isConnected && approved === true && (
-                <p className="mt-2 text-[11px] text-emerald-200/80">Approved — stake, unstake, and claim.</p>
-              )}
+              {isConnected && approved !== true && <p className="mt-2 text-[11px] text-white/60">Approve once so the pool can move NFTs for staking.</p>}
+              {isConnected && approved === true && <p className="mt-2 text-[11px] text-emerald-200/80">Approved — stake, unstake, and claim.</p>}
             </div>
 
             {/* Info */}
-            <div
-              className="mt-3 grid gap-2 text-[11px] text-white/70 font-mono rounded-2xl border p-3"
-              style={{
-                borderColor: "rgba(255,255,255,0.10)",
-                background: "rgba(0,0,0,0.38)",
-              }}
-            >
+            <div className="mt-3 grid gap-2 text-[11px] text-white/70 font-mono rounded-2xl border p-3" style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.38)" }}>
               <div className="break-all">
                 NFT: <span className="text-white">{pool.nft}</span>
               </div>
@@ -1352,18 +1287,10 @@ function EnterPoolModal({
             </div>
 
             {/* Approval */}
-            <div
-              className="mt-3 rounded-2xl border p-3"
-              style={{
-                borderColor: "rgba(255,255,255,0.10)",
-                background: "rgba(0,0,0,0.38)",
-              }}
-            >
+            <div className="mt-3 rounded-2xl border p-3" style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.38)" }}>
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-white/60 uppercase tracking-wide">Approval</span>
-                <span className="text-[11px] text-white/70">
-                  {approved === null ? "—" : approved ? "Approved" : "Not approved"}
-                </span>
+                <span className="text-[11px] text-white/70">{approved === null ? "—" : approved ? "Approved" : "Not approved"}</span>
               </div>
 
               <button
@@ -1372,45 +1299,23 @@ function EnterPoolModal({
                 disabled={txPending || approved === true || !isConnected}
                 className="mt-2 w-full rounded-full border px-3 py-2 text-[12px] font-semibold transition-all active:scale-[0.98]"
                 style={{
-                  borderColor: !isConnected
-                    ? "rgba(255,255,255,0.10)"
-                    : approved
-                    ? "rgba(52,211,153,0.40)"
-                    : "rgba(121,255,225,0.45)",
+                  borderColor: !isConnected ? "rgba(255,255,255,0.10)" : approved ? "rgba(52,211,153,0.40)" : "rgba(121,255,225,0.45)",
                   background: !isConnected
                     ? "rgba(255,255,255,0.05)"
                     : approved
                     ? "rgba(16,185,129,0.10)"
                     : "linear-gradient(135deg, rgba(3,28,27,0.92), rgba(6,30,45,0.62))",
-                  color: !isConnected
-                    ? "rgba(255,255,255,0.35)"
-                    : approved
-                    ? "rgba(236,253,245,0.92)"
-                    : neon,
+                  color: !isConnected ? "rgba(255,255,255,0.35)" : approved ? "rgba(236,253,245,0.92)" : neon,
                   cursor: !isConnected || approved || txPending ? "not-allowed" : "pointer",
-                  boxShadow: approved
-                    ? "0 0 0 1px rgba(52,211,153,0.10)"
-                    : "0 0 0 1px rgba(121,255,225,0.10), 0 0 16px rgba(121,255,225,0.14)",
+                  boxShadow: approved ? "0 0 0 1px rgba(52,211,153,0.10)" : "0 0 0 1px rgba(121,255,225,0.10), 0 0 16px rgba(121,255,225,0.14)",
                 }}
               >
-                {!isConnected
-                  ? "Connect wallet to approve"
-                  : approved
-                  ? "Approved"
-                  : txPending
-                  ? "Approving…"
-                  : "Approve pool to stake"}
+                {!isConnected ? "Connect wallet to approve" : approved ? "Approved" : txPending ? "Approving…" : "Approve pool to stake"}
               </button>
             </div>
 
             {/* Token selector */}
-            <div
-              className="mt-3 rounded-2xl border p-3"
-              style={{
-                borderColor: "rgba(255,255,255,0.10)",
-                background: "rgba(0,0,0,0.38)",
-              }}
-            >
+            <div className="mt-3 rounded-2xl border p-3" style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.38)" }}>
               <div className="flex items-center justify-between">
                 <span className="text-[11px] uppercase tracking-wide text-white/60">Your NFT</span>
                 <button
@@ -1430,13 +1335,7 @@ function EnterPoolModal({
               </div>
 
               {!!fid && (
-                <div
-                  className="mt-2 flex items-center justify-between gap-2 rounded-xl border px-3 py-2"
-                  style={{
-                    borderColor: "rgba(121,255,225,0.22)",
-                    background: "rgba(121,255,225,0.06)",
-                  }}
-                >
+                <div className="mt-2 flex items-center justify-between gap-2 rounded-xl border px-3 py-2" style={{ borderColor: "rgba(121,255,225,0.22)", background: "rgba(121,255,225,0.06)" }}>
                   <div className="text-[11px] text-white/80">
                     FID detected: <span className="font-mono text-white">{fid}</span>
                   </div>
@@ -1481,9 +1380,7 @@ function EnterPoolModal({
                       </option>
                     ))}
                   </select>
-                  <p className="mt-1 text-[11px] text-white/55">
-                    Auto-selected from your wallet{fid ? " (defaults to FID when possible)." : "."}
-                  </p>
+                  <p className="mt-1 text-[11px] text-white/55">Auto-selected from your wallet{fid ? " (defaults to FID when possible)." : "."}</p>
                 </label>
               ) : (
                 <label className="mt-2 block">
@@ -1509,9 +1406,7 @@ function EnterPoolModal({
                 className="rounded-full border py-2 text-[12px] font-semibold transition-all active:scale-[0.98]"
                 style={{
                   borderColor: canAct ? "rgba(52,211,153,0.55)" : "rgba(255,255,255,0.10)",
-                  background: canAct
-                    ? "linear-gradient(135deg, rgba(16,185,129,0.16), rgba(0,0,0,0.20))"
-                    : "rgba(255,255,255,0.05)",
+                  background: canAct ? "linear-gradient(135deg, rgba(16,185,129,0.16), rgba(0,0,0,0.20))" : "rgba(255,255,255,0.05)",
                   color: canAct ? "rgba(236,253,245,0.96)" : "rgba(255,255,255,0.35)",
                   boxShadow: canAct ? "0 0 0 1px rgba(52,211,153,0.10), 0 0 16px rgba(52,211,153,0.12)" : "none",
                   cursor: canAct ? "pointer" : "not-allowed",
@@ -1528,9 +1423,7 @@ function EnterPoolModal({
                 className="rounded-full border py-2 text-[12px] font-semibold transition-all active:scale-[0.98]"
                 style={{
                   borderColor: canAct ? "rgba(251,113,133,0.55)" : "rgba(255,255,255,0.10)",
-                  background: canAct
-                    ? "linear-gradient(135deg, rgba(244,63,94,0.14), rgba(0,0,0,0.20))"
-                    : "rgba(255,255,255,0.05)",
+                  background: canAct ? "linear-gradient(135deg, rgba(244,63,94,0.14), rgba(0,0,0,0.20))" : "rgba(255,255,255,0.05)",
                   color: canAct ? "rgba(255,241,242,0.96)" : "rgba(255,255,255,0.35)",
                   boxShadow: canAct ? "0 0 0 1px rgba(251,113,133,0.10), 0 0 16px rgba(251,113,133,0.12)" : "none",
                   cursor: canAct ? "pointer" : "not-allowed",
@@ -1577,9 +1470,7 @@ function EnterPoolModal({
               {(msg || txErr) && <div className="text-rose-300 break-words">{msg || getErrText(txErr)}</div>}
             </div>
 
-            <div className="mt-4 text-[10px] text-white/45">
-              Tip: if tokenId scanning fails, the NFT may not be enumerable — manual tokenId entry still works.
-            </div>
+            <div className="mt-4 text-[10px] text-white/45">Tip: if tokenId scanning fails, the NFT may not be enumerable — manual tokenId entry still works.</div>
           </div>
         </div>
       </div>
