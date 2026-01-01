@@ -17,7 +17,8 @@ function getErrText(e: unknown): string {
     const anyE = e as any;
     if (typeof anyE.shortMessage === "string" && anyE.shortMessage.length > 0) return anyE.shortMessage;
     if (typeof anyE.message === "string" && anyE.message.length > 0) return anyE.message;
-    if (anyE.cause && typeof anyE.cause.message === "string" && anyE.cause.message.length > 0) return anyE.cause.message;
+    if (anyE.cause && typeof anyE.cause.message === "string" && anyE.cause.message.length > 0)
+      return anyE.cause.message;
   }
   if (typeof e === "string") return e;
   try {
@@ -179,21 +180,21 @@ function ChipButton({
 
 /**
  * ✅ IMPORTANT FIX:
- * viem's decodeEventLog requires:
- * topics: [] | [signature, ...topics]
+ * viem decodeEventLog expects:
+ * topics: [] | [signature, ...topics]   (MUTABLE tuple)
  *
- * Receipt logs give: unknown / any[]
+ * Receipt logs give: unknown / readonly / any[]
  * We must:
- * 1) validate it's an array
- * 2) ensure non-empty
- * 3) cast via unknown first (TS strict requirement)
+ * - validate array
+ * - ensure non-empty
+ * - return a MUTABLE tuple type: [Hex, ...Hex[]]
  */
-function asTopicsTuple(topics: unknown): readonly [Hex, ...Hex[]] | null {
+function asTopicsTuple(topics: unknown): [Hex, ...Hex[]] | null {
   if (!Array.isArray(topics)) return null;
   if (topics.length === 0) return null;
 
-  // TS wants unknown first because any[] doesn't "overlap" the tuple type enough.
-  return topics as unknown as readonly [Hex, ...Hex[]];
+  // Convert via unknown first; return MUTABLE tuple (not readonly)
+  return topics as unknown as [Hex, ...Hex[]];
 }
 
 function extractPoolCreatedFromReceipt(params: {
@@ -375,7 +376,6 @@ export default function CreatePoolCard({
       notifiedRef.current = null;
 
       if (!address) return setMsg("Connect your wallet.");
-
       if (!isAddress(nft)) return setMsg("Enter a valid NFT (ERC-721) address.");
       if (!isAddress(rewardToken)) return setMsg("Enter a valid reward token (ERC-20) address.");
 
@@ -504,9 +504,7 @@ export default function CreatePoolCard({
                 <div className="mt-1 text-[11px] text-white/70">
                   Starts{" "}
                   <span className="font-semibold text-white">
-                    {startMode === "now"
-                      ? "now"
-                      : `in ${startOffset || 0} ${startMode === "inHours" ? "hour(s)" : "day(s)"}`}
+                    {startMode === "now" ? "now" : `in ${startOffset || 0} ${startMode === "inHours" ? "hour(s)" : "day(s)"}`}
                   </span>{" "}
                   • Duration{" "}
                   <span className="font-semibold text-white">
@@ -614,9 +612,7 @@ export default function CreatePoolCard({
             <div className={"mt-3 rounded-2xl border border-white/10 bg-black/25 p-3" + (feeDisabled ? " opacity-60" : "")}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-[11px] uppercase tracking-wide text-white/60">Creator fee percent</div>
-                <div className="text-[12px] font-semibold text-white/85">
-                  {feeDisabled ? "—" : `${clampInt(creatorFeePct, 0, 10)}%`}
-                </div>
+                <div className="text-[12px] font-semibold text-white/85">{feeDisabled ? "—" : `${clampInt(creatorFeePct, 0, 10)}%`}</div>
               </div>
 
               <div className="mt-2 flex flex-wrap gap-2">
