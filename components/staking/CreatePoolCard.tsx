@@ -4,12 +4,16 @@ import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   useAccount,
-  usePublicClient,
   useWriteContract,
   useWaitForTransactionReceipt,
 } from "wagmi";
 import { base } from "viem/chains";
-import { decodeEventLog, isAddress, parseUnits } from "viem";
+import {
+  decodeEventLog,
+  isAddress,
+  parseUnits,
+  type Hex,
+} from "viem";
 import { CONFIG_STAKING_FACTORY } from "@/lib/stakingContracts";
 
 type FundTarget = {
@@ -50,6 +54,26 @@ function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, Math.floor(n)));
 }
 
+const U64_MAX = (1n << 64n) - 1n;
+
+function clampU64(x: bigint) {
+  if (x < 0n) return 0n;
+  if (x > U64_MAX) return U64_MAX;
+  return x;
+}
+
+function parseU64FromDecimalString(s: string): bigint | null {
+  const t = (s || "").trim();
+  if (t === "") return 0n;
+  if (!/^\d+$/.test(t)) return null;
+  try {
+    const b = BigInt(t);
+    return clampU64(b);
+  } catch {
+    return null;
+  }
+}
+
 type Tone = "teal" | "amber" | "rose" | "sky";
 
 function toneStyle(tone: Tone): React.CSSProperties {
@@ -77,7 +101,6 @@ function toneStyle(tone: Tone): React.CSSProperties {
       boxShadow: "0 0 0 1px rgba(251,113,133,0.20), 0 0 20px rgba(251,113,133,0.22)",
     };
   }
-  // sky
   return {
     background: "linear-gradient(135deg, rgba(56,189,248,0.28), rgba(14,165,233,0.14))",
     borderColor: "rgba(56,189,248,0.92)",
@@ -163,43 +186,53 @@ function ChipButton({
   );
 }
 
-/**
- * Best-effort: tries to decode a pool address from factory logs.
- * Works if your factory emits an event where args contains:
- * - pool OR poolAddress OR stakingPool OR stakingPoolAddress OR createdPool
- */
-function extractPoolFromReceipt(receipt: any): `0x${string}` | null {
-  try {
-    const logs: any[] = receipt?.logs ?? [];
-    for (const log of logs) {
-      try {
-        const decoded = decodeEventLog({
-          abi: (CONFIG_STAKING_FACTORY as any).abi,
-          data: log.data,
-          topics: log.topics,
-        });
+function extractPoolCreatedFromReceipt(params: {
+  receipt: any;
+  factory: `0x${string}`;
+  expectedCreator?: `0x${string}`;
+}) {
+  const { receipt, factory, expectedCreator } = params;
 
-        const args: any = decoded?.args ?? {};
+  const logs: any[] = receipt?.logs ?? [];
+  const factoryLc = factory.toLowerCase();
+  const creatorLc = expectedCreator?.toLowerCase();
 
-        const candidates = [
-          args.pool,
-          args.poolAddress,
-          args.stakingPool,
-          args.stakingPoolAddress,
-          args.createdPool,
-        ].filter(Boolean);
+  for (const log of logs) {
+    // must be from the factory address
+    const logAddr = String(log.address || "").toLowerCase();
+    if (!logAddr || logAddr !== factoryLc) continue;
 
-        for (const c of candidates) {
-          if (typeof c === "string" && isAddress(c)) return c as `0x${string}`;
-        }
-      } catch {
-        // ignore non-matching logs
-      }
+    // decode only factory ABI (includes PoolCreated)
+    try {
+      const decoded = decodeEventLog({
+        abi: (CONFIG_STAKING_FACTORY as any).abi,
+        data: log.data as Hex,
+        topics: log.topics as Hex[],
+      });
+
+      if (decoded.eventName !== "PoolCreated") continue;
+
+      const args: any = decoded.args ?? {};
+      const pool = args.pool;
+      const creator = args.creator;
+      const nft = args.nft;
+      const rewardToken = args.rewardToken;
+
+      if (!isAddress(pool) || !isAddress(creator) || !isAddress(nft) || !isAddress(rewardToken)) continue;
+      if (creatorLc && String(creator).toLowerCase() !== creatorLc) continue;
+
+      return {
+        pool: pool as `0x${string}`,
+        creator: creator as `0x${string}`,
+        nft: nft as `0x${string}`,
+        rewardToken: rewardToken as `0x${string}`,
+      };
+    } catch {
+      continue;
     }
-    return null;
-  } catch {
-    return null;
   }
+
+  return null;
 }
 
 export default function CreatePoolCard({
@@ -212,7 +245,6 @@ export default function CreatePoolCard({
   onLastCreatedPoolResolved: (poolAddr: `0x${string}`) => void;
 }) {
   const { address } = useAccount();
-  const publicClient = usePublicClient({ chainId: base.id });
 
   const { writeContract, data: txHash, error: txErr } = useWriteContract();
   const {
@@ -226,7 +258,6 @@ export default function CreatePoolCard({
 
   const [nft, setNft] = useState("");
   const [rewardToken, setRewardToken] = useState("");
-
   const [rewardRate, setRewardRate] = useState("0");
   const [rewardDecimals, setRewardDecimals] = useState("18");
 
@@ -242,7 +273,6 @@ export default function CreatePoolCard({
 
   const [msg, setMsg] = useState("");
 
-  // resolved pool (after tx mined)
   const [createdPool, setCreatedPool] = useState<`0x${string}` | null>(null);
   const notifiedRef = useRef<string | null>(null);
 
@@ -258,7 +288,7 @@ export default function CreatePoolCard({
   }, [creatorFeePct, feeMode]);
 
   const computedTimes = useMemo(() => {
-    const now = nowSeconds();
+    const now = BigInt(nowSeconds());
 
     const offsetRaw = Number(startOffset || "0");
     const offset = Number.isFinite(offsetRaw) ? Math.max(0, Math.floor(offsetRaw)) : 0;
@@ -267,22 +297,24 @@ export default function CreatePoolCard({
       startMode === "now"
         ? now
         : startMode === "inHours"
-        ? now + offset * 3600
-        : now + offset * 86400;
+        ? now + BigInt(offset) * 3600n
+        : now + BigInt(offset) * 86400n;
 
     const durRaw = Number(durationValue || "0");
     const dur = Number.isFinite(durRaw) ? Math.max(1, Math.floor(durRaw)) : 1;
 
-    const seconds = durationUnit === "hours" ? dur * 3600 : dur * 86400;
+    const seconds = durationUnit === "hours" ? BigInt(dur) * 3600n : BigInt(dur) * 86400n;
     const end = start + seconds;
 
-    return { start, end, seconds };
+    return { start: clampU64(start), end: clampU64(end), seconds };
   }, [startMode, startOffset, durationValue, durationUnit]);
 
   const suggestedFund = useMemo(() => {
     const rate = Number(rewardRate || "0");
     if (!rate || rate <= 0) return "";
-    const total = rate * computedTimes.seconds;
+    const seconds = Number(computedTimes.seconds);
+    if (!Number.isFinite(seconds) || seconds <= 0) return "";
+    const total = rate * seconds;
     if (!Number.isFinite(total) || total <= 0) return "";
     return total.toLocaleString("en-US", { maximumFractionDigits: 6 });
   }, [rewardRate, computedTimes.seconds]);
@@ -299,25 +331,29 @@ export default function CreatePoolCard({
     return `${pct}% creator fee ${where}`;
   }, [creatorFeeBpsU16, feeMode]);
 
-  // When the tx is mined, attempt to decode the created pool from logs.
+  // Decode PoolCreated from receipt after mined (exact)
   useEffect(() => {
-    if (!txMined) return;
-    if (!receipt) return;
+    if (!txMined || !receipt) return;
 
-    const poolAddr = extractPoolFromReceipt(receipt);
-    if (poolAddr) setCreatedPool(poolAddr);
-  }, [txMined, receipt]);
+    const hit = extractPoolCreatedFromReceipt({
+      receipt,
+      factory: CONFIG_STAKING_FACTORY.address,
+      expectedCreator: address ? (address as `0x${string}`) : undefined,
+    });
 
-  // Notify parent + optionally open modal once per pool
+    if (hit?.pool) setCreatedPool(hit.pool);
+  }, [txMined, receipt, address]);
+
+  // Notify parent + open fund modal once
   useEffect(() => {
     if (!createdPool) return;
-    if (notifiedRef.current === createdPool.toLowerCase()) return;
+    const key = createdPool.toLowerCase();
+    if (notifiedRef.current === key) return;
+    notifiedRef.current = key;
 
-    notifiedRef.current = createdPool.toLowerCase();
     try {
       onLastCreatedPoolResolved(createdPool);
 
-      // If rewardToken is valid, suggest funding right away.
       if (isAddress(rewardToken)) {
         onOpenFundModal(
           { pool: createdPool, rewardToken: rewardToken as `0x${string}` },
@@ -351,34 +387,24 @@ export default function CreatePoolCard({
         return setMsg("Reward rate is invalid. Example: 0.01");
       }
 
-      // maxStaked: bigint, allow 0 = no cap
-      let maxS: bigint = 0n;
-      const ms = (maxStaked || "0").trim();
-      if (ms.length > 0) {
-        if (!/^\d+$/.test(ms)) return setMsg("Max staked must be an integer (0 = no cap).");
-        try {
-          maxS = BigInt(ms);
-        } catch {
-          return setMsg("Max staked is too large.");
-        }
-      }
+      const maxS = parseU64FromDecimalString(maxStaked);
+      if (maxS === null) return setMsg("Max staked must be an integer (0 = no cap).");
 
       const startTime = computedTimes.start;
       const endTime = computedTimes.end;
       if (endTime <= startTime) return setMsg("Duration must be > 0.");
 
-      const feeDisabled = feeMode === "noCreatorFee";
-
+      // uint64 in your factory input; keep it in range
       const p = {
         nft: nft as `0x${string}`,
         rewardToken: rewardToken as `0x${string}`,
         rewardRate: rateWei,
-        startTime: BigInt(startTime),
-        endTime: BigInt(endTime),
+        startTime,
+        endTime,
         maxStaked: maxS,
-        creatorFeeBps: feeDisabled ? 0 : creatorFeeBpsU16,
-        takeFeeOnClaim: feeDisabled ? false : takeFeeOnClaim,
-        takeFeeOnUnstake: feeDisabled ? false : takeFeeOnUnstake,
+        creatorFeeBps: feeMode === "noCreatorFee" ? 0 : creatorFeeBpsU16,
+        takeFeeOnClaim: feeMode === "noCreatorFee" ? false : takeFeeOnClaim,
+        takeFeeOnUnstake: feeMode === "noCreatorFee" ? false : takeFeeOnUnstake,
       };
 
       writeContract({
@@ -506,8 +532,8 @@ export default function CreatePoolCard({
               </div>
 
               <div className="text-[11px] text-white/55">
-                Start: <span className="text-white/70">{computedTimes.start}</span> • End:{" "}
-                <span className="text-white/70">{computedTimes.end}</span>
+                Start: <span className="text-white/70">{computedTimes.start.toString()}</span> • End:{" "}
+                <span className="text-white/70">{computedTimes.end.toString()}</span>
               </div>
             </div>
 
@@ -638,10 +664,7 @@ export default function CreatePoolCard({
                   value={clampInt(creatorFeePct, 0, 10)}
                   onChange={(e) => setCreatorFeePct(clampInt(Number(e.target.value), 0, 10))}
                   className="w-full"
-                  style={{
-                    accentColor: "#79ffe1",
-                    opacity: feeDisabled ? 0.5 : 1,
-                  }}
+                  style={{ accentColor: "#79ffe1", opacity: feeDisabled ? 0.5 : 1 }}
                 />
                 <div className="mt-1 flex justify-between text-[10px] text-white/45">
                   <span>0%</span>
@@ -666,31 +689,11 @@ export default function CreatePoolCard({
             {txPending ? "Creating…" : "Create pool"}
           </button>
 
-          {/* Post-create helpers */}
-          {createdPool && isAddress(createdPool) && (
+          {createdPool && (
             <div className="mt-2 rounded-2xl border border-white/10 bg-black/35 p-3 text-[11px] text-white/75">
               <div className="font-semibold text-white/90">Pool created</div>
               <div className="mt-1 break-all font-mono text-white/80">{createdPool}</div>
-
               <div className="mt-2 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isAddress(rewardToken)) {
-                      onOpenFundModal({ pool: createdPool, rewardToken: rewardToken as `0x${string}` }, suggestedFund || undefined);
-                    }
-                  }}
-                  className="rounded-full border px-3 py-1.5 text-[11px] font-semibold hover:brightness-110 active:scale-95"
-                  style={{
-                    borderColor: "rgba(52,211,153,0.55)",
-                    background: "linear-gradient(135deg, rgba(16,185,129,0.18), rgba(0,0,0,0.20))",
-                    color: "rgba(236,253,245,0.96)",
-                    boxShadow: "0 0 0 1px rgba(52,211,153,0.10), 0 0 16px rgba(52,211,153,0.12)",
-                  }}
-                >
-                  Fund now
-                </button>
-
                 <a
                   href={`https://basescan.org/address/${createdPool}`}
                   target="_blank"
@@ -726,7 +729,7 @@ export default function CreatePoolCard({
 
             {txMined && (
               <div className="text-emerald-300">
-                Confirmed ✔ Pool created. Now fund it (Creator badge → Fund) or tap “Fund now” above.
+                Confirmed ✔ Pool created. Funding modal should open automatically.
               </div>
             )}
           </div>
