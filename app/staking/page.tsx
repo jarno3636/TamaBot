@@ -14,6 +14,8 @@ import {
 import { base } from "viem/chains";
 import { formatUnits } from "viem";
 
+import useFid from "@/hooks/useFid";
+
 import {
   CONFIG_STAKING_FACTORY,
   BASEBOTS_STAKING_POOL,
@@ -194,9 +196,27 @@ const POOL_ACTIONS_ABI = [
   { name: "rewardRate", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
 ] as const;
 
+// ✅ NEW: pull user stake amount from pool.users(address)
+const POOL_USERS_ABI = [
+  {
+    name: "users",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "", type: "address" }],
+    outputs: [
+      { name: "amount", type: "uint256" },
+      { name: "rewardDebt", type: "uint256" },
+      { name: "pending", type: "uint256" },
+    ],
+  },
+] as const;
+
 export default function StakingPage() {
   const { address } = useAccount();
   const publicClient = usePublicClient({ chainId: base.id });
+
+  // ✅ Use your existing fid hook (already used in Nav)
+  const { fid } = useFid();
 
   const [activeFilter, setActiveFilter] = useState<FilterTab>("all");
   const [poolSearch, setPoolSearch] = useState("");
@@ -211,7 +231,7 @@ export default function StakingPage() {
   const protocolFeeBps = Number(protocolFeeBpsRaw ?? 0);
   const protocolFeePercent = protocolFeeBps / 100;
 
-  /* ───────────────── Pools discovery from /api/pools ───────────────── */
+  /* ───────────────── Pools discovery from /api/pools (Supabase-backed) ───────────────── */
   const [factoryPools, setFactoryPools] = useState<FactoryPoolMeta[]>([]);
   const [factoryPoolDetails, setFactoryPoolDetails] = useState<FactoryPoolDetails[]>([]);
   const [poolsLoading, setPoolsLoading] = useState(false);
@@ -600,6 +620,7 @@ export default function StakingPage() {
           protocolFeePercent={protocolFeePercent}
           onOpenFundModal={(target, suggestedAmount) => openFundModal(target, suggestedAmount)}
           onLastCreatedPoolResolved={(poolAddr) => openPoolModal(poolAddr)}
+          // ✅ IMPORTANT: ensure CreatePoolCard upserts to Supabase after create (snippet provided below)
         />
 
         {/* Filters */}
@@ -736,7 +757,6 @@ export default function StakingPage() {
                           )}
                         </div>
 
-                        {/* ✅ avoid overflow on mobile */}
                         <div className="flex flex-wrap gap-3 text-[11px] text-white/65 font-mono break-all">
                           <span>Pool: {shortenAddress(pool.pool, 4)}</span>
                           <span>NFT: {shortenAddress(pool.nft, 4)}</span>
@@ -838,6 +858,7 @@ export default function StakingPage() {
         pool={activePool}
         address={address}
         tokenMetaMap={tokenMetaMap}
+        fid={fid ?? null}
       />
     </main>
   );
@@ -845,10 +866,8 @@ export default function StakingPage() {
 
 /* ──────────────────────────────────────────────────────────────
  * ENTER POOL MODAL (NO PORTAL)
- * - centered, mobile-safe, internal scroll
- * - inline neon styles for background + buttons
- * - overlay click closes; modal click does NOT close
- * - Escape key closes
+ * - now auto-defaults tokenId to user FID (editable)
+ * - shows staked amount + pending
  * ──────────────────────────────────────────────────────────── */
 function EnterPoolModal({
   open,
@@ -856,12 +875,14 @@ function EnterPoolModal({
   pool,
   address,
   tokenMetaMap,
+  fid,
 }: {
   open: boolean;
   onClose: () => void;
   pool: FactoryPoolDetails | null;
   address?: `0x${string}`;
   tokenMetaMap: Record<string, TokenMeta>;
+  fid: number | null;
 }) {
   const publicClient = usePublicClient({ chainId: base.id });
   const { writeContract, data: txHash, error: txErr } = useWriteContract();
@@ -875,6 +896,7 @@ function EnterPoolModal({
   const [tokenId, setTokenId] = useState("");
   const [approved, setApproved] = useState<boolean | null>(null);
   const [pendingRewards, setPendingRewards] = useState<bigint | null>(null);
+  const [myStakedAmount, setMyStakedAmount] = useState<bigint | null>(null);
 
   const [ownedTokenIds, setOwnedTokenIds] = useState<string[]>([]);
   const [ownedLoading, setOwnedLoading] = useState(false);
@@ -889,7 +911,6 @@ function EnterPoolModal({
     setMsg("");
     setOwnedErr(null);
 
-    // lock scroll (iOS/Warpcast friendly)
     const prevHtmlOverflow = document.documentElement.style.overflow;
     const prevBodyOverflow = document.body.style.overflow;
     document.documentElement.style.overflow = "hidden";
@@ -912,25 +933,36 @@ function EnterPoolModal({
     if (!open || !pool || !pc || !address) return;
 
     try {
-      const [isApproved, pending] = await Promise.all([
+      const [isApproved, pending, userRow] = await Promise.all([
         pc.readContract({
           address: pool.nft,
           abi: ERC721_APPROVAL_ABI,
           functionName: "isApprovedForAll",
           args: [address, pool.pool],
         }) as Promise<boolean>,
+
         pc.readContract({
           address: pool.pool,
           abi: POOL_ACTIONS_ABI,
           functionName: "pendingRewards",
           args: [address],
         }) as Promise<bigint>,
+
+        pc.readContract({
+          address: pool.pool,
+          abi: POOL_USERS_ABI,
+          functionName: "users",
+          args: [address],
+        }) as Promise<{ amount: bigint; rewardDebt: bigint; pending: bigint }>,
       ]);
+
       setApproved(!!isApproved);
       setPendingRewards(pending ?? 0n);
+      setMyStakedAmount(userRow?.amount ?? 0n);
     } catch {
       setApproved(null);
       setPendingRewards(null);
+      setMyStakedAmount(null);
     }
   }
 
@@ -965,12 +997,31 @@ function EnterPoolModal({
       }
 
       setOwnedTokenIds(ids);
-      setTokenId((prev) => (prev.trim() ? prev : ids[0] ?? ""));
+
+      // ✅ Default tokenId logic:
+      // 1) if user already typed something, keep it
+      // 2) else if fid exists and is owned, pick fid
+      // 3) else if fid exists, default to fid (editable)
+      // 4) else default to first owned (if any)
+      const fidStr = fid ? String(fid) : "";
+      setTokenId((prev) => {
+        if (prev.trim()) return prev;
+
+        if (fidStr && ids.includes(fidStr)) return fidStr;
+        if (fidStr) return fidStr;
+
+        return ids[0] ?? "";
+      });
     } catch {
       setOwnedTokenIds([]);
       setOwnedErr(
         "Could not auto-detect tokenIds (collection may not be enumerable). You can still type a tokenId.",
       );
+
+      // If not enumerable, still default to fid if present and empty
+      if (fid) {
+        setTokenId((prev) => (prev.trim() ? prev : String(fid)));
+      }
     } finally {
       setOwnedLoading(false);
     }
@@ -981,7 +1032,7 @@ function EnterPoolModal({
     void refreshApprovalAndRewards();
     void refreshOwnedNfts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, pool?.pool, pool?.nft, address, txMined]);
+  }, [open, pool?.pool, pool?.nft, address, txMined, fid]);
 
   function doApprove() {
     try {
@@ -1092,7 +1143,9 @@ function EnterPoolModal({
   const pendingPretty =
     pendingRewards === null ? "—" : fmtNumber(Number(formatUnits(pendingRewards, rewardDecimals)), 6);
 
-  // Inline theme tokens (keeps modal consistent even if global CSS changes)
+  const stakedPretty = myStakedAmount === null ? "—" : myStakedAmount.toString();
+  const isStakedNow = (myStakedAmount ?? 0n) > 0n;
+
   const neon = "#79ffe1";
   const cardBg = "#070A16";
 
@@ -1102,10 +1155,8 @@ function EnterPoolModal({
       role="dialog"
       aria-modal="true"
       aria-label="Enter pool modal"
-      // ✅ prevent iOS “tap-through”
       style={{ WebkitTapHighlightColor: "transparent" as any }}
     >
-      {/* overlay (click closes) */}
       <button
         aria-label="Close"
         onClick={onClose}
@@ -1116,7 +1167,6 @@ function EnterPoolModal({
         }}
       />
 
-      {/* modal shell */}
       <div
         className="relative w-full max-w-md overflow-hidden rounded-3xl border"
         onClick={(e) => e.stopPropagation()}
@@ -1126,7 +1176,6 @@ function EnterPoolModal({
           boxShadow: "0 30px 90px rgba(0,0,0,0.95)",
         }}
       >
-        {/* glow */}
         <div
           aria-hidden
           className="absolute inset-0 opacity-95"
@@ -1136,7 +1185,6 @@ function EnterPoolModal({
           }}
         />
 
-        {/* ✅ internal scroll container (mobile-safe) */}
         <div
           className="relative"
           style={{
@@ -1146,7 +1194,6 @@ function EnterPoolModal({
           }}
         >
           <div className="relative p-5" style={{ background: "rgba(7,10,22,0.92)" }}>
-            {/* top bar */}
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h2 className="text-sm font-semibold">Stake / Claim</h2>
@@ -1160,6 +1207,12 @@ function EnterPoolModal({
                     <span className="text-rose-300 font-semibold">Closed</span>
                   )}
                 </p>
+
+                {isStakedNow && (
+                  <p className="mt-1 text-[11px] text-emerald-200/90">
+                    You’re currently staked in this pool.
+                  </p>
+                )}
               </div>
 
               <button
@@ -1191,19 +1244,34 @@ function EnterPoolModal({
                 Basescan ↗
               </Link>
 
-              <div className="rounded-full border px-3 py-1 text-[11px] font-mono"
-                style={{
-                  borderColor: "rgba(121,255,225,0.30)",
-                  background: "rgba(121,255,225,0.08)",
-                  color: "rgba(217,255,248,0.95)",
-                }}
-              >
-                Pending: {pendingPretty} {rewardSymbol}
+              <div className="flex flex-wrap gap-2 justify-end">
+                <div
+                  className="rounded-full border px-3 py-1 text-[11px] font-mono"
+                  style={{
+                    borderColor: "rgba(121,255,225,0.30)",
+                    background: "rgba(121,255,225,0.08)",
+                    color: "rgba(217,255,248,0.95)",
+                  }}
+                >
+                  Pending: {pendingPretty} {rewardSymbol}
+                </div>
+
+                <div
+                  className="rounded-full border px-3 py-1 text-[11px] font-mono"
+                  style={{
+                    borderColor: "rgba(255,255,255,0.16)",
+                    background: "rgba(255,255,255,0.08)",
+                    color: "rgba(255,255,255,0.90)",
+                  }}
+                >
+                  Staked: {stakedPretty}
+                </div>
               </div>
             </div>
 
             {/* Steps */}
-            <div className="mt-4 rounded-2xl border p-3"
+            <div
+              className="mt-4 rounded-2xl border p-3"
               style={{
                 borderColor: "rgba(255,255,255,0.10)",
                 background: "rgba(0,0,0,0.38)",
@@ -1260,7 +1328,8 @@ function EnterPoolModal({
             </div>
 
             {/* Info */}
-            <div className="mt-3 grid gap-2 text-[11px] text-white/70 font-mono rounded-2xl border p-3"
+            <div
+              className="mt-3 grid gap-2 text-[11px] text-white/70 font-mono rounded-2xl border p-3"
               style={{
                 borderColor: "rgba(255,255,255,0.10)",
                 background: "rgba(0,0,0,0.38)",
@@ -1271,7 +1340,8 @@ function EnterPoolModal({
             </div>
 
             {/* Approval */}
-            <div className="mt-3 rounded-2xl border p-3"
+            <div
+              className="mt-3 rounded-2xl border p-3"
               style={{
                 borderColor: "rgba(255,255,255,0.10)",
                 background: "rgba(0,0,0,0.38)",
@@ -1279,7 +1349,9 @@ function EnterPoolModal({
             >
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-white/60 uppercase tracking-wide">Approval</span>
-                <span className="text-[11px] text-white/70">{approved === null ? "—" : approved ? "Approved" : "Not approved"}</span>
+                <span className="text-[11px] text-white/70">
+                  {approved === null ? "—" : approved ? "Approved" : "Not approved"}
+                </span>
               </div>
 
               <button
@@ -1314,7 +1386,8 @@ function EnterPoolModal({
             </div>
 
             {/* Token selector */}
-            <div className="mt-3 rounded-2xl border p-3"
+            <div
+              className="mt-3 rounded-2xl border p-3"
               style={{
                 borderColor: "rgba(255,255,255,0.10)",
                 background: "rgba(0,0,0,0.38)",
@@ -1338,7 +1411,38 @@ function EnterPoolModal({
                 </button>
               </div>
 
-              {ownedErr && <p className="mt-2 text-[11px]" style={{ color: "rgba(255,211,107,0.95)" }}>{ownedErr}</p>}
+              {/* ✅ FID helper row */}
+              {!!fid && (
+                <div
+                  className="mt-2 flex items-center justify-between gap-2 rounded-xl border px-3 py-2"
+                  style={{
+                    borderColor: "rgba(121,255,225,0.22)",
+                    background: "rgba(121,255,225,0.06)",
+                  }}
+                >
+                  <div className="text-[11px] text-white/80">
+                    FID detected: <span className="font-mono text-white">{fid}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setTokenId(String(fid))}
+                    className="rounded-full border px-2.5 py-1 text-[11px] font-semibold"
+                    style={{
+                      borderColor: "rgba(121,255,225,0.40)",
+                      background: "rgba(3,28,27,0.75)",
+                      color: "#79ffe1",
+                    }}
+                  >
+                    Use FID
+                  </button>
+                </div>
+              )}
+
+              {ownedErr && (
+                <p className="mt-2 text-[11px]" style={{ color: "rgba(255,211,107,0.95)" }}>
+                  {ownedErr}
+                </p>
+              )}
 
               {ownedTokenIds.length > 0 ? (
                 <label className="mt-2 block">
@@ -1358,7 +1462,9 @@ function EnterPoolModal({
                       <option key={id} value={id}>#{id}</option>
                     ))}
                   </select>
-                  <p className="mt-1 text-[11px] text-white/55">Auto-selected from your wallet.</p>
+                  <p className="mt-1 text-[11px] text-white/55">
+                    Auto-selected from your wallet{fid ? " (defaults to FID when possible)." : "."}
+                  </p>
                 </label>
               ) : (
                 <label className="mt-2 block">
@@ -1366,7 +1472,7 @@ function EnterPoolModal({
                   <input
                     value={tokenId}
                     onChange={(e) => setTokenId(e.target.value)}
-                    placeholder="e.g. 123"
+                    placeholder={fid ? `e.g. ${fid}` : "e.g. 123"}
                     className={inputBase}
                     inputMode="numeric"
                     disabled={!isConnected}
