@@ -2,18 +2,10 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useAccount } from "wagmi";
-
-const OWNER_ADDRESS =
-  "0xB37c91305F50e3CdB0D7a048a18d7536c9524f58" as `0x${string}`;
 
 export default function BasebotTokenCard() {
   const contract = "0xc45d7c40c9c65aF95d33da5921F787D5cFD3FFcf";
   const [copied, setCopied] = useState(false);
-  const { address } = useAccount();
-
-  const isOwner =
-    address && address.toLowerCase() === OWNER_ADDRESS.toLowerCase();
 
   const copyAddress = () => {
     navigator.clipboard.writeText(contract);
@@ -41,10 +33,16 @@ export default function BasebotTokenCard() {
 
         {/* --- Text content --- */}
         <div className="flex-1 min-w-0 w-full">
-          <h2 className="text-xl md:text-2xl font-bold flex items-center justify-center gap-2">
+          <h2 className="text-xl md:text-2xl font-bold flex flex-wrap items-center justify-center gap-2">
             Basebot Token
             <span className="inline-flex items-center rounded-full bg-white/10 px-2 py-[2px] text-[11px] font-semibold tracking-wide text-[#79ffe1] border border-white/20">
               $BOTS
+            </span>
+
+            {/* ✅ Added: Staking Now Live */}
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-[2px] text-[11px] font-semibold tracking-wide text-emerald-200 border border-emerald-400/40">
+              <span className="h-2 w-2 rounded-full bg-emerald-300 animate-pulse" />
+              Staking Now Live
             </span>
           </h2>
 
@@ -76,7 +74,7 @@ export default function BasebotTokenCard() {
             </div>
           </div>
 
-          {/* --- Actions --- */}
+          {/* --- Actions (✅ No gating / no disabled state) --- */}
           <div className="mt-5 flex flex-col md:flex-row items-center justify-center gap-3">
             <Link
               href="https://mint.club/token/base/BOTS"
@@ -87,67 +85,38 @@ export default function BasebotTokenCard() {
               Mint / trade on Mint.club ↗
             </Link>
 
-            <div className="flex flex-col items-center">
-              {isOwner ? (
-                <Link
-                  href="/staking"
-                  className="btn-pill btn-pill--blue !w-full md:!w-auto !justify-center"
-                >
-                  Stake Your Basebot
-                </Link>
-              ) : (
-                <button
-                  type="button"
-                  disabled
-                  className="btn-pill !w-full md:!w-auto !justify-center opacity-40 cursor-not-allowed"
-                >
-                  Stake Your Basebot
-                </button>
-              )}
-
-              <span className="mt-1 text-[11px] text-white/50 italic">
-                {isOwner
-                  ? "Owner-only: configure staking pools"
-                  : "Connect owner wallet to manage staking"}
-              </span>
-            </div>
+            <Link
+              href="/staking"
+              className="btn-pill btn-pill--blue !w-full md:!w-auto !justify-center"
+            >
+              Stake Your Basebot
+            </Link>
           </div>
 
-          {/* --- Creator / pool promo (also owner-gated) --- */}
-          {isOwner ? (
-            <div className="mt-4 max-w-xl mx-auto rounded-2xl border border-dashed border-white/20 bg-white/5 px-4 py-3 text-xs md:text-sm text-white/75 flex flex-col gap-2">
-              <p>
-                Have your own NFT collection? Plug it into{" "}
-                <span className="font-semibold text-[#79ffe1]">
-                  Basebots Staking
-                </span>{" "}
-                and stream rewards in your token. Pick your duration, caps, and
-                creator fee — your pool, your rules.
-              </p>
-              <div className="flex flex-col sm:flex-row items-center gap-2 sm:justify-center">
-                <span className="text-[11px] uppercase tracking-wide text-white/60">
-                  Customizable staking pools are live.
-                </span>
-                <Link
-                  href="/staking"
-                  className="btn-pill !w-full sm:!w-auto !justify-center text-[12px]"
-                >
-                  Start a staking pool ↗
-                </Link>
-              </div>
+          {/* --- Public staking promo (✅ no owner gating) --- */}
+          <div className="mt-4 max-w-xl mx-auto rounded-2xl border border-dashed border-white/20 bg-white/5 px-4 py-3 text-xs md:text-sm text-white/75 flex flex-col gap-2">
+            <p>
+              <span className="font-semibold text-[#79ffe1]">Staking is live.</span>{" "}
+              Stake your Basebot to earn rewards and track your progress on-chain.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center gap-2 sm:justify-center">
+              <span className="text-[11px] uppercase tracking-wide text-white/60">
+                Open to everyone.
+              </span>
+              <Link
+                href="/staking"
+                className="btn-pill !w-full sm:!w-auto !justify-center text-[12px]"
+              >
+                Go to Staking ↗
+              </Link>
             </div>
-          ) : (
-            <div className="mt-4 max-w-xl mx-auto rounded-2xl border border-dashed border-white/10 bg-white/5/40 px-4 py-3 text-[11px] text-white/65">
-              Basebots staking pools and creator controls are managed from the
-              owner wallet. Connect the owner address to unlock pool
-              configuration.
-            </div>
-          )}
+          </div>
 
           {/* --- Pills --- */}
           <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-white/60 justify-center">
             <span className="pill-note pill-note--blue">Chain: Base</span>
             <span className="pill-note pill-note--cyan">Live on Mint.club</span>
+            <span className="pill-note pill-note--blue">Staking: Live</span>
           </div>
         </div>
       </div>
