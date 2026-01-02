@@ -14,9 +14,6 @@ type Body = {
   chainId?: number;
 };
 
-// If you set this env var, endpoint requires a header:
-//   x-admin-secret: <SUPABASE_UPSERT_SECRET>
-// If you leave it unset, endpoint stays open (not recommended in prod).
 function requireSecret(req: Request): string | null {
   const secret = process.env.SUPABASE_UPSERT_SECRET;
   if (!secret) return null; // no auth configured
@@ -33,10 +30,19 @@ function normAddr(s: unknown): `0x${string}` | null {
 }
 
 function normChainId(n: unknown): number {
-  // Allowlist (add more if you actually want them)
-  const allowed = new Set([8453]); // Base mainnet
+  const allowed = new Set([8453]);
   const v = typeof n === "number" && Number.isFinite(n) ? Math.trunc(n) : 8453;
   return allowed.has(v) ? v : 8453;
+}
+
+function clearPoolsCacheBestEffort() {
+  const g = globalThis as any;
+  try {
+    const cache: Map<string, any> | undefined = g.__POOLS_CACHE__;
+    if (cache && typeof cache.clear === "function") cache.clear();
+  } catch {
+    // ignore
+  }
 }
 
 export async function POST(req: Request) {
@@ -71,7 +77,7 @@ export async function POST(req: Request) {
     const chain_id = normChainId(body.chainId);
 
     const row = {
-      pool, // primary key or unique
+      pool,
       creator,
       nft,
       reward_token: rewardToken,
@@ -79,24 +85,18 @@ export async function POST(req: Request) {
       updated_at: new Date().toISOString(),
     };
 
-    const { error } = await supabaseAdmin
-      .from("pools")
-      .upsert(row, { onConflict: "pool" });
+    const { error } = await supabaseAdmin.from("pools").upsert(row, { onConflict: "pool" });
 
     if (error) {
-      return NextResponse.json(
-        { ok: false, error: error.message ?? "Upsert failed" },
-        { status: 500 },
-      );
+      return NextResponse.json({ ok: false, error: error.message ?? "Upsert failed" }, { status: 500 });
     }
+
+    clearPoolsCacheBestEffort();
 
     const res = NextResponse.json({ ok: true });
     res.headers.set("Cache-Control", "no-store");
     return res;
   } catch (e: any) {
-    return NextResponse.json(
-      { ok: false, error: e?.message ?? "Upsert failed" },
-      { status: 500 },
-    );
+    return NextResponse.json({ ok: false, error: e?.message ?? "Upsert failed" }, { status: 500 });
   }
 }
