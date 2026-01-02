@@ -16,7 +16,6 @@ import { base } from "viem/chains";
 import { formatUnits } from "viem";
 
 import useFid from "@/hooks/useFid";
-
 import { CONFIG_STAKING_FACTORY, BASEBOTS_STAKING_POOL, BASEBOTS_NFT } from "@/lib/stakingContracts";
 
 import CreatePoolCard from "@/components/staking/CreatePoolCard";
@@ -57,7 +56,7 @@ type PoolExtra = {
   rewardRate: bigint;
 };
 
-// ✅ viem returns tuples for multi-output functions (even if outputs are named)
+// viem returns tuples for multi-output functions
 type PoolUserRow = readonly [bigint, bigint, bigint]; // [amount, rewardDebt, pending]
 
 /* ──────────────────────────────────────────────────────────────
@@ -73,7 +72,6 @@ function shortenAddress(addr?: string, chars = 4): string {
   return `${addr.slice(0, 2 + chars)}…${addr.slice(-chars)}`;
 }
 
-// BigInt/circular-safe error string
 function getErrText(e: unknown): string {
   if (!e) return "Unknown error";
   if (typeof e === "string") return e;
@@ -213,7 +211,6 @@ export default function StakingPage() {
   const { address } = useAccount();
   const publicClient = usePublicClient({ chainId: base.id });
 
-  // normalize fid into number|null
   const { fid: fidRaw } = useFid();
   const fid = useMemo<number | null>(() => {
     if (fidRaw === null || fidRaw === undefined) return null;
@@ -319,12 +316,15 @@ export default function StakingPage() {
         const [startRes, endRes, stakedRes, userRes] = await Promise.all([
           client.multicall({
             contracts: contractsBase.map((c) => ({ ...c, functionName: "startTime" })),
+            allowFailure: true,
           }),
           client.multicall({
             contracts: contractsBase.map((c) => ({ ...c, functionName: "endTime" })),
+            allowFailure: true,
           }),
           client.multicall({
             contracts: contractsBase.map((c) => ({ ...c, functionName: "totalStaked" })),
+            allowFailure: true,
           }),
           address
             ? client.multicall({
@@ -333,6 +333,7 @@ export default function StakingPage() {
                   functionName: "users",
                   args: [address],
                 })),
+                allowFailure: true,
               })
             : Promise.resolve(null),
         ]);
@@ -346,9 +347,8 @@ export default function StakingPage() {
 
           let hasMyStake = false;
           if (address && userRes) {
-            // ✅ FIX: users() result is a tuple [amount, rewardDebt, pending]
             const u = (userRes as any)[i]?.result as PoolUserRow | undefined;
-            const amt = u?.[0];
+            const amt = u?.[0]; // ✅ tuple access
             hasMyStake = !!amt && amt > 0n;
           }
 
@@ -390,27 +390,32 @@ export default function StakingPage() {
 
     (async () => {
       try {
-        const symRes = await pc.multicall({
-          contracts: missing.map((addr) => ({
-            address: addr as `0x${string}`,
-            abi: ERC20_METADATA_ABI,
-            functionName: "symbol",
-          })),
-        });
-        const nameRes = await pc.multicall({
-          contracts: missing.map((addr) => ({
-            address: addr as `0x${string}`,
-            abi: ERC20_METADATA_ABI,
-            functionName: "name",
-          })),
-        });
-        const decRes = await pc.multicall({
-          contracts: missing.map((addr) => ({
-            address: addr as `0x${string}`,
-            abi: ERC20_METADATA_ABI,
-            functionName: "decimals",
-          })),
-        });
+        const [symRes, nameRes, decRes] = await Promise.all([
+          pc.multicall({
+            contracts: missing.map((addr) => ({
+              address: addr as `0x${string}`,
+              abi: ERC20_METADATA_ABI,
+              functionName: "symbol",
+            })),
+            allowFailure: true,
+          }),
+          pc.multicall({
+            contracts: missing.map((addr) => ({
+              address: addr as `0x${string}`,
+              abi: ERC20_METADATA_ABI,
+              functionName: "name",
+            })),
+            allowFailure: true,
+          }),
+          pc.multicall({
+            contracts: missing.map((addr) => ({
+              address: addr as `0x${string}`,
+              abi: ERC20_METADATA_ABI,
+              functionName: "decimals",
+            })),
+            allowFailure: true,
+          }),
+        ]);
 
         if (cancelled) return;
 
@@ -454,22 +459,25 @@ export default function StakingPage() {
       try {
         setExtrasLoading(true);
 
-        const rrRes = await pc.multicall({
-          contracts: factoryPoolDetails.map((p) => ({
-            address: p.pool,
-            abi: POOL_ACTIONS_ABI,
-            functionName: "rewardRate",
-          })),
-        });
-
-        const balRes = await pc.multicall({
-          contracts: factoryPoolDetails.map((p) => ({
-            address: p.rewardToken,
-            abi: ERC20_BALANCE_ABI,
-            functionName: "balanceOf",
-            args: [p.pool],
-          })),
-        });
+        const [rrRes, balRes] = await Promise.all([
+          pc.multicall({
+            contracts: factoryPoolDetails.map((p) => ({
+              address: p.pool,
+              abi: POOL_ACTIONS_ABI,
+              functionName: "rewardRate",
+            })),
+            allowFailure: true,
+          }),
+          pc.multicall({
+            contracts: factoryPoolDetails.map((p) => ({
+              address: p.rewardToken,
+              abi: ERC20_BALANCE_ABI,
+              functionName: "balanceOf",
+              args: [p.pool],
+            })),
+            allowFailure: true,
+          }),
+        ]);
 
         if (cancelled) return;
 
@@ -598,7 +606,8 @@ export default function StakingPage() {
                   Create pools for any ERC-721 on Base and stream rewards in any ERC-20.
                 </p>
                 <p className="mt-2 text-[11px] text-white/60 max-w-md">
-                  Creating a pool sets the schedule — <span className="font-semibold text-[#79ffe1]">you must fund it after</span>.
+                  Creating a pool sets the schedule —{" "}
+                  <span className="font-semibold text-[#79ffe1]">you must fund it after</span>.
                 </p>
               </div>
             </div>
@@ -610,7 +619,8 @@ export default function StakingPage() {
                   <span className="font-semibold text-[#79ffe1]">{protocolFeePercent}%</span>
                 </div>
                 <p className="mt-2 text-[11px] text-white/60">
-                  Tip: after creation, click <span className="text-white/80 font-semibold">Fund</span> to send reward tokens to the pool address.
+                  Tip: after creation, click{" "}
+                  <span className="text-white/80 font-semibold">Fund</span> to send reward tokens to the pool address.
                 </p>
               </div>
             </div>
@@ -783,7 +793,9 @@ export default function StakingPage() {
                             </div>
                             <div className="mt-1 text-[10px] text-white/55">
                               Per NFT/hr:{" "}
-                              <span className="text-white/75 font-medium">{extra ? (stakedCount > 0 ? fmtNumber(perNftPerHour, 6) : "be first") : "—"}</span>
+                              <span className="text-white/75 font-medium">
+                                {extra ? (stakedCount > 0 ? fmtNumber(perNftPerHour, 6) : "be first") : "—"}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -847,15 +859,20 @@ export default function StakingPage() {
       />
 
       {/* Enter Pool Modal */}
-      <EnterPoolModal open={!!activePool} onClose={closePoolModal} pool={activePool} address={address} tokenMetaMap={tokenMetaMap} fid={fid} />
+      <EnterPoolModal
+        open={!!activePool}
+        onClose={closePoolModal}
+        pool={activePool}
+        address={address}
+        tokenMetaMap={tokenMetaMap}
+        fid={fid}
+      />
     </main>
   );
 }
 
 /* ──────────────────────────────────────────────────────────────
  * ENTER POOL MODAL (NO PORTAL)
- * - auto-defaults tokenId to user FID (editable)
- * - shows staked amount + pending
  * ──────────────────────────────────────────────────────────── */
 function EnterPoolModal({
   open,
@@ -892,7 +909,6 @@ function EnterPoolModal({
 
   useEffect(() => setMounted(true), []);
 
-  // Scroll lock + escape key
   useEffect(() => {
     if (!open) return;
 
@@ -936,7 +952,6 @@ function EnterPoolModal({
           args: [address],
         }) as Promise<bigint>,
 
-        // ✅ FIX: users() returns a tuple [amount, rewardDebt, pending]
         pc.readContract({
           address: pool.pool,
           abi: POOL_USERS_ABI,
@@ -1111,7 +1126,6 @@ function EnterPoolModal({
 
   const isConnected = !!address;
   const canAct = approved === true && !txPending;
-  const step = !isConnected ? 1 : approved === true ? 3 : 2;
 
   const rewardLower = pool.rewardToken.toLowerCase();
   const rewardMeta = tokenMetaMap[rewardLower];
@@ -1120,7 +1134,6 @@ function EnterPoolModal({
 
   const pendingPretty = pendingRewards === null ? "—" : fmtNumber(Number(formatUnits(pendingRewards, rewardDecimals)), 6);
   const stakedPretty = myStakedAmount === null ? "—" : myStakedAmount.toString();
-  const isStakedNow = (myStakedAmount ?? 0n) > 0n;
 
   const neon = "#79ffe1";
   const cardBg = "#070A16";
@@ -1177,8 +1190,6 @@ function EnterPoolModal({
                     <span className="text-rose-300 font-semibold">Closed</span>
                   )}
                 </p>
-
-                {isStakedNow && <p className="mt-1 text-[11px] text-emerald-200/90">You’re currently staked in this pool.</p>}
               </div>
 
               <button
@@ -1235,57 +1246,6 @@ function EnterPoolModal({
               </div>
             </div>
 
-            {/* Steps */}
-            <div className="mt-4 rounded-2xl border p-3" style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.38)" }}>
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] uppercase tracking-wide text-white/60">Steps</span>
-                <span className="text-[11px] text-white/70">{step === 1 ? "Connect" : step === 2 ? "Approve" : "Stake / Claim"}</span>
-              </div>
-
-              <div className="mt-2 grid grid-cols-3 gap-2">
-                {[{ n: 1, label: "Connect" }, { n: 2, label: "Approve" }, { n: 3, label: "Stake" }].map((s) => {
-                  const done = step > s.n;
-                  const active = step === s.n;
-                  const boxStyle: React.CSSProperties = done
-                    ? { borderColor: "rgba(52,211,153,0.40)", background: "rgba(16,185,129,0.12)" }
-                    : active
-                    ? { borderColor: "rgba(121,255,225,0.40)", background: "rgba(3,28,27,0.80)" }
-                    : { borderColor: "rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.05)" };
-
-                  return (
-                    <div key={s.n} className="rounded-xl border px-2 py-2 text-center" style={boxStyle}>
-                      <div className={["text-[10px] font-semibold", done ? "text-emerald-200" : active ? "text-[#79ffe1]" : "text-white/60"].join(" ")}>
-                        {done ? "✓" : s.n}. {s.label}
-                      </div>
-                      <div className="mt-1 h-[2px] w-full rounded-full bg-white/5">
-                        <div
-                          className="h-[2px] rounded-full transition-all"
-                          style={{
-                            width: done ? "100%" : active ? "66%" : "0%",
-                            background: done ? "rgba(52,211,153,0.55)" : active ? "rgba(121,255,225,0.55)" : "transparent",
-                          }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {!isConnected && <p className="mt-2 text-[11px] text-amber-200/80">Connect a wallet to continue.</p>}
-              {isConnected && approved !== true && <p className="mt-2 text-[11px] text-white/60">Approve once so the pool can move NFTs for staking.</p>}
-              {isConnected && approved === true && <p className="mt-2 text-[11px] text-emerald-200/80">Approved — stake, unstake, and claim.</p>}
-            </div>
-
-            {/* Info */}
-            <div className="mt-3 grid gap-2 text-[11px] text-white/70 font-mono rounded-2xl border p-3" style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.38)" }}>
-              <div className="break-all">
-                NFT: <span className="text-white">{pool.nft}</span>
-              </div>
-              <div className="break-all">
-                Reward: <span className="text-white">{pool.rewardToken}</span>
-              </div>
-            </div>
-
             {/* Approval */}
             <div className="mt-3 rounded-2xl border p-3" style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.38)" }}>
               <div className="flex items-center justify-between">
@@ -1307,14 +1267,13 @@ function EnterPoolModal({
                     : "linear-gradient(135deg, rgba(3,28,27,0.92), rgba(6,30,45,0.62))",
                   color: !isConnected ? "rgba(255,255,255,0.35)" : approved ? "rgba(236,253,245,0.92)" : neon,
                   cursor: !isConnected || approved || txPending ? "not-allowed" : "pointer",
-                  boxShadow: approved ? "0 0 0 1px rgba(52,211,153,0.10)" : "0 0 0 1px rgba(121,255,225,0.10), 0 0 16px rgba(121,255,225,0.14)",
                 }}
               >
                 {!isConnected ? "Connect wallet to approve" : approved ? "Approved" : txPending ? "Approving…" : "Approve pool to stake"}
               </button>
             </div>
 
-            {/* Token selector */}
+            {/* TokenId input */}
             <div className="mt-3 rounded-2xl border p-3" style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.38)" }}>
               <div className="flex items-center justify-between">
                 <span className="text-[11px] uppercase tracking-wide text-white/60">Your NFT</span>
@@ -1334,26 +1293,6 @@ function EnterPoolModal({
                 </button>
               </div>
 
-              {!!fid && (
-                <div className="mt-2 flex items-center justify-between gap-2 rounded-xl border px-3 py-2" style={{ borderColor: "rgba(121,255,225,0.22)", background: "rgba(121,255,225,0.06)" }}>
-                  <div className="text-[11px] text-white/80">
-                    FID detected: <span className="font-mono text-white">{fid}</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setTokenId(String(fid))}
-                    className="rounded-full border px-2.5 py-1 text-[11px] font-semibold"
-                    style={{
-                      borderColor: "rgba(121,255,225,0.40)",
-                      background: "rgba(3,28,27,0.75)",
-                      color: "#79ffe1",
-                    }}
-                  >
-                    Use FID
-                  </button>
-                </div>
-              )}
-
               {ownedErr && (
                 <p className="mt-2 text-[11px]" style={{ color: "rgba(255,211,107,0.95)" }}>
                   {ownedErr}
@@ -1367,11 +1306,7 @@ function EnterPoolModal({
                     value={tokenId}
                     onChange={(e) => setTokenId(e.target.value)}
                     className="mt-1 w-full rounded-xl border px-3 py-2 text-[13px] text-white focus:outline-none focus:ring-2"
-                    style={{
-                      borderColor: "rgba(255,255,255,0.20)",
-                      background: "#0B1022",
-                      boxShadow: "0 0 0 2px rgba(121,255,225,0.00)",
-                    }}
+                    style={{ borderColor: "rgba(255,255,255,0.20)", background: "#0B1022" }}
                     disabled={!isConnected}
                   >
                     {ownedTokenIds.map((id) => (
@@ -1380,7 +1315,6 @@ function EnterPoolModal({
                       </option>
                     ))}
                   </select>
-                  <p className="mt-1 text-[11px] text-white/55">Auto-selected from your wallet{fid ? " (defaults to FID when possible)." : "."}</p>
                 </label>
               ) : (
                 <label className="mt-2 block">
@@ -1408,10 +1342,7 @@ function EnterPoolModal({
                   borderColor: canAct ? "rgba(52,211,153,0.55)" : "rgba(255,255,255,0.10)",
                   background: canAct ? "linear-gradient(135deg, rgba(16,185,129,0.16), rgba(0,0,0,0.20))" : "rgba(255,255,255,0.05)",
                   color: canAct ? "rgba(236,253,245,0.96)" : "rgba(255,255,255,0.35)",
-                  boxShadow: canAct ? "0 0 0 1px rgba(52,211,153,0.10), 0 0 16px rgba(52,211,153,0.12)" : "none",
-                  cursor: canAct ? "pointer" : "not-allowed",
                 }}
-                title={approved === true ? "" : "Approve first"}
               >
                 {txPending ? "Working…" : "Stake"}
               </button>
@@ -1425,10 +1356,7 @@ function EnterPoolModal({
                   borderColor: canAct ? "rgba(251,113,133,0.55)" : "rgba(255,255,255,0.10)",
                   background: canAct ? "linear-gradient(135deg, rgba(244,63,94,0.14), rgba(0,0,0,0.20))" : "rgba(255,255,255,0.05)",
                   color: canAct ? "rgba(255,241,242,0.96)" : "rgba(255,255,255,0.35)",
-                  boxShadow: canAct ? "0 0 0 1px rgba(251,113,133,0.10), 0 0 16px rgba(251,113,133,0.12)" : "none",
-                  cursor: canAct ? "pointer" : "not-allowed",
                 }}
-                title={approved === true ? "" : "Approve first"}
               >
                 {txPending ? "Working…" : "Unstake"}
               </button>
@@ -1443,14 +1371,11 @@ function EnterPoolModal({
                 borderColor: canAct ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.10)",
                 background: canAct ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.05)",
                 color: canAct ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.35)",
-                cursor: canAct ? "pointer" : "not-allowed",
               }}
-              title={approved === true ? "" : "Approve first"}
             >
               {txPending ? "Working…" : `Claim ${rewardSymbol}`}
             </button>
 
-            {/* Status */}
             <div className="mt-3 space-y-1 text-[11px] text-white/75">
               {txHash && (
                 <div>
@@ -1470,7 +1395,9 @@ function EnterPoolModal({
               {(msg || txErr) && <div className="text-rose-300 break-words">{msg || getErrText(txErr)}</div>}
             </div>
 
-            <div className="mt-4 text-[10px] text-white/45">Tip: if tokenId scanning fails, the NFT may not be enumerable — manual tokenId entry still works.</div>
+            <div className="mt-4 text-[10px] text-white/45">
+              Tip: if tokenId scanning fails, the NFT may not be enumerable — manual tokenId entry still works.
+            </div>
           </div>
         </div>
       </div>
