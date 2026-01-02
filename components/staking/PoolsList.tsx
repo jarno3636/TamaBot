@@ -1,5 +1,6 @@
 "use client";
 
+import type React from "react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { usePublicClient } from "wagmi";
@@ -55,7 +56,6 @@ function fmtNumber(n: number, max = 4) {
 }
 
 function safeNumFromUnits(v: bigint, decimals: number) {
-  // formatUnits -> string, parseFloat keeps it safe-ish for UI
   try {
     const s = formatUnits(v, decimals);
     const n = Number.parseFloat(s);
@@ -120,18 +120,9 @@ function toneStyle(tone: Tone): React.CSSProperties {
   }
 }
 
-function Chip({
-  tone,
-  children,
-}: {
-  tone: Tone;
-  children: React.ReactNode;
-}) {
+function Chip({ tone, children }: { tone: Tone; children: React.ReactNode }) {
   return (
-    <span
-      className="inline-flex items-center rounded-full border px-2 py-[1px] text-[10px] font-semibold"
-      style={toneStyle(tone)}
-    >
+    <span className="inline-flex items-center rounded-full border px-2 py-[1px] text-[10px] font-semibold" style={toneStyle(tone)}>
       {children}
     </span>
   );
@@ -156,13 +147,7 @@ function ActionBtn({
 
   if (href) {
     return (
-      <Link
-        href={href}
-        target={external ? "_blank" : undefined}
-        rel={external ? "noopener noreferrer" : undefined}
-        className={cls}
-        style={style}
-      >
+      <Link href={href} target={external ? "_blank" : undefined} rel={external ? "noopener noreferrer" : undefined} className={cls} style={style}>
         {children}
       </Link>
     );
@@ -176,10 +161,12 @@ function ActionBtn({
 }
 
 type PoolExtra = {
-  rewardBal: bigint;   // reward token balance held by pool
-  rewardRate: bigint;  // tokens/sec (raw)
-  myAmount: bigint;    // user.amount
+  rewardBal: bigint;
+  rewardRate: bigint;
+  myAmount: bigint;
 };
+
+type UsersRowTuple = readonly [bigint, bigint, bigint];
 
 export default function PoolsList({
   pools,
@@ -202,9 +189,11 @@ export default function PoolsList({
 }) {
   const pc = usePublicClient({ chainId: base.id });
 
+  // ok to use now for UI-only status labels; do NOT let it drive fetches
   const now = nowSec();
   const basebotsNftLower = basebotsNftAddress.toLowerCase();
 
+  // ✅ STABLE sorting (does NOT depend on `now`)
   const sorted = useMemo(() => {
     const copy = [...pools];
 
@@ -213,17 +202,26 @@ export default function PoolsList({
       const bIsBots = b.nft.toLowerCase() === basebotsNftLower;
       if (aIsBots !== bIsBots) return aIsBots ? -1 : 1;
 
-      const rank = (p: FactoryPoolDetails) => {
-        if (p.startTime === 0) return 1;
-        if (now < p.startTime) return 1;
-        if (p.endTime !== 0 && now > p.endTime) return 3;
+      // live-ish first, then upcoming, then closed-ish by endTime (best-effort)
+      const bucket = (p: FactoryPoolDetails) => {
+        if (!p.startTime) return 1; // upcoming-ish
+        if (!p.endTime) return 0; // long-live-ish
         return 0;
       };
-      return rank(a) - rank(b);
+
+      const ba = bucket(a);
+      const bb = bucket(b);
+      if (ba !== bb) return ba - bb;
+
+      // newest startTime first
+      return (b.startTime ?? 0) - (a.startTime ?? 0);
     });
 
     return copy;
-  }, [pools, basebotsNftLower, now]);
+  }, [pools, basebotsNftLower]);
+
+  // ✅ Key that only changes when pool set changes
+  const poolsKey = useMemo(() => sorted.map((p) => p.pool.toLowerCase()).join("|"), [sorted]);
 
   /* ──────────────────────────────────────────────────────────────
    * Extra stats: reward balance + rewardRate + my amount
@@ -243,33 +241,38 @@ export default function PoolsList({
       try {
         const poolAddrs = sorted.map((p) => p.pool);
 
-        const rewardRateRes = await pc.multicall({
-          contracts: poolAddrs.map((addr) => ({
-            address: addr,
-            abi: POOL_STATS_ABI,
-            functionName: "rewardRate",
-          })),
-        });
+        const [rewardRateRes, balanceRes, userRes] = await Promise.all([
+          pc.multicall({
+            contracts: poolAddrs.map((addr) => ({
+              address: addr,
+              abi: POOL_STATS_ABI,
+              functionName: "rewardRate",
+            })),
+            allowFailure: true,
+          }),
 
-        const balanceRes = await pc.multicall({
-          contracts: sorted.map((p) => ({
-            address: p.rewardToken,
-            abi: ERC20_BALANCE_ABI,
-            functionName: "balanceOf",
-            args: [p.pool],
-          })),
-        });
+          pc.multicall({
+            contracts: sorted.map((p) => ({
+              address: p.rewardToken,
+              abi: ERC20_BALANCE_ABI,
+              functionName: "balanceOf",
+              args: [p.pool],
+            })),
+            allowFailure: true,
+          }),
 
-        const userRes = address
-          ? await pc.multicall({
-              contracts: poolAddrs.map((addr) => ({
-                address: addr,
-                abi: POOL_STATS_ABI,
-                functionName: "users",
-                args: [address],
-              })),
-            })
-          : null;
+          address
+            ? pc.multicall({
+                contracts: poolAddrs.map((addr) => ({
+                  address: addr,
+                  abi: POOL_STATS_ABI,
+                  functionName: "users",
+                  args: [address],
+                })),
+                allowFailure: true,
+              })
+            : Promise.resolve(null),
+        ]);
 
         if (cancelled) return;
 
@@ -283,8 +286,9 @@ export default function PoolsList({
 
           let myAmount = 0n;
           if (address && userRes) {
-            const u = (userRes as any)?.[i]?.result as any;
-            myAmount = (u?.amount as bigint | undefined) ?? 0n;
+            // ✅ FIX: tuple access
+            const u = (userRes as any)?.[i]?.result as UsersRowTuple | undefined;
+            myAmount = u?.[0] ?? 0n;
           }
 
           next[key] = { rewardRate: rr ?? 0n, rewardBal: bal ?? 0n, myAmount };
@@ -302,11 +306,10 @@ export default function PoolsList({
     return () => {
       cancelled = true;
     };
-  }, [pc, sorted, address]);
+  }, [pc, poolsKey, address]); // ✅ no `sorted` / no `now`
 
   return (
     <section className="glass glass-pad relative overflow-hidden rounded-3xl border border-white/10 bg-[#020617]/85 space-y-4">
-      {/* header glow */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 opacity-90"
@@ -316,14 +319,11 @@ export default function PoolsList({
         }}
       />
 
-      {/* Header */}
       <div className="relative flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-[220px]">
           <div className="flex items-center gap-2">
             <h3 className="text-sm md:text-base font-semibold">Staking Pools</h3>
-
             <Chip tone="white">{sorted.length} total</Chip>
-
             {extraLoading && <Chip tone="sky">loading stats…</Chip>}
           </div>
 
@@ -353,7 +353,6 @@ export default function PoolsList({
         <p className="relative text-xs text-white/60">No pools yet. Create one above to launch the first pool.</p>
       )}
 
-      {/* List */}
       {sorted.length > 0 && (
         <div className="relative grid gap-3">
           {sorted.map((pool) => {
@@ -375,39 +374,28 @@ export default function PoolsList({
             const rewardLabel = meta ? meta.symbol : shortenAddress(pool.rewardToken, 4);
             const decimals = meta?.decimals ?? 18;
 
-            // Rewards in pool / rate
             const rewardBalTokens = extra ? safeNumFromUnits(extra.rewardBal, decimals) : NaN;
             const rewardRateTokensSec = extra ? safeNumFromUnits(extra.rewardRate, decimals) : NaN;
-
             const totalPerHour = Number.isFinite(rewardRateTokensSec) ? rewardRateTokensSec * 3600 : NaN;
 
             const stakedCount = Number(pool.totalStaked ?? 0n);
             const perNftPerHour = stakedCount > 0 && Number.isFinite(totalPerHour) ? totalPerHour / stakedCount : NaN;
 
             const hoursLeftFromBalance =
-              Number.isFinite(rewardBalTokens) &&
-              Number.isFinite(rewardRateTokensSec) &&
-              rewardRateTokensSec > 0
+              Number.isFinite(rewardBalTokens) && Number.isFinite(rewardRateTokensSec) && rewardRateTokensSec > 0
                 ? (rewardBalTokens / rewardRateTokensSec) / 3600
                 : NaN;
 
-            // Your estimate
             const myAmt = extra?.myAmount ?? 0n;
             const myAmtNum = Number(myAmt);
             const myEstPerHour = myAmtNum > 0 && Number.isFinite(perNftPerHour) ? perNftPerHour * myAmtNum : NaN;
 
-            const statusTone: Tone =
-              status === "live" ? "emerald" : status === "upcoming" ? "sky" : "rose";
+            const statusTone: Tone = status === "live" ? "emerald" : status === "upcoming" ? "sky" : "rose";
 
-            // Auto-select NFT (and reward token) when entering
             const enterHref = `/staking?pool=${pool.pool}&nft=${pool.nft}&rewardToken=${pool.rewardToken}`;
 
             return (
-              <div
-                key={pool.pool}
-                className="relative overflow-hidden rounded-3xl border border-white/12 bg-black/35 p-4 md:p-5"
-              >
-                {/* card glow */}
+              <div key={pool.pool} className="relative overflow-hidden rounded-3xl border border-white/12 bg-black/35 p-4 md:p-5">
                 <div
                   aria-hidden
                   className="pointer-events-none absolute inset-0 opacity-80"
@@ -419,24 +407,18 @@ export default function PoolsList({
                 />
 
                 <div className="relative">
-                  {/* Top row */}
                   <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-semibold text-white/90">
-                          {isBasebotsNft ? "Basebots NFT Pool" : "NFT Pool"}
-                        </span>
+                        <span className="font-semibold text-white/90">{isBasebotsNft ? "Basebots NFT Pool" : "NFT Pool"}</span>
 
                         {isBasebotsNft && <Chip tone="teal">Featured</Chip>}
-                        <Chip tone={statusTone}>
-                          {status === "live" ? "Live" : status === "upcoming" ? "Upcoming" : "Closed"}
-                        </Chip>
+                        <Chip tone={statusTone}>{status === "live" ? "Live" : status === "upcoming" ? "Upcoming" : "Closed"}</Chip>
 
                         {isCreator && <Chip tone="amber">Creator</Chip>}
                         {pool.hasMyStake && <Chip tone="emerald">You’re staked</Chip>}
                       </div>
 
-                      {/* Meta row */}
                       <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-white/65 font-mono">
                         <span>Pool: {shortenAddress(pool.pool, 4)}</span>
                         <span>NFT: {shortenAddress(pool.nft, 4)}</span>
@@ -445,7 +427,6 @@ export default function PoolsList({
                       </div>
                     </div>
 
-                    {/* Right CTAs */}
                     <div className="flex flex-wrap items-center gap-2 justify-start md:justify-end">
                       <ActionBtn tone="white" href={`https://basescan.org/address/${pool.pool}`} external>
                         Basescan ↗
@@ -456,23 +437,17 @@ export default function PoolsList({
                       </ActionBtn>
 
                       {isCreator && (
-                        <ActionBtn
-                          tone="emerald"
-                          onClick={() => openFundModalForPool({ pool: pool.pool, rewardToken: pool.rewardToken })}
-                        >
+                        <ActionBtn tone="emerald" onClick={() => openFundModalForPool({ pool: pool.pool, rewardToken: pool.rewardToken })}>
                           Fund
                         </ActionBtn>
                       )}
                     </div>
                   </div>
 
-                  {/* Stats strip */}
                   <div className="mt-3 grid gap-2 md:grid-cols-3">
                     <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
                       <div className="text-[10px] uppercase tracking-wide text-white/55">Rewards in pool</div>
-                      <div className="mt-1 text-sm font-semibold text-white/90">
-                        {extra ? `${fmtNumber(rewardBalTokens, 4)} ${rewardLabel}` : "—"}
-                      </div>
+                      <div className="mt-1 text-sm font-semibold text-white/90">{extra ? `${fmtNumber(rewardBalTokens, 4)} ${rewardLabel}` : "—"}</div>
                       <div className="mt-1 text-[11px] text-white/55">
                         Est. left:{" "}
                         <span className="text-white/75 font-medium">
@@ -483,9 +458,7 @@ export default function PoolsList({
 
                     <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
                       <div className="text-[10px] uppercase tracking-wide text-white/55">Reward rate</div>
-                      <div className="mt-1 text-sm font-semibold text-white/90">
-                        {extra ? `${fmtCompact(totalPerHour)} ${rewardLabel}/hr` : "—"}
-                      </div>
+                      <div className="mt-1 text-sm font-semibold text-white/90">{extra ? `${fmtCompact(totalPerHour)} ${rewardLabel}/hr` : "—"}</div>
                       <div className="mt-1 text-[11px] text-white/55">
                         Per NFT/hr:{" "}
                         <span className="text-white/75 font-medium">
@@ -497,20 +470,14 @@ export default function PoolsList({
                     <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
                       <div className="text-[10px] uppercase tracking-wide text-white/55">Your estimate</div>
                       <div className="mt-1 text-sm font-semibold text-white/90">
-                        {address
-                          ? myAmtNum > 0
-                            ? `${fmtNumber(myEstPerHour, 6)} ${rewardLabel}/hr`
-                            : "Not staked"
-                          : "Connect wallet"}
+                        {address ? (myAmtNum > 0 ? `${fmtNumber(myEstPerHour, 6)} ${rewardLabel}/hr` : "Not staked") : "Connect wallet"}
                       </div>
                       <div className="mt-1 text-[11px] text-white/55">
-                        Your NFTs:{" "}
-                        <span className="text-white/75 font-medium">{address ? (extra ? myAmt.toString() : "…") : "—"}</span>
+                        Your NFTs: <span className="text-white/75 font-medium">{address ? (extra ? myAmt.toString() : "…") : "—"}</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Creator tools */}
                   {isCreator && (
                     <div className="mt-3 rounded-2xl border border-white/10 bg-black/25 p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
