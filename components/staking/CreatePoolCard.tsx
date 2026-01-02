@@ -179,7 +179,6 @@ function ChipButton({
 }
 
 /**
- * ✅ IMPORTANT FIX:
  * viem decodeEventLog expects:
  * topics: [] | [signature, ...topics]   (MUTABLE tuple)
  *
@@ -192,8 +191,6 @@ function ChipButton({
 function asTopicsTuple(topics: unknown): [Hex, ...Hex[]] | null {
   if (!Array.isArray(topics)) return null;
   if (topics.length === 0) return null;
-
-  // Convert via unknown first; return MUTABLE tuple (not readonly)
   return topics as unknown as [Hex, ...Hex[]];
 }
 
@@ -361,7 +358,10 @@ export default function CreatePoolCard({
       onLastCreatedPoolResolved(createdPool);
 
       if (isAddress(rewardToken)) {
-        onOpenFundModal({ pool: createdPool, rewardToken: rewardToken as `0x${string}` }, suggestedFund || undefined);
+        onOpenFundModal(
+          { pool: createdPool, rewardToken: rewardToken as `0x${string}` },
+          suggestedFund || undefined,
+        );
       }
     } catch {
       // ignore
@@ -476,13 +476,23 @@ export default function CreatePoolCard({
 
           <label>
             <span className="text-[11px] uppercase tracking-wide text-white/60">Reward token</span>
-            <input value={rewardToken} onChange={(e) => setRewardToken(e.target.value)} className={inputBase} placeholder="0x…" />
+            <input
+              value={rewardToken}
+              onChange={(e) => setRewardToken(e.target.value)}
+              className={inputBase}
+              placeholder="0x…"
+            />
           </label>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <label>
               <span className="text-[11px] uppercase tracking-wide text-white/60">Reward rate (tokens / sec)</span>
-              <input value={rewardRate} onChange={(e) => setRewardRate(e.target.value)} className={inputBase} placeholder="e.g. 0.01" />
+              <input
+                value={rewardRate}
+                onChange={(e) => setRewardRate(e.target.value)}
+                className={inputBase}
+                placeholder="e.g. 0.01"
+              />
               {suggestedFund && (
                 <p className="mt-1 text-[11px] text-white/55">
                   Suggested funding: <span className="text-[#79ffe1] font-semibold">{suggestedFund}</span>
@@ -492,7 +502,13 @@ export default function CreatePoolCard({
 
             <label>
               <span className="text-[11px] uppercase tracking-wide text-white/60">Reward decimals</span>
-              <input value={rewardDecimals} onChange={(e) => setRewardDecimals(e.target.value)} className={inputBase} placeholder="18" inputMode="numeric" />
+              <input
+                value={rewardDecimals}
+                onChange={(e) => setRewardDecimals(e.target.value)}
+                className={inputBase}
+                placeholder="18"
+                inputMode="numeric"
+              />
             </label>
           </div>
 
@@ -504,7 +520,9 @@ export default function CreatePoolCard({
                 <div className="mt-1 text-[11px] text-white/70">
                   Starts{" "}
                   <span className="font-semibold text-white">
-                    {startMode === "now" ? "now" : `in ${startOffset || 0} ${startMode === "inHours" ? "hour(s)" : "day(s)"}`}
+                    {startMode === "now"
+                      ? "now"
+                      : `in ${startOffset || 0} ${startMode === "inHours" ? "hour(s)" : "day(s)"}`}
                   </span>{" "}
                   • Duration{" "}
                   <span className="font-semibold text-white">
@@ -569,7 +587,13 @@ export default function CreatePoolCard({
 
           <label>
             <span className="text-[11px] uppercase tracking-wide text-white/60">Max staked (0 = no cap)</span>
-            <input value={maxStaked} onChange={(e) => setMaxStaked(e.target.value)} className={inputBase} placeholder="0" inputMode="numeric" />
+            <input
+              value={maxStaked}
+              onChange={(e) => setMaxStaked(e.target.value)}
+              className={inputBase}
+              placeholder="0"
+              inputMode="numeric"
+            />
           </label>
 
           {/* Fees */}
@@ -599,7 +623,11 @@ export default function CreatePoolCard({
                   Fee on claim
                 </PillButton>
 
-                <PillButton active={feeMode === "feeOnUnstake"} tone="amber" onClick={() => setFeeMode("feeOnUnstake")}>
+                <PillButton
+                  active={feeMode === "feeOnUnstake"}
+                  tone="amber"
+                  onClick={() => setFeeMode("feeOnUnstake")}
+                >
                   Fee on unstake
                 </PillButton>
 
@@ -612,12 +640,19 @@ export default function CreatePoolCard({
             <div className={"mt-3 rounded-2xl border border-white/10 bg-black/25 p-3" + (feeDisabled ? " opacity-60" : "")}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-[11px] uppercase tracking-wide text-white/60">Creator fee percent</div>
-                <div className="text-[12px] font-semibold text-white/85">{feeDisabled ? "—" : `${clampInt(creatorFeePct, 0, 10)}%`}</div>
+                <div className="text-[12px] font-semibold text-white/85">
+                  {feeDisabled ? "—" : `${clampInt(creatorFeePct, 0, 10)}%`}
+                </div>
               </div>
 
               <div className="mt-2 flex flex-wrap gap-2">
                 {[0, 1, 2, 5, 10].map((p) => (
-                  <ChipButton key={p} disabled={feeDisabled} active={!feeDisabled && creatorFeePct === p} onClick={() => setCreatorFeePct(p)}>
+                  <ChipButton
+                    key={p}
+                    disabled={feeDisabled}
+                    active={!feeDisabled && creatorFeePct === p}
+                    onClick={() => setCreatorFeePct(p)}
+                  >
                     {p === 0 ? "0%" : `${p}%`}
                   </ChipButton>
                 ))}
@@ -676,7 +711,9 @@ export default function CreatePoolCard({
           )}
 
           <div className="text-[11px] text-white/70 space-y-1">
-            {(msg || txErr) && <div className={txErr ? "text-rose-300" : "text-white/70"}>{msg || getErrText(txErr)}</div>}
+            {(msg || txErr) && (
+              <div className={txErr ? "text-rose-300" : "text-white/70"}>{msg || getErrText(txErr)}</div>
+            )}
 
             {txHash && (
               <div className="text-white/70">
@@ -692,7 +729,9 @@ export default function CreatePoolCard({
               </div>
             )}
 
-            {txMined && <div className="text-emerald-300">Confirmed ✔ Pool created. Funding modal should open automatically.</div>}
+            {txMined && (
+              <div className="text-emerald-300">Confirmed ✔ Pool created. Funding modal should open automatically.</div>
+            )}
           </div>
         </div>
       </div>
