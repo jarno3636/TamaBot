@@ -181,12 +181,6 @@ function ChipButton({
 /**
  * viem decodeEventLog expects:
  * topics: [] | [signature, ...topics]   (MUTABLE tuple)
- *
- * Receipt logs give: unknown / readonly / any[]
- * We must:
- * - validate array
- * - ensure non-empty
- * - return a MUTABLE tuple type: [Hex, ...Hex[]]
  */
 function asTopicsTuple(topics: unknown): [Hex, ...Hex[]] | null {
   if (!Array.isArray(topics)) return null;
@@ -213,15 +207,16 @@ function extractPoolCreatedFromReceipt(params: {
     if (!topicsTuple) continue;
 
     try {
+      // ✅ FIX: viem types decodeEventLog as "unknown" unless ABI is strongly typed.
       const decoded = decodeEventLog({
         abi: (CONFIG_STAKING_FACTORY as any).abi,
         data: log.data as Hex,
         topics: topicsTuple,
-      });
+      }) as any;
 
-      if (decoded.eventName !== "PoolCreated") continue;
+      if (decoded?.eventName !== "PoolCreated") continue;
 
-      const args: any = decoded.args ?? {};
+      const args: any = decoded?.args ?? {};
       const pool = args.pool;
       const creator = args.creator;
       const nft = args.nft;
