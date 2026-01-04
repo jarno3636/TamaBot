@@ -4,21 +4,20 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useMemo, useRef, useState } from "react";
 
 type MintCard = { tokenId: string; image: string | null };
+
 type ApiResp =
-  | { ok: true; cards: MintCard[]; warning?: string; rpcUrl?: string; latest?: string; scanned?: string }
-  | { ok: false; error: string; hint?: string };
+  | { ok: true; cards: MintCard[]; cached?: boolean; stale?: boolean; note?: string }
+  | { ok: false; error: string };
 
 export default function CollectionPreview() {
   const title = useMemo(() => "Recently Minted", []);
   const [loading, setLoading] = useState(false);
   const [cards, setCards] = useState<MintCard[]>([]);
   const [error, setError] = useState("");
-  const [warning, setWarning] = useState("");
+  const [note, setNote] = useState<string>("");
 
-  // popup viewer
   const [active, setActive] = useState<MintCard | null>(null);
 
-  // prevent overlapping requests
   const inFlight = useRef<AbortController | null>(null);
 
   async function refresh() {
@@ -26,9 +25,8 @@ export default function CollectionPreview() {
 
     setLoading(true);
     setError("");
-    setWarning("");
+    setNote("");
 
-    // abort any previous request
     if (inFlight.current) {
       inFlight.current.abort();
       inFlight.current = null;
@@ -37,7 +35,7 @@ export default function CollectionPreview() {
     const controller = new AbortController();
     inFlight.current = controller;
 
-    // Client timeout (UI) — server route has its own longer internal timeouts too
+    // Slightly longer; server now also protects itself
     const timeout = setTimeout(() => controller.abort(), 25_000);
 
     try {
@@ -47,38 +45,22 @@ export default function CollectionPreview() {
         signal: controller.signal,
       });
 
-      const text = await res.text();
+      const json = (await res.json()) as ApiResp;
 
-      let json: ApiResp;
-      try {
-        json = JSON.parse(text);
-      } catch {
-        throw new Error(`Bad response: ${text.slice(0, 240)}`);
-      }
-
-      if (!res.ok || !json || (json as any).ok === false) {
-        const msg =
-          (json as any)?.error ||
-          `API ${res.status}: ${text.slice(0, 240)}`;
+      if (!res.ok || !json.ok) {
+        const msg = (json as any)?.error || `API ${res.status}`;
         throw new Error(msg);
       }
 
-      const ok = json as Extract<ApiResp, { ok: true }>;
-      const next = Array.isArray(ok.cards) ? ok.cards : [];
-
-      setCards(next);
-
-      if (ok.warning) setWarning(ok.warning);
-      if (next.length < 4) {
-        setWarning(
-          `Loaded ${next.length}/4. Try Refresh again — RPCs can temporarily rate-limit log reads.`
-        );
-      }
+      setCards(Array.isArray(json.cards) ? json.cards : []);
+      if (json.note) setNote(json.note);
+      if (json.stale) setNote((prev) => (prev ? prev : "Showing last known results (RPC busy)."));
+      if (json.cards.length < 4) setNote((prev) => prev || `Loaded ${json.cards.length}/4 (recent mints not found in scan window).`);
     } catch (e: any) {
       if (e?.name === "AbortError") {
-        setError("Request timed out. Tap Refresh again (RPC may be slow/rate-limited).");
+        setError("Request timed out. Try again in a few seconds (Base RPC busy).");
       } else {
-        setError(e?.message || "HTTP request failed.");
+        setError(e?.message || "Request failed.");
       }
     } finally {
       clearTimeout(timeout);
@@ -89,10 +71,9 @@ export default function CollectionPreview() {
 
   return (
     <section className="w-full flex justify-center">
-      <div className="glass glass-pad w-full max-w-md sm:max-w-lg md:max-w-2xl relative">
-        {/* Header */}
+      <div className="glass glass-pad w-full max-w-md sm:max-w-lg md:max-w-2xl">
         <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0 w-full">
+          <div className="min-w-0">
             <h2 className="text-center font-extrabold tracking-tight text-3xl md:text-4xl bg-gradient-to-r from-cyan-300 via-blue-400 to-fuchsia-500 bg-clip-text text-transparent">
               {title}
             </h2>
@@ -106,7 +87,7 @@ export default function CollectionPreview() {
             type="button"
             onClick={() => void refresh()}
             disabled={loading}
-            className="shrink-0 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-white/80 hover:bg-white/10 disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/60 active:scale-95 transition-transform"
+            className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-white/80 hover:bg-white/10 disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/60 active:scale-95 transition-transform"
           >
             {loading ? (
               <span className="h-3 w-3 animate-spin rounded-full border border-white/50 border-t-transparent" />
@@ -117,36 +98,27 @@ export default function CollectionPreview() {
           </button>
         </div>
 
-        {/* Sticky message box that never “goes off screen” */}
-        <AnimatePresence>
-          {(error || warning) && (
-            <motion.div
-              initial={{ opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              className="mt-3 rounded-2xl border border-white/10 bg-black/30 p-3"
-            >
-              {error && (
-                <div className="text-[11px] text-rose-300 whitespace-pre-wrap break-words max-h-[140px] overflow-auto">
-                  {error}
-                </div>
-              )}
-              {!error && warning && (
-                <div className="text-[11px] text-amber-200 whitespace-pre-wrap break-words max-h-[140px] overflow-auto">
-                  {warning}
-                </div>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {note && (
+          <div className="mt-3 rounded-xl border border-emerald-400/25 bg-emerald-500/10 p-3 text-[11px] text-emerald-200">
+            {note}
+          </div>
+        )}
 
-        {!loading && cards.length === 0 && !error && (
+        {error && (
+          <div className="mt-3 rounded-xl border border-white/10 bg-black/30 p-3">
+            <div className="text-[11px] font-semibold text-rose-300">Error</div>
+            <div className="mt-1 max-h-[120px] overflow-auto whitespace-pre-wrap break-words text-[11px] text-rose-200/90">
+              {error}
+            </div>
+          </div>
+        )}
+
+        {!loading && !error && cards.length === 0 && (
           <p className="mt-3 text-center text-sm text-white/70">
-            Tap <span className="font-semibold text-white/80">Refresh</span> to load the last 4 mints.
+            Click <span className="font-semibold text-white/80">Refresh</span> to load the last 4 mints.
           </p>
         )}
 
-        {/* Grid */}
         {cards.length > 0 && (
           <div className="mt-5 flex flex-wrap -mx-2 min-w-0">
             {cards.map((bot) => (
@@ -184,7 +156,6 @@ export default function CollectionPreview() {
                     </div>
                   </div>
 
-                  {/* ✅ Green FID pill UNDER the image */}
                   <div className="mt-2 flex justify-center">
                     <span className="inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-200">
                       FID #{bot.tokenId}
@@ -197,10 +168,9 @@ export default function CollectionPreview() {
         )}
 
         <p className="mt-1 text-center text-[11px] text-white/45">
-          Pulled from on-chain mint events and rendered from on-chain tokenURI SVG
+          Pulled from on-chain mint events (Transfer from zero address) and rendered from on-chain tokenURI SVG
         </p>
 
-        {/* Popup */}
         <AnimatePresence>
           {active && (
             <motion.div
