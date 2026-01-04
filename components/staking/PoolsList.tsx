@@ -67,6 +67,34 @@ function safeNumFromUnits(v: bigint, decimals: number) {
   }
 }
 
+function formatDaysHours(hours: number): string {
+  if (!Number.isFinite(hours) || hours <= 0) return "—";
+  const totalHours = Math.floor(hours);
+  const days = Math.floor(totalHours / 24);
+  const remHours = totalHours % 24;
+
+  if (days > 0 && remHours > 0) return `${days}d ${remHours}h`;
+  if (days > 0) return `${days}d`;
+  return `${remHours}h`;
+}
+
+function formatTimeFromSec(sec: number): string {
+  if (!sec || sec <= 0) return "—";
+  try {
+    const d = new Date(sec * 1000);
+    // short + readable, local timezone
+    return new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "2-digit",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(d);
+  } catch {
+    return "—";
+  }
+}
+
 type Tone = "teal" | "emerald" | "amber" | "rose" | "sky" | "purple" | "white";
 
 function toneStyle(tone: Tone): React.CSSProperties {
@@ -464,7 +492,7 @@ export default function PoolsList({
 
             const hoursLeftFromBalance =
               Number.isFinite(rewardBalTokens) && Number.isFinite(rewardRateTokensSec) && rewardRateTokensSec > 0
-                ? (rewardBalTokens / rewardRateTokensSec) / 3600
+                ? rewardBalTokens / rewardRateTokensSec / 3600
                 : NaN;
 
             const myAmt = extra?.myAmount ?? 0n;
@@ -476,15 +504,22 @@ export default function PoolsList({
             const enterHref = `/staking?pool=${pool.pool}&nft=${pool.nft}&rewardToken=${pool.rewardToken}`;
             const card = poolCardStyle(pool.pool);
 
+            // Share text: include schedule time + FULL reward token address
+            const startStr = pool.startTime ? formatTimeFromSec(pool.startTime) : "TBD";
+            const endStr = pool.endTime ? formatTimeFromSec(pool.endTime) : "No end";
+            const shareText =
+              `NFT staking pool on Base 🚀\n\n` +
+              `Pool: ${pool.pool}\n` +
+              `NFT: ${pool.nft}\n` +
+              `Reward token: ${pool.rewardToken}\n` + // ✅ FULL address
+              `Start: ${startStr}\n` +
+              `End: ${endStr}\n\n` +
+              `Stake + earn rewards here:`;
+
             return (
               <div key={pool.pool} className="relative overflow-hidden rounded-3xl border p-4 md:p-5" style={{ ...card.outer }}>
-                {/* left accent bar */}
                 <div aria-hidden className="pointer-events-none absolute left-0 top-0 bottom-0 w-[6px] opacity-90" style={card.accent} />
-
-                {/* color wash */}
                 <div aria-hidden className="pointer-events-none absolute inset-0 opacity-95" style={card.wash} />
-
-                {/* shine strip */}
                 <div
                   aria-hidden
                   className="pointer-events-none absolute -top-16 left-0 right-0 h-32 opacity-50"
@@ -511,6 +546,15 @@ export default function PoolsList({
                         <span>Reward: {rewardLabel}</span>
                         <span>Staked: {pool.totalStaked.toString()}</span>
                       </div>
+
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-white/60">
+                        <span>
+                          Start: <span className="text-white/75">{startStr}</span>
+                        </span>
+                        <span>
+                          End: <span className="text-white/75">{endStr}</span>
+                        </span>
+                      </div>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 justify-start md:justify-end">
@@ -518,7 +562,6 @@ export default function PoolsList({
                         Basescan ↗
                       </ActionBtn>
 
-                      {/* If onEnterPool provided -> open modal. Otherwise -> navigate */}
                       <ActionBtn
                         tone="teal"
                         onClick={onEnterPool ? () => onEnterPool(pool.pool) : undefined}
@@ -546,7 +589,7 @@ export default function PoolsList({
                       <div className="mt-1 text-[11px] text-white/55">
                         Est. left:{" "}
                         <span className="text-white/75 font-medium">
-                          {extra && Number.isFinite(hoursLeftFromBalance) ? `${fmtNumber(hoursLeftFromBalance, 1)} hr` : "—"}
+                          {extra && Number.isFinite(hoursLeftFromBalance) ? formatDaysHours(hoursLeftFromBalance) : "—"}
                         </span>
                       </div>
                     </div>
@@ -587,14 +630,7 @@ export default function PoolsList({
                             tone="purple"
                             onClick={async () => {
                               const url = getAppUrl(enterHref);
-                              const text =
-                                `I just launched an NFT staking pool on Base 🚀\n\n` +
-                                `Pool: ${shortenAddress(pool.pool, 4)}\n` +
-                                `NFT: ${shortenAddress(pool.nft, 4)}\n` +
-                                `Reward token: ${shortenAddress(pool.rewardToken, 4)}\n\n` +
-                                `Stake + earn rewards here:`;
-
-                              await smartShare({ text, url });
+                              await smartShare({ text: shareText, url });
                             }}
                           >
                             Share
@@ -604,13 +640,7 @@ export default function PoolsList({
                             tone="sky"
                             onClick={() => {
                               const url = getAppUrl(enterHref);
-                              const text =
-                                `I just launched an NFT staking pool on Base 🚀\n\n` +
-                                `Pool: ${shortenAddress(pool.pool, 4)}\n` +
-                                `NFT: ${shortenAddress(pool.nft, 4)}\n` +
-                                `Reward token: ${shortenAddress(pool.rewardToken, 4)}\n\n` +
-                                `Stake + earn rewards here:`;
-                              const shareUrl = `https://x.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
+                              const shareUrl = `https://x.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(url)}`;
                               window.open(shareUrl, "_blank", "noopener,noreferrer");
                             }}
                           >
