@@ -2,9 +2,9 @@
 
 import { motion } from "framer-motion";
 import { useCallback, useMemo, useState } from "react";
-import { usePublicClient } from "wagmi";
+import { createPublicClient, http, zeroAddress } from "viem";
 import { base } from "viem/chains";
-import { zeroAddress } from "viem";
+import { usePublicClient } from "wagmi";
 import { BASEBOTS } from "@/lib/abi";
 
 const ERC721_TRANSFER_EVENT = {
@@ -29,8 +29,24 @@ const ERC721_TOKENURI_ABI = [
 
 type MintCard = {
   tokenId: bigint;
-  svg: string | null; // raw <svg ...>
+  svg: string | null;
 };
+
+function getErrText(e: unknown): string {
+  if (!e) return "Unknown error";
+  if (typeof e === "string") return e;
+  if (typeof e === "object") {
+    const anyE = e as any;
+    if (typeof anyE.shortMessage === "string" && anyE.shortMessage) return anyE.shortMessage;
+    if (typeof anyE.message === "string" && anyE.message) return anyE.message;
+    if (anyE.cause && typeof anyE.cause.message === "string" && anyE.cause.message) return anyE.cause.message;
+  }
+  try {
+    return String(e);
+  } catch {
+    return "Unknown error";
+  }
+}
 
 function safeAtob(b64: string): string {
   try {
@@ -43,7 +59,6 @@ function safeAtob(b64: string): string {
 function extractSvgFromTokenUri(tokenUri: string): string | null {
   if (!tokenUri) return null;
 
-  // data:application/json;base64,<base64json>
   if (tokenUri.startsWith("data:application/json;base64,")) {
     const b64 = tokenUri.slice("data:application/json;base64,".length);
     const jsonStr = safeAtob(b64);
@@ -52,12 +67,10 @@ function extractSvgFromTokenUri(tokenUri: string): string | null {
     try {
       const meta = JSON.parse(jsonStr);
 
-      // image_data as raw SVG
       if (typeof meta?.image_data === "string" && meta.image_data.trim().startsWith("<svg")) {
         return meta.image_data;
       }
 
-      // image as data svg
       if (typeof meta?.image === "string") {
         const img: string = meta.image;
 
@@ -79,7 +92,6 @@ function extractSvgFromTokenUri(tokenUri: string): string | null {
     }
   }
 
-  // Some contracts return plain JSON string
   if (tokenUri.trim().startsWith("{")) {
     try {
       const meta = JSON.parse(tokenUri);
@@ -97,70 +109,89 @@ function extractSvgFromTokenUri(tokenUri: string): string | null {
   return null;
 }
 
-function getErrText(e: unknown): string {
-  if (!e) return "Unknown error";
-  if (typeof e === "string") return e;
-  if (typeof e === "object") {
-    const anyE = e as any;
-    if (typeof anyE.shortMessage === "string" && anyE.shortMessage) return anyE.shortMessage;
-    if (typeof anyE.message === "string" && anyE.message) return anyE.message;
-    if (anyE.cause && typeof anyE.cause.message === "string" && anyE.cause.message) return anyE.cause.message;
+// Small sleep helper for retries
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+// Retry wrapper (RPCs often flake on getLogs)
+async function withRetry<T>(fn: () => Promise<T>, tries = 3): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < tries; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      // backoff: 250ms, 750ms, 1500ms...
+      await sleep(250 + i * 500);
+    }
   }
-  try {
-    return String(e);
-  } catch {
-    return "Unknown error";
-  }
+  throw lastErr;
 }
 
 export default function CollectionPreview({
-  // set your known deployment block to keep scans fast
   deployBlock = 37969324n,
 }: {
   deployBlock?: bigint;
 }) {
-  const pc = usePublicClient({ chainId: base.id });
-
-  const [loading, setLoading] = useState(false);
-  const [cards, setCards] = useState<MintCard[]>([]);
-  const [error, setError] = useState<string>("");
+  // wagmi client (can be flaky for getLogs in some in-app contexts)
+  const wagmiPc = usePublicClient({ chainId: base.id });
 
   const contractAddr = BASEBOTS.address as `0x${string}`;
 
   const title = useMemo(() => "Recently Minted", []);
 
+  const [loading, setLoading] = useState(false);
+  const [cards, setCards] = useState<MintCard[]>([]);
+  const [error, setError] = useState<string>("");
+
+  // Dedicated RPC client (recommended)
+  const rpcUrl = (process.env.NEXT_PUBLIC_BASE_RPC_URL || "").trim();
+  const dedicatedPc = useMemo(() => {
+    if (!rpcUrl) return null;
+    return createPublicClient({
+      chain: base,
+      transport: http(rpcUrl, {
+        // viem will handle fetch; keep it simple
+        timeout: 20_000,
+      }),
+    });
+  }, [rpcUrl]);
+
   const loadRecentMints = useCallback(async () => {
+    const pc = dedicatedPc ?? wagmiPc; // prefer dedicated
     if (!pc) return;
 
     setLoading(true);
     setError("");
 
     try {
-      // Scan backwards from latest in chunks until we find 4 mint Transfer logs (from == zeroAddress)
-      const latest = await pc.getBlockNumber();
+      const latest = await withRetry(() => pc.getBlockNumber(), 3);
 
-      // chunk size: tune as desired
-      const CHUNK = 20_000n;
+      // Use smaller chunks to avoid provider limits
+      const CHUNK = 8_000n;
 
       let toBlock = latest;
       let fromBlock = deployBlock;
 
-      // if deployBlock accidentally higher than latest, clamp
       if (fromBlock > latest) fromBlock = latest;
 
       const found: Array<{ tokenId: bigint; blockNumber: bigint; logIndex: number }> = [];
 
-      // hard cap loops so we never hang
-      for (let tries = 0; tries < 12 && found.length < 4; tries++) {
-        const logs = await pc.getLogs({
-          address: contractAddr,
-          event: ERC721_TRANSFER_EVENT,
-          args: { from: zeroAddress },
-          fromBlock,
-          toBlock,
-        });
+      // hard cap: don’t hang
+      for (let tries = 0; tries < 18 && found.length < 4; tries++) {
+        const logs = await withRetry(
+          () =>
+            pc.getLogs({
+              address: contractAddr,
+              event: ERC721_TRANSFER_EVENT,
+              args: { from: zeroAddress },
+              fromBlock,
+              toBlock,
+            }),
+          3
+        );
 
-        // newest first
         const sortedLogs = [...logs].sort((a, b) => {
           if (a.blockNumber === b.blockNumber) return (b.logIndex ?? 0) - (a.logIndex ?? 0);
           return Number((b.blockNumber ?? 0n) - (a.blockNumber ?? 0n));
@@ -175,16 +206,20 @@ export default function CollectionPreview({
           }
         }
 
+        if (fromBlock === deployBlock) {
+          // if we’re already at deployBlock and still not enough, stop
+          if (toBlock <= deployBlock) break;
+        }
+
         // move window back
         if (fromBlock === 0n) break;
 
         toBlock = fromBlock > 0n ? fromBlock - 1n : 0n;
         const nextFrom = toBlock > CHUNK ? toBlock - CHUNK : 0n;
 
-        // don't go below deployBlock
+        // never go below deployBlock
         fromBlock = nextFrom < deployBlock ? deployBlock : nextFrom;
 
-        // if the window collapses, stop
         if (toBlock < deployBlock) break;
       }
 
@@ -201,15 +236,19 @@ export default function CollectionPreview({
         return;
       }
 
-      const urisRes = await pc.multicall({
-        allowFailure: true,
-        contracts: tokenIds.map((tid) => ({
-          address: contractAddr,
-          abi: ERC721_TOKENURI_ABI,
-          functionName: "tokenURI",
-          args: [tid],
-        })),
-      });
+      const urisRes = await withRetry(
+        () =>
+          pc.multicall({
+            allowFailure: true,
+            contracts: tokenIds.map((tid) => ({
+              address: contractAddr,
+              abi: ERC721_TOKENURI_ABI,
+              functionName: "tokenURI",
+              args: [tid],
+            })),
+          }),
+        3
+      );
 
       const nextCards: MintCard[] = tokenIds.map((tid, i) => {
         const uri = (urisRes as any)[i]?.result as string | undefined;
@@ -220,16 +259,22 @@ export default function CollectionPreview({
       setCards(nextCards);
     } catch (e) {
       console.error("Recently minted load failed", e);
-      setError(getErrText(e));
+
+      // If they didn't set a dedicated RPC, give a helpful hint.
+      const hint =
+        !rpcUrl
+          ? " Tip: set NEXT_PUBLIC_BASE_RPC_URL (mainnet.base.org or Alchemy/QuickNode) — some in-app providers block log queries."
+          : "";
+
+      setError(`${getErrText(e)}.${hint}`);
     } finally {
       setLoading(false);
     }
-  }, [pc, contractAddr, deployBlock]);
+  }, [dedicatedPc, wagmiPc, contractAddr, deployBlock, rpcUrl]);
 
   return (
     <section className="w-full flex justify-center">
       <div className="glass glass-pad w-full max-w-md sm:max-w-lg md:max-w-2xl">
-        {/* Title + Refresh */}
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <h2 className="font-extrabold tracking-tight text-3xl md:text-4xl bg-gradient-to-r from-cyan-300 via-blue-400 to-fuchsia-500 bg-clip-text text-transparent">
@@ -246,6 +291,7 @@ export default function CollectionPreview({
             onClick={() => void loadRecentMints()}
             disabled={loading}
             className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-white/80 hover:bg-white/10 disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/60 active:scale-95 transition-transform"
+            title={!rpcUrl ? "Set NEXT_PUBLIC_BASE_RPC_URL for best reliability" : undefined}
           >
             {loading ? (
               <span className="h-3 w-3 animate-spin rounded-full border border-white/50 border-t-transparent" />
@@ -256,7 +302,6 @@ export default function CollectionPreview({
           </button>
         </div>
 
-        {/* Error / Empty */}
         {error && <p className="mt-4 text-center text-sm text-rose-300 break-words">{error}</p>}
 
         {!loading && !error && cards.length === 0 && (
@@ -265,7 +310,6 @@ export default function CollectionPreview({
           </p>
         )}
 
-        {/* 2x2 grid (flexbox) */}
         {cards.length > 0 && (
           <div className="mt-6 flex flex-wrap -mx-2 min-w-0">
             {cards.map((bot) => (
@@ -280,7 +324,6 @@ export default function CollectionPreview({
                   {bot.svg ? (
                     <div
                       className="w-full h-full p-2 flex items-center justify-center"
-                      // on-chain svg render
                       dangerouslySetInnerHTML={{ __html: bot.svg }}
                     />
                   ) : (
