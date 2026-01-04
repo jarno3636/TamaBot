@@ -168,55 +168,6 @@ type PoolExtra = {
 
 type UsersRowTuple = readonly [bigint, bigint, bigint];
 
-/* ──────────────────────────────────────────────────────────────
- * Alternating per-pool card backgrounds (deterministic by address)
- * ──────────────────────────────────────────────────────────── */
-type CardTheme = "blue" | "amber";
-
-function hashAddrToTheme(addr: string): CardTheme {
-  // simple deterministic hash of the address characters
-  let h = 0;
-  for (let i = 0; i < addr.length; i++) {
-    h = (h * 31 + addr.charCodeAt(i)) >>> 0;
-  }
-  return h % 2 === 0 ? "blue" : "amber";
-}
-
-function poolCardStyle(poolAddr: string): { theme: CardTheme; outer: React.CSSProperties; wash: React.CSSProperties } {
-  const theme = hashAddrToTheme(poolAddr.toLowerCase());
-
-  if (theme === "blue") {
-    return {
-      theme,
-      outer: {
-        borderColor: "rgba(56,189,248,0.22)",
-        background: "linear-gradient(180deg, rgba(2,6,23,0.70), rgba(3,7,18,0.55))",
-        boxShadow:
-          "0 30px 90px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 1px rgba(56,189,248,0.06)",
-      },
-      wash: {
-        background:
-          "radial-gradient(900px 320px at 15% -10%, rgba(56,189,248,0.18), transparent 60%), radial-gradient(900px 360px at 90% 0%, rgba(99,102,241,0.10), transparent 55%), radial-gradient(700px 260px at 30% 120%, rgba(121,255,225,0.08), transparent 60%)",
-      },
-    };
-  }
-
-  // amber theme
-  return {
-    theme,
-    outer: {
-      borderColor: "rgba(251,191,36,0.22)",
-      background: "linear-gradient(180deg, rgba(2,6,23,0.70), rgba(16,10,0,0.18))",
-      boxShadow:
-        "0 30px 90px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 1px rgba(251,191,36,0.06)",
-    },
-    wash: {
-      background:
-        "radial-gradient(900px 320px at 15% -10%, rgba(251,191,36,0.18), transparent 60%), radial-gradient(900px 360px at 90% 0%, rgba(245,158,11,0.10), transparent 55%), radial-gradient(700px 260px at 30% 120%, rgba(56,189,248,0.06), transparent 60%)",
-    },
-  };
-}
-
 export default function PoolsList({
   pools,
   poolsLoading,
@@ -251,7 +202,6 @@ export default function PoolsList({
       const bIsBots = b.nft.toLowerCase() === basebotsNftLower;
       if (aIsBots !== bIsBots) return aIsBots ? -1 : 1;
 
-      // live-ish first, then upcoming, then closed-ish by endTime (best-effort)
       const bucket = (p: FactoryPoolDetails) => {
         if (!p.startTime) return 1; // upcoming-ish
         if (!p.endTime) return 0; // long-live-ish
@@ -262,14 +212,12 @@ export default function PoolsList({
       const bb = bucket(b);
       if (ba !== bb) return ba - bb;
 
-      // newest startTime first
       return (b.startTime ?? 0) - (a.startTime ?? 0);
     });
 
     return copy;
   }, [pools, basebotsNftLower]);
 
-  // ✅ Key that only changes when pool set changes
   const poolsKey = useMemo(() => sorted.map((p) => p.pool.toLowerCase()).join("|"), [sorted]);
 
   /* ──────────────────────────────────────────────────────────────
@@ -335,7 +283,6 @@ export default function PoolsList({
 
           let myAmount = 0n;
           if (address && userRes) {
-            // ✅ tuple access
             const u = (userRes as any)?.[i]?.result as UsersRowTuple | undefined;
             myAmount = u?.[0] ?? 0n;
           }
@@ -355,7 +302,7 @@ export default function PoolsList({
     return () => {
       cancelled = true;
     };
-  }, [pc, poolsKey, address]); // ✅ no `sorted` / no `now`
+  }, [pc, poolsKey, address]);
 
   return (
     <section className="glass glass-pad relative overflow-hidden rounded-3xl border border-white/10 bg-[#020617]/85 space-y-4">
@@ -403,8 +350,8 @@ export default function PoolsList({
       )}
 
       {sorted.length > 0 && (
-        <div className="relative grid gap-3">
-          {sorted.map((pool) => {
+        <div className="relative grid gap-4">
+          {sorted.map((pool, idx) => {
             const poolKey = pool.pool.toLowerCase();
             const extra = extraByPool[poolKey];
 
@@ -443,33 +390,49 @@ export default function PoolsList({
 
             const enterHref = `/staking?pool=${pool.pool}&nft=${pool.nft}&rewardToken=${pool.rewardToken}`;
 
-            // ✅ Deterministic blue/amber card background per pool
-            const card = poolCardStyle(pool.pool);
+            // ✅ INLINE alternating card backgrounds (strong + visible)
+            const isBlue = idx % 2 === 0;
+
+            const cardBorder = isBlue ? "rgba(56,189,248,0.30)" : "rgba(251,191,36,0.30)";
+            const cardGlow = isBlue ? "rgba(56,189,248,0.22)" : "rgba(251,191,36,0.18)";
+            const cardBg = isBlue
+              ? "linear-gradient(180deg, rgba(2,6,23,0.78), rgba(2,20,45,0.55))"
+              : "linear-gradient(180deg, rgba(2,6,23,0.78), rgba(45,25,0,0.42))";
+
+            const washBg = isBlue
+              ? "radial-gradient(900px 340px at 10% 0%, rgba(56,189,248,0.28), transparent 62%), radial-gradient(900px 380px at 90% 0%, rgba(99,102,241,0.16), transparent 58%)"
+              : "radial-gradient(900px 340px at 10% 0%, rgba(251,191,36,0.26), transparent 62%), radial-gradient(900px 380px at 90% 0%, rgba(245,158,11,0.16), transparent 58%)";
 
             return (
               <div
                 key={pool.pool}
                 className="relative overflow-hidden rounded-3xl border p-4 md:p-5"
                 style={{
-                  ...card.outer,
-                  // small lift for each card; feels “separate”
-                  transform: "translateZ(0)",
+                  borderColor: isBasebotsNft ? "rgba(121,255,225,0.38)" : cardBorder,
+                  background: cardBg,
+                  boxShadow: `0 28px 80px rgba(0,0,0,0.70), 0 0 0 1px rgba(255,255,255,0.05), 0 0 26px ${cardGlow}`,
                 }}
               >
+                {/* inline wash for obvious color */}
                 <div
                   aria-hidden
-                  className="pointer-events-none absolute inset-0 opacity-95"
-                  style={card.wash}
+                  className="pointer-events-none absolute inset-0"
+                  style={{
+                    background: isBasebotsNft
+                      ? "radial-gradient(900px 340px at 10% 0%, rgba(121,255,225,0.24), transparent 62%), radial-gradient(900px 380px at 90% 0%, rgba(56,189,248,0.16), transparent 58%)"
+                      : washBg,
+                    opacity: 0.95,
+                  }}
                 />
 
-                {/* extra subtle “shine” strip */}
+                {/* shine strip */}
                 <div
                   aria-hidden
-                  className="pointer-events-none absolute -top-16 left-0 right-0 h-32 opacity-60"
+                  className="pointer-events-none absolute -top-14 left-[-20%] right-[-20%] h-28"
                   style={{
-                    background:
-                      "linear-gradient(90deg, transparent, rgba(255,255,255,0.10), transparent)",
-                    transform: "rotate(-6deg)",
+                    background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.14), transparent)",
+                    transform: "rotate(-7deg)",
+                    opacity: 0.55,
                   }}
                 />
 
@@ -482,14 +445,11 @@ export default function PoolsList({
                         {isBasebotsNft && <Chip tone="teal">Featured</Chip>}
                         <Chip tone={statusTone}>{status === "live" ? "Live" : status === "upcoming" ? "Upcoming" : "Closed"}</Chip>
 
-                        {/* show theme chip (optional but fun) */}
-                        <Chip tone={card.theme === "blue" ? "sky" : "amber"}>{card.theme === "blue" ? "Blue" : "Amber"}</Chip>
-
                         {isCreator && <Chip tone="amber">Creator</Chip>}
                         {pool.hasMyStake && <Chip tone="emerald">You’re staked</Chip>}
                       </div>
 
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-white/65 font-mono">
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-white/70 font-mono">
                         <span>Pool: {shortenAddress(pool.pool, 4)}</span>
                         <span>NFT: {shortenAddress(pool.nft, 4)}</span>
                         <span>Reward: {rewardLabel}</span>
@@ -515,7 +475,7 @@ export default function PoolsList({
                   </div>
 
                   <div className="mt-3 grid gap-2 md:grid-cols-3">
-                    <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
+                    <div className="rounded-2xl border border-white/12 bg-black/25 p-3">
                       <div className="text-[10px] uppercase tracking-wide text-white/55">Rewards in pool</div>
                       <div className="mt-1 text-sm font-semibold text-white/90">{extra ? `${fmtNumber(rewardBalTokens, 4)} ${rewardLabel}` : "—"}</div>
                       <div className="mt-1 text-[11px] text-white/55">
@@ -526,7 +486,7 @@ export default function PoolsList({
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
+                    <div className="rounded-2xl border border-white/12 bg-black/25 p-3">
                       <div className="text-[10px] uppercase tracking-wide text-white/55">Reward rate</div>
                       <div className="mt-1 text-sm font-semibold text-white/90">{extra ? `${fmtCompact(totalPerHour)} ${rewardLabel}/hr` : "—"}</div>
                       <div className="mt-1 text-[11px] text-white/55">
@@ -537,7 +497,7 @@ export default function PoolsList({
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
+                    <div className="rounded-2xl border border-white/12 bg-black/25 p-3">
                       <div className="text-[10px] uppercase tracking-wide text-white/55">Your estimate</div>
                       <div className="mt-1 text-sm font-semibold text-white/90">
                         {address ? (myAmtNum > 0 ? `${fmtNumber(myEstPerHour, 6)} ${rewardLabel}/hr` : "Not staked") : "Connect wallet"}
@@ -549,7 +509,7 @@ export default function PoolsList({
                   </div>
 
                   {isCreator && (
-                    <div className="mt-3 rounded-2xl border border-white/10 bg-black/25 p-3">
+                    <div className="mt-3 rounded-2xl border border-white/12 bg-black/20 p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="text-[11px] text-white/60">
                           <span className="font-semibold text-white/75">Creator tools:</span> share your pool link so others can stake.
