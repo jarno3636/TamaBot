@@ -1,3 +1,4 @@
+// components/CollectionPreview.tsx
 "use client";
 
 import { motion } from "framer-motion";
@@ -16,7 +17,9 @@ export default function CollectionPreview() {
     setError("");
 
     try {
-      const res = await fetch("/api/basebots/recent?n=4&deployBlock=37969324", {
+      // ✅ no auto-refresh; user clicks button
+      // ✅ no deployBlock by default (it can cause “only 1 found” if too recent)
+      const res = await fetch("/api/basebots/recent?n=4", {
         method: "GET",
         cache: "no-store",
       });
