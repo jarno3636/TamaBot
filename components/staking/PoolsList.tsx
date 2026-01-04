@@ -12,7 +12,7 @@ import { shortenAddress, getAppUrl } from "./stakingUtils";
 
 /* ──────────────────────────────────────────────────────────────
  * Minimal ABIs for extra pool stats
- * ──────────────────────────────────────────────────────────── */
+ * ────────────────────────────────────────────────────────────── */
 const ERC20_BALANCE_ABI = [
   {
     name: "balanceOf",
@@ -40,7 +40,7 @@ const POOL_STATS_ABI = [
 
 /* ──────────────────────────────────────────────────────────────
  * Helpers
- * ──────────────────────────────────────────────────────────── */
+ * ────────────────────────────────────────────────────────────── */
 function nowSec() {
   return Math.floor(Date.now() / 1000);
 }
@@ -168,6 +168,55 @@ type PoolExtra = {
 
 type UsersRowTuple = readonly [bigint, bigint, bigint];
 
+/* ──────────────────────────────────────────────────────────────
+ * VERY OBVIOUS alternating per-pool card backgrounds
+ * ────────────────────────────────────────────────────────────── */
+function hashEven(addr: string) {
+  let h = 0;
+  for (let i = 0; i < addr.length; i++) h = (h * 33 + addr.charCodeAt(i)) >>> 0;
+  return h % 2 === 0;
+}
+
+function poolCardStyle(poolAddr: string): { isBlue: boolean; outer: React.CSSProperties; wash: React.CSSProperties; accent: React.CSSProperties } {
+  const isBlue = hashEven(poolAddr.toLowerCase());
+
+  if (isBlue) {
+    return {
+      isBlue,
+      outer: {
+        borderColor: "rgba(56,189,248,0.32)",
+        backgroundColor: "rgba(2, 18, 34, 0.92)", // <- OBVIOUS
+        backgroundImage: "linear-gradient(180deg, rgba(2,18,34,0.92), rgba(2,6,23,0.78))",
+        boxShadow: "0 30px 90px rgba(0,0,0,0.60), 0 0 0 1px rgba(56,189,248,0.10)",
+      },
+      wash: {
+        background:
+          "radial-gradient(900px 320px at 20% -10%, rgba(56,189,248,0.28), transparent 60%), radial-gradient(700px 260px at 90% 10%, rgba(99,102,241,0.16), transparent 60%)",
+      },
+      accent: {
+        background: "linear-gradient(180deg, rgba(56,189,248,0.9), rgba(121,255,225,0.35))",
+      },
+    };
+  }
+
+  return {
+    isBlue,
+    outer: {
+      borderColor: "rgba(251,191,36,0.32)",
+      backgroundColor: "rgba(34, 18, 2, 0.92)", // <- OBVIOUS
+      backgroundImage: "linear-gradient(180deg, rgba(34,18,2,0.92), rgba(2,6,23,0.78))",
+      boxShadow: "0 30px 90px rgba(0,0,0,0.60), 0 0 0 1px rgba(251,191,36,0.10)",
+    },
+    wash: {
+      background:
+        "radial-gradient(900px 320px at 20% -10%, rgba(251,191,36,0.26), transparent 60%), radial-gradient(700px 260px at 90% 10%, rgba(245,158,11,0.16), transparent 60%)",
+    },
+    accent: {
+      background: "linear-gradient(180deg, rgba(251,191,36,0.9), rgba(245,158,11,0.35))",
+    },
+  };
+}
+
 export default function PoolsList({
   pools,
   poolsLoading,
@@ -189,40 +238,22 @@ export default function PoolsList({
 }) {
   const pc = usePublicClient({ chainId: base.id });
 
-  // ok to use now for UI-only status labels; do NOT let it drive fetches
   const now = nowSec();
   const basebotsNftLower = basebotsNftAddress.toLowerCase();
 
-  // ✅ STABLE sorting (does NOT depend on `now`)
   const sorted = useMemo(() => {
     const copy = [...pools];
-
     copy.sort((a, b) => {
       const aIsBots = a.nft.toLowerCase() === basebotsNftLower;
       const bIsBots = b.nft.toLowerCase() === basebotsNftLower;
       if (aIsBots !== bIsBots) return aIsBots ? -1 : 1;
-
-      const bucket = (p: FactoryPoolDetails) => {
-        if (!p.startTime) return 1; // upcoming-ish
-        if (!p.endTime) return 0; // long-live-ish
-        return 0;
-      };
-
-      const ba = bucket(a);
-      const bb = bucket(b);
-      if (ba !== bb) return ba - bb;
-
       return (b.startTime ?? 0) - (a.startTime ?? 0);
     });
-
     return copy;
   }, [pools, basebotsNftLower]);
 
   const poolsKey = useMemo(() => sorted.map((p) => p.pool.toLowerCase()).join("|"), [sorted]);
 
-  /* ──────────────────────────────────────────────────────────────
-   * Extra stats: reward balance + rewardRate + my amount
-   * ──────────────────────────────────────────────────────────── */
   const [extraByPool, setExtraByPool] = useState<Record<string, PoolExtra>>({});
   const [extraLoading, setExtraLoading] = useState(false);
 
@@ -247,7 +278,6 @@ export default function PoolsList({
             })),
             allowFailure: true,
           }),
-
           pc.multicall({
             contracts: sorted.map((p) => ({
               address: p.rewardToken,
@@ -257,7 +287,6 @@ export default function PoolsList({
             })),
             allowFailure: true,
           }),
-
           address
             ? pc.multicall({
                 contracts: poolAddrs.map((addr) => ({
@@ -322,7 +351,6 @@ export default function PoolsList({
             <Chip tone="white">{sorted.length} total</Chip>
             {extraLoading && <Chip tone="sky">loading stats…</Chip>}
           </div>
-
           <p className="mt-1 text-[11px] md:text-xs text-white/60 max-w-[760px]">
             Enter any pool if you hold the NFT collection. Creators can fund rewards and share the pool link.
           </p>
@@ -351,7 +379,7 @@ export default function PoolsList({
 
       {sorted.length > 0 && (
         <div className="relative grid gap-4">
-          {sorted.map((pool, idx) => {
+          {sorted.map((pool) => {
             const poolKey = pool.pool.toLowerCase();
             const extra = extraByPool[poolKey];
 
@@ -389,50 +417,31 @@ export default function PoolsList({
             const statusTone: Tone = status === "live" ? "emerald" : status === "upcoming" ? "sky" : "rose";
 
             const enterHref = `/staking?pool=${pool.pool}&nft=${pool.nft}&rewardToken=${pool.rewardToken}`;
-
-            // ✅ INLINE alternating card backgrounds (strong + visible)
-            const isBlue = idx % 2 === 0;
-
-            const cardBorder = isBlue ? "rgba(56,189,248,0.30)" : "rgba(251,191,36,0.30)";
-            const cardGlow = isBlue ? "rgba(56,189,248,0.22)" : "rgba(251,191,36,0.18)";
-            const cardBg = isBlue
-              ? "linear-gradient(180deg, rgba(2,6,23,0.78), rgba(2,20,45,0.55))"
-              : "linear-gradient(180deg, rgba(2,6,23,0.78), rgba(45,25,0,0.42))";
-
-            const washBg = isBlue
-              ? "radial-gradient(900px 340px at 10% 0%, rgba(56,189,248,0.28), transparent 62%), radial-gradient(900px 380px at 90% 0%, rgba(99,102,241,0.16), transparent 58%)"
-              : "radial-gradient(900px 340px at 10% 0%, rgba(251,191,36,0.26), transparent 62%), radial-gradient(900px 380px at 90% 0%, rgba(245,158,11,0.16), transparent 58%)";
+            const card = poolCardStyle(pool.pool);
 
             return (
               <div
                 key={pool.pool}
                 className="relative overflow-hidden rounded-3xl border p-4 md:p-5"
-                style={{
-                  borderColor: isBasebotsNft ? "rgba(121,255,225,0.38)" : cardBorder,
-                  background: cardBg,
-                  boxShadow: `0 28px 80px rgba(0,0,0,0.70), 0 0 0 1px rgba(255,255,255,0.05), 0 0 26px ${cardGlow}`,
-                }}
+                style={{ ...card.outer }}
               >
-                {/* inline wash for obvious color */}
+                {/* left accent bar */}
                 <div
                   aria-hidden
-                  className="pointer-events-none absolute inset-0"
-                  style={{
-                    background: isBasebotsNft
-                      ? "radial-gradient(900px 340px at 10% 0%, rgba(121,255,225,0.24), transparent 62%), radial-gradient(900px 380px at 90% 0%, rgba(56,189,248,0.16), transparent 58%)"
-                      : washBg,
-                    opacity: 0.95,
-                  }}
+                  className="pointer-events-none absolute left-0 top-0 bottom-0 w-[6px] opacity-90"
+                  style={card.accent}
                 />
+
+                {/* color wash */}
+                <div aria-hidden className="pointer-events-none absolute inset-0 opacity-95" style={card.wash} />
 
                 {/* shine strip */}
                 <div
                   aria-hidden
-                  className="pointer-events-none absolute -top-14 left-[-20%] right-[-20%] h-28"
+                  className="pointer-events-none absolute -top-16 left-0 right-0 h-32 opacity-50"
                   style={{
                     background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.14), transparent)",
-                    transform: "rotate(-7deg)",
-                    opacity: 0.55,
+                    transform: "rotate(-6deg)",
                   }}
                 />
 
@@ -441,10 +450,8 @@ export default function PoolsList({
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-semibold text-white/90">{isBasebotsNft ? "Basebots NFT Pool" : "NFT Pool"}</span>
-
                         {isBasebotsNft && <Chip tone="teal">Featured</Chip>}
                         <Chip tone={statusTone}>{status === "live" ? "Live" : status === "upcoming" ? "Upcoming" : "Closed"}</Chip>
-
                         {isCreator && <Chip tone="amber">Creator</Chip>}
                         {pool.hasMyStake && <Chip tone="emerald">You’re staked</Chip>}
                       </div>
@@ -475,9 +482,11 @@ export default function PoolsList({
                   </div>
 
                   <div className="mt-3 grid gap-2 md:grid-cols-3">
-                    <div className="rounded-2xl border border-white/12 bg-black/25 p-3">
+                    <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
                       <div className="text-[10px] uppercase tracking-wide text-white/55">Rewards in pool</div>
-                      <div className="mt-1 text-sm font-semibold text-white/90">{extra ? `${fmtNumber(rewardBalTokens, 4)} ${rewardLabel}` : "—"}</div>
+                      <div className="mt-1 text-sm font-semibold text-white/90">
+                        {extra ? `${fmtNumber(rewardBalTokens, 4)} ${rewardLabel}` : "—"}
+                      </div>
                       <div className="mt-1 text-[11px] text-white/55">
                         Est. left:{" "}
                         <span className="text-white/75 font-medium">
@@ -486,9 +495,11 @@ export default function PoolsList({
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border border-white/12 bg-black/25 p-3">
+                    <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
                       <div className="text-[10px] uppercase tracking-wide text-white/55">Reward rate</div>
-                      <div className="mt-1 text-sm font-semibold text-white/90">{extra ? `${fmtCompact(totalPerHour)} ${rewardLabel}/hr` : "—"}</div>
+                      <div className="mt-1 text-sm font-semibold text-white/90">
+                        {extra ? `${fmtCompact(totalPerHour)} ${rewardLabel}/hr` : "—"}
+                      </div>
                       <div className="mt-1 text-[11px] text-white/55">
                         Per NFT/hr:{" "}
                         <span className="text-white/75 font-medium">
@@ -497,7 +508,7 @@ export default function PoolsList({
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border border-white/12 bg-black/25 p-3">
+                    <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
                       <div className="text-[10px] uppercase tracking-wide text-white/55">Your estimate</div>
                       <div className="mt-1 text-sm font-semibold text-white/90">
                         {address ? (myAmtNum > 0 ? `${fmtNumber(myEstPerHour, 6)} ${rewardLabel}/hr` : "Not staked") : "Connect wallet"}
@@ -509,7 +520,7 @@ export default function PoolsList({
                   </div>
 
                   {isCreator && (
-                    <div className="mt-3 rounded-2xl border border-white/12 bg-black/20 p-3">
+                    <div className="mt-3 rounded-2xl border border-white/10 bg-black/20 p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="text-[11px] text-white/60">
                           <span className="font-semibold text-white/75">Creator tools:</span> share your pool link so others can stake.
