@@ -1,17 +1,22 @@
+// app/api/basebots/recent/route.ts
 import { NextResponse } from "next/server";
 import { createPublicClient, http } from "viem";
 import { base } from "viem/chains";
+import { zeroAddress } from "viem";
 import { BASEBOTS } from "@/lib/abi";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const MINTED_EVENT = {
+// ✅ Canonical mint signal for ERC721:
+// Transfer(from = 0x0, to = someone, tokenId = minted id)
+const TRANSFER_EVENT = {
   type: "event",
-  name: "Minted",
+  name: "Transfer",
   inputs: [
-    { indexed: true, name: "minter", type: "address" },
-    { indexed: true, name: "fid", type: "uint256" },
+    { indexed: true, name: "from", type: "address" },
+    { indexed: true, name: "to", type: "address" },
+    { indexed: true, name: "tokenId", type: "uint256" },
   ],
 } as const;
 
@@ -72,29 +77,57 @@ function extractSvgFromTokenUri(tokenUri: string): string | null {
     }
   }
 
+  // If your contract ever returns raw JSON (not base64)
+  if (tokenUri.trim().startsWith("{")) {
+    try {
+      const meta = JSON.parse(tokenUri);
+      if (typeof meta?.image_data === "string" && meta.image_data.trim().includes("<svg")) return meta.image_data;
+
+      if (typeof meta?.image === "string") {
+        const img: string = meta.image;
+        if (img.startsWith("data:image/svg+xml;base64,")) {
+          const svgB64 = img.slice("data:image/svg+xml;base64,".length);
+          const svg = safeB64ToUtf8(svgB64);
+          return svg.includes("<svg") ? svg : null;
+        }
+        if (img.startsWith("data:image/svg+xml;utf8,")) {
+          const svg = decodeURIComponent(img.slice("data:image/svg+xml;utf8,".length));
+          return svg.includes("<svg") ? svg : null;
+        }
+      }
+    } catch {
+      return null;
+    }
+  }
+
   return null;
 }
 
 // Make it “image-like” + force it to scale correctly
 function svgToDataUrl(svg: string) {
+  let s = svg;
+
   // ensure xmlns exists
-  let s = svg.includes('xmlns="http://www.w3.org/2000/svg"')
-    ? svg
-    : svg.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"');
+  if (!s.includes('xmlns="http://www.w3.org/2000/svg"')) {
+    s = s.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"');
+  }
 
-  // force scaling if the svg is missing sizing
-  if (!/width=/.test(s)) s = s.replace("<svg", '<svg width="100%"');
-  if (!/height=/.test(s)) s = s.replace("<svg", '<svg height="100%"');
-  if (!/preserveAspectRatio=/.test(s)) s = s.replace("<svg", '<svg preserveAspectRatio="xMidYMid meet"');
+  // helpful scaling hints if missing
+  if (!/preserveAspectRatio=/.test(s)) {
+    s = s.replace("<svg", '<svg preserveAspectRatio="xMidYMid meet"');
+  }
 
-  // encode into a data URL
+  // Encode into a data URL
   return `data:image/svg+xml;utf8,${encodeURIComponent(s)}`;
 }
 
 function getRpcList() {
   const env = (process.env.BASE_RPC_URLS || "").trim();
   const list = env
-    ? env.split(",").map((s) => s.trim()).filter(Boolean)
+    ? env
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
     : [process.env.BASE_RPC_URL || "", "https://mainnet.base.org", "https://base.publicnode.com"]
         .map((s) => s.trim())
         .filter(Boolean);
@@ -131,8 +164,9 @@ export async function GET(req: Request) {
     );
   }
 
-  const CHUNK = 4_000n;
-  const MAX_LOOPS = 35;
+  // ✅ bigger scan window so you actually find 4 mints
+  const CHUNK = 20_000n;
+  const MAX_LOOPS = 60;
 
   let lastErr: any = null;
 
@@ -149,14 +183,16 @@ export async function GET(req: Request) {
       let fromBlock = toBlock > CHUNK ? toBlock - CHUNK : 0n;
       if (fromBlock < deployBlock) fromBlock = deployBlock;
 
-      const found: Array<{ fid: bigint; blockNumber: bigint; logIndex: number }> = [];
+      const found: Array<{ tokenId: bigint; blockNumber: bigint; logIndex: number }> = [];
 
       for (let loop = 0; loop < MAX_LOOPS && found.length < n; loop++) {
+        // ✅ pull only mints: Transfer(from=0x0)
         const logs = await tryWith(
           () =>
             pc.getLogs({
               address: contract,
-              event: MINTED_EVENT,
+              event: TRANSFER_EVENT,
+              args: { from: zeroAddress },
               fromBlock,
               toBlock,
             }),
@@ -169,10 +205,11 @@ export async function GET(req: Request) {
         });
 
         for (const l of logs) {
-          const fid = (l.args as any)?.fid as bigint | undefined;
-          if (fid === undefined) continue;
-          if (!found.some((x) => x.fid === fid)) {
-            found.push({ fid, blockNumber: l.blockNumber!, logIndex: l.logIndex ?? 0 });
+          const tokenId = (l.args as any)?.tokenId as bigint | undefined;
+          if (tokenId === undefined) continue;
+
+          if (!found.some((x) => x.tokenId === tokenId)) {
+            found.push({ tokenId, blockNumber: l.blockNumber!, logIndex: l.logIndex ?? 0 });
             if (found.length >= n) break;
           }
         }
@@ -184,6 +221,7 @@ export async function GET(req: Request) {
         fromBlock = nextFrom < deployBlock ? deployBlock : nextFrom;
 
         if (toBlock < deployBlock) break;
+        if (toBlock === 0n && fromBlock === 0n) break;
       }
 
       const tokenIds = found
@@ -192,7 +230,7 @@ export async function GET(req: Request) {
           return Number(b.blockNumber - a.blockNumber);
         })
         .slice(0, n)
-        .map((x) => x.fid);
+        .map((x) => x.tokenId);
 
       const urisRes = await tryWith(
         () =>
