@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /* ────────────────────────────────────────────────────────────── */
-/* Seed pools (instant load, merged with DB + chain scan)         */
+/* Seed pools                                                     */
 /* ────────────────────────────────────────────────────────────── */
 const SEED_POOLS = [
   {
@@ -24,7 +24,13 @@ const SEED_POOLS = [
     rewardToken: "0xc45d7c40c9c65af95d33da5921f787d5cfd3ffcf",
     chainId: 8453,
   },
-];
+].map((p) => ({
+  ...p,
+  pool: p.pool.toLowerCase(),
+  creator: p.creator.toLowerCase(),
+  nft: p.nft.toLowerCase(),
+  rewardToken: p.rewardToken.toLowerCase(),
+}));
 
 /* ────────────────────────────────────────────────────────────── */
 /* Cache + single-flight                                         */
@@ -44,14 +50,24 @@ const POOLS_INFLIGHT: Map<string, Promise<any>> =
 function normalizePools(pools: any[]) {
   const map = new Map<string, any>();
 
-  for (const p of pools) {
+  for (const p of pools ?? []) {
     if (!p?.pool) continue;
-    map.set(p.pool.toLowerCase(), {
+
+    const pool = String(p.pool).toLowerCase();
+    const creator = p.creator ? String(p.creator).toLowerCase() : undefined;
+    const nft = p.nft ? String(p.nft).toLowerCase() : undefined;
+    const rewardToken = p.rewardToken ? String(p.rewardToken).toLowerCase() : undefined;
+
+    if (!pool || !creator || !nft || !rewardToken) continue;
+    if (![pool, creator, nft, rewardToken].every(isAddress)) continue;
+
+    map.set(pool, {
       ...p,
-      pool: p.pool.toLowerCase(),
-      creator: p.creator?.toLowerCase(),
-      nft: p.nft?.toLowerCase(),
-      rewardToken: p.rewardToken?.toLowerCase(),
+      pool,
+      creator,
+      nft,
+      rewardToken,
+      chainId: Number(p.chainId ?? p.chain_id ?? 8453),
     });
   }
 
@@ -66,7 +82,7 @@ async function fetchFromSupabase(creator?: `0x${string}`) {
 
   if (creator) q = q.eq("creator", creator.toLowerCase());
 
-  const { data, error } = await q.limit(500);
+  const { data, error } = await q.order("updated_at", { ascending: false }).limit(500);
   if (error) throw error;
 
   return (data ?? []).map((r) => ({
@@ -79,59 +95,104 @@ async function fetchFromSupabase(creator?: `0x${string}`) {
   }));
 }
 
+async function upsertToSupabaseBestEffort(pools: any[]) {
+  try {
+    const normalized = normalizePools(pools).filter((p) => (p.chainId ?? 8453) === 8453);
+    if (normalized.length === 0) return;
+
+    const rows = normalized.map((p) => ({
+      pool: p.pool,
+      creator: p.creator,
+      nft: p.nft,
+      reward_token: p.rewardToken,
+      chain_id: 8453,
+      updated_at: new Date().toISOString(),
+    }));
+
+    const { error } = await supabaseAdmin.from("pools").upsert(rows, { onConflict: "pool" });
+    if (error) console.warn("[/api/pools] upsert failed:", error.message ?? error);
+  } catch (e: any) {
+    console.warn("[/api/pools] upsert exception:", e?.message ?? e);
+  }
+}
+
 /* ────────────────────────────────────────────────────────────── */
 /* GET                                                           */
 /* ────────────────────────────────────────────────────────────── */
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const creatorParam = searchParams.get("creator");
+  const refreshParam = searchParams.get("refresh"); // <-- NEW
 
   const creator =
     creatorParam && isAddress(creatorParam)
       ? (creatorParam.toLowerCase() as `0x${string}`)
       : undefined;
 
+  if (creatorParam && !creator) {
+    return NextResponse.json(
+      { ok: false, error: `Invalid creator address: ${creatorParam}` },
+      { status: 400 }
+    );
+  }
+
+  const forceScan = refreshParam === "1" || refreshParam === "true"; // <-- NEW
+
+  // If forceScan, bypass cache so Refresh always “does something”
   const cacheKey = `creator=${creator ?? "all"}`;
   const now = Date.now();
 
-  const cached = POOLS_CACHE.get(cacheKey);
-  if (cached && cached.expiresAt > now) {
-    return NextResponse.json({ ok: true, pools: cached.value });
-  }
+  if (!forceScan) {
+    const cached = POOLS_CACHE.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      const res = NextResponse.json({ ok: true, pools: cached.value });
+      res.headers.set("X-Pools-Cache", "HIT");
+      return res;
+    }
 
-  if (POOLS_INFLIGHT.has(cacheKey)) {
-    const pools = await POOLS_INFLIGHT.get(cacheKey)!;
-    return NextResponse.json({ ok: true, pools });
+    const inflight = POOLS_INFLIGHT.get(cacheKey);
+    if (inflight) {
+      const pools = await inflight;
+      const res = NextResponse.json({ ok: true, pools });
+      res.headers.set("X-Pools-Cache", "JOIN");
+      return res;
+    }
   }
 
   const job = (async () => {
     const results: any[] = [];
 
-    /* 1️⃣ Seed pools (instant) */
-    results.push(
-      ...SEED_POOLS.filter((p) =>
-        creator ? p.creator === creator : true
-      )
-    );
+    // 1) Seed pools (instant)
+    results.push(...SEED_POOLS.filter((p) => (creator ? p.creator === creator : true)));
 
-    /* 2️⃣ Supabase */
+    // 2) Supabase (fast)
     try {
       const dbPools = await fetchFromSupabase(creator);
       results.push(...dbPools);
-    } catch (e) {
-      console.warn("[pools] supabase skipped");
+    } catch {
+      console.warn("[/api/pools] supabase read failed; continuing");
     }
 
-    /* 3️⃣ Chain scan fallback */
-    if (results.length === 0) {
+    // 3) Chain scan
+    // ✅ NOW: scan if forced OR if we still have nothing
+    if (forceScan || results.length === 0) {
       const scanned = creator
         ? await fetchPoolsByCreator(creator)
-        : await fetchPoolsByCreator(undefined as any);
+        : // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await fetchPoolsByCreator(undefined as any);
+
       results.push(...scanned);
+
+      // Persist findings so next load is fast
+      void upsertToSupabaseBestEffort([...SEED_POOLS, ...scanned]);
+    } else {
+      // Optional: ensure seeds are in DB
+      void upsertToSupabaseBestEffort(SEED_POOLS);
     }
 
     const normalized = normalizePools(results);
 
+    // Cache
     POOLS_CACHE.set(cacheKey, {
       value: normalized,
       expiresAt: Date.now() + 30_000,
@@ -140,12 +201,15 @@ export async function GET(req: Request) {
     return normalized;
   })();
 
-  POOLS_INFLIGHT.set(cacheKey, job);
+  if (!forceScan) POOLS_INFLIGHT.set(cacheKey, job);
 
   try {
     const pools = await job;
-    return NextResponse.json({ ok: true, pools });
+    const res = NextResponse.json({ ok: true, pools });
+    res.headers.set("X-Pools-Cache", forceScan ? "BYPASS" : "MISS");
+    res.headers.set("Cache-Control", "no-store");
+    return res;
   } finally {
-    POOLS_INFLIGHT.delete(cacheKey);
+    if (!forceScan) POOLS_INFLIGHT.delete(cacheKey);
   }
 }
