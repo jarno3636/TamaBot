@@ -20,6 +20,7 @@ import { CONFIG_STAKING_FACTORY, BASEBOTS_STAKING_POOL, BASEBOTS_NFT } from "@/l
 
 import CreatePoolCard from "@/components/staking/CreatePoolCard";
 import FundPoolModal from "@/components/staking/FundPoolModal";
+import PoolsList from "@/components/staking/PoolsList"; // ✅ make sure this path matches your project
 
 /* ──────────────────────────────────────────────────────────────
  * Types
@@ -51,17 +52,12 @@ export type FundTarget = {
   rewardToken: `0x${string}`;
 };
 
-type PoolExtra = {
-  rewardBal: bigint;
-  rewardRate: bigint;
-};
-
 // viem returns tuples for multi-output functions
 type PoolUserRow = readonly [bigint, bigint, bigint]; // [amount, rewardDebt, pending]
 
 /* ──────────────────────────────────────────────────────────────
  * Helpers
- * ──────────────────────────────────────────────────────────── */
+ * ────────────────────────────────────────────────────────────── */
 function nowSeconds() {
   return Math.floor(Date.now() / 1000);
 }
@@ -88,54 +84,26 @@ function getErrText(e: unknown): string {
   }
 }
 
-function fmtCompact(n: number) {
-  if (!Number.isFinite(n)) return "—";
-  return new Intl.NumberFormat("en-US", {
-    notation: "compact",
-    maximumFractionDigits: 2,
-  }).format(n);
-}
-
 function fmtNumber(n: number, max = 6) {
   if (!Number.isFinite(n)) return "—";
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: max }).format(n);
-}
-
-function fmtTimeLeft(seconds: number) {
-  if (!Number.isFinite(seconds) || seconds <= 0) return "—";
-  const d = Math.floor(seconds / 86400);
-  const h = Math.floor((seconds % 86400) / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (d > 0) return `${d}d ${h}h`;
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
 }
 
 const inputBase =
   "mt-1 w-full max-w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-[13px] md:text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60";
 
 /* ──────────────────────────────────────────────────────────────
- * Minimal ERC-20 metadata ABI + balance
- * ──────────────────────────────────────────────────────────── */
+ * Minimal ERC-20 metadata ABI
+ * ────────────────────────────────────────────────────────────── */
 const ERC20_METADATA_ABI = [
   { name: "name", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "string", name: "" }] },
   { name: "symbol", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "string", name: "" }] },
   { name: "decimals", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "uint8", name: "" }] },
 ] as const;
 
-const ERC20_BALANCE_ABI = [
-  {
-    name: "balanceOf",
-    type: "function",
-    stateMutability: "view",
-    inputs: [{ name: "account", type: "address" }],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-] as const;
-
 /* ──────────────────────────────────────────────────────────────
- * Pool interaction ABIs
- * ──────────────────────────────────────────────────────────── */
+ * Pool interaction ABIs (Enter modal)
+ * ────────────────────────────────────────────────────────────── */
 const ERC721_APPROVAL_ABI = [
   {
     name: "isApprovedForAll",
@@ -452,65 +420,6 @@ export default function StakingPage() {
     };
   }, [publicClient, factoryPoolDetails, tokenMetaMap]);
 
-  /* ───────────────── Pool extras: reward balance + rate ───────────────── */
-  const [poolExtras, setPoolExtras] = useState<Record<string, PoolExtra>>({});
-  const [extrasLoading, setExtrasLoading] = useState(false);
-
-  useEffect(() => {
-    const pc = publicClient;
-    if (!pc) return;
-    if (factoryPoolDetails.length === 0) return;
-
-    let cancelled = false;
-
-    (async () => {
-      try {
-        setExtrasLoading(true);
-
-        const [rrRes, balRes] = await Promise.all([
-          pc.multicall({
-            contracts: factoryPoolDetails.map((p) => ({
-              address: p.pool,
-              abi: POOL_ACTIONS_ABI,
-              functionName: "rewardRate",
-            })),
-            allowFailure: true,
-          }),
-          pc.multicall({
-            contracts: factoryPoolDetails.map((p) => ({
-              address: p.rewardToken,
-              abi: ERC20_BALANCE_ABI,
-              functionName: "balanceOf",
-              args: [p.pool],
-            })),
-            allowFailure: true,
-          }),
-        ]);
-
-        if (cancelled) return;
-
-        const next: Record<string, PoolExtra> = {};
-        for (let i = 0; i < factoryPoolDetails.length; i++) {
-          const p = factoryPoolDetails[i];
-          const key = p.pool.toLowerCase();
-          next[key] = {
-            rewardRate: ((rrRes as any)[i]?.result as bigint) ?? 0n,
-            rewardBal: ((balRes as any)[i]?.result as bigint) ?? 0n,
-          };
-        }
-        setPoolExtras(next);
-      } catch (e) {
-        console.error("Failed to load pool extras", e);
-      } finally {
-        if (!cancelled) setExtrasLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [publicClient, factoryPoolDetails, refreshNonce]);
-
   /* ───────────────── Filters + search ───────────────── */
   const filteredPools = useMemo(() => {
     if (factoryPoolDetails.length === 0) return [];
@@ -680,182 +589,17 @@ export default function StakingPage() {
           </div>
         </section>
 
-        {/* Pools List */}
-        <section className="glass glass-pad rounded-3xl border border-white/10 bg-[#020617]/85 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 className="text-sm md:text-base font-semibold">Staking Pools</h3>
-              <p className="text-[11px] md:text-xs text-white/55">
-                Tap <span className="text-white/75 font-semibold">Enter</span> to stake / unstake / claim. Creators can fund.
-              </p>
-              {extrasLoading && <p className="mt-1 text-[11px] text-white/45">Loading pool stats…</p>}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setRefreshNonce((n) => n + 1)}
-              disabled={poolsLoading}
-              className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/5 px-3 py-1.5 text-[11px] font-medium text-white/80 hover:bg-white/10 disabled:opacity-60 disabled:cursor-not-allowed transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/60"
-            >
-              {poolsLoading && <span className="h-3 w-3 animate-spin rounded-full border border-t-transparent border-white/70" />}
-              <span>{poolsLoading ? "Refreshing…" : "Refresh"}</span>
-            </button>
-          </div>
-
-          {poolsError && <p className="text-xs text-rose-300 break-words">{poolsError}</p>}
-
-          {factoryPools.length === 0 && !poolsLoading && !poolsError && <p className="text-xs text-white/60">No pools yet. Create one above.</p>}
-
-          {factoryPools.length > 0 && filteredPools.length === 0 && !poolsLoading && !poolsError && (
-            <p className="text-xs text-white/60">No pools match your filter/search.</p>
-          )}
-
-          {filteredPools.length > 0 && (
-            <div className="mt-1 grid gap-3 text-xs">
-              {filteredPools.map((pool) => {
-                const now = nowSeconds();
-                const isCreator = !!address && pool.creator.toLowerCase() === address.toLowerCase();
-                const isBasebotsNft = pool.nft.toLowerCase() === BASEBOTS_NFT.address.toLowerCase();
-
-                const status: "upcoming" | "live" | "closed" = (() => {
-                  if (pool.startTime === 0) return "upcoming";
-                  if (now < pool.startTime) return "upcoming";
-                  if (pool.endTime !== 0 && now > pool.endTime) return "closed";
-                  return "live";
-                })();
-
-                const rewardLower = pool.rewardToken.toLowerCase();
-                const meta = tokenMetaMap[rewardLower];
-                const rewardLabel = meta ? meta.symbol : shortenAddress(pool.rewardToken, 4);
-                const decimals = meta?.decimals ?? 18;
-
-                const extra = poolExtras[pool.pool.toLowerCase()];
-                const rewardBalTokens = extra ? Number(formatUnits(extra.rewardBal, decimals)) : NaN;
-                const rewardRateTokensSec = extra ? Number(formatUnits(extra.rewardRate, decimals)) : NaN;
-
-                const ratePerHour = Number.isFinite(rewardRateTokensSec) ? rewardRateTokensSec * 3600 : NaN;
-                const stakedCount = Number(pool.totalStaked ?? 0n);
-                const perNftPerHour = stakedCount > 0 ? ratePerHour / stakedCount : NaN;
-
-                const timeLeftSec = status === "live" && pool.endTime && pool.endTime > 0 ? Math.max(0, pool.endTime - now) : NaN;
-
-                return (
-                  <div key={pool.pool} className="rounded-2xl border border-white/12 bg-black/45 px-4 py-3">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                      <div className="space-y-2 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-semibold text-white/90">{isBasebotsNft ? "Basebots NFT Pool" : "NFT Pool"}</span>
-
-                          <span
-                            className={[
-                              "px-2 py-[1px] rounded-full text-[10px] font-semibold border",
-                              status === "live"
-                                ? "border-emerald-400/70 bg-emerald-500/10 text-emerald-300"
-                                : status === "upcoming"
-                                ? "border-sky-400/70 bg-sky-500/10 text-sky-300"
-                                : "border-rose-400/70 bg-rose-500/10 text-rose-300",
-                            ].join(" ")}
-                          >
-                            {status === "live" ? "Live" : status === "upcoming" ? "Upcoming" : "Closed"}
-                          </span>
-
-                          {isCreator && (
-                            <span className="rounded-full border border-amber-400/60 bg-amber-500/10 px-2 py-[1px] text-[10px] font-semibold text-amber-200">
-                              Creator
-                            </span>
-                          )}
-
-                          {pool.hasMyStake && (
-                            <span className="rounded-full border border-emerald-400/70 bg-emerald-500/10 px-2 py-[1px] text-[10px] font-semibold text-emerald-200">
-                              You’re staked
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex flex-wrap gap-3 text-[11px] text-white/65 font-mono break-all">
-                          <span>Pool: {shortenAddress(pool.pool, 4)}</span>
-                          <span>NFT: {shortenAddress(pool.nft, 4)}</span>
-                          <span>Reward: {rewardLabel}</span>
-                          <span>Staked: {pool.totalStaked.toString()}</span>
-                        </div>
-
-                        <div className="mt-2 grid gap-2 md:grid-cols-3">
-                          <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
-                            <div className="text-[10px] uppercase tracking-wide text-white/55">Time left</div>
-                            <div className="mt-1 text-[12px] font-semibold text-white/90">
-                              {status === "live" ? fmtTimeLeft(timeLeftSec) : status === "upcoming" ? "Not started" : "Ended"}
-                            </div>
-                          </div>
-
-                          <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
-                            <div className="text-[10px] uppercase tracking-wide text-white/55">Rewards left</div>
-                            <div className="mt-1 text-[12px] font-semibold text-white/90">
-                              {extra ? `${fmtNumber(rewardBalTokens, 4)} ${rewardLabel}` : "—"}
-                            </div>
-                          </div>
-
-                          <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
-                            <div className="text-[10px] uppercase tracking-wide text-white/55">Reward rate</div>
-                            <div className="mt-1 text-[12px] font-semibold text-white/90">
-                              {extra ? `${fmtCompact(ratePerHour)} ${rewardLabel}/hr` : "—"}
-                            </div>
-                            <div className="mt-1 text-[10px] text-white/55">
-                              Per NFT/hr:{" "}
-                              <span className="text-white/75 font-medium">
-                                {extra ? (stakedCount > 0 ? fmtNumber(perNftPerHour, 6) : "be first") : "—"}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2 justify-start md:justify-end">
-                        <button
-                          type="button"
-                          onClick={() => openPoolModal(pool.pool)}
-                          className="rounded-full border px-3 py-1 text-[11px] font-semibold active:scale-95 focus-visible:outline-none focus-visible:ring-2"
-                          style={{
-                            borderColor: "rgba(121,255,225,0.55)",
-                            background: "linear-gradient(135deg, rgba(3,28,27,0.92), rgba(6,30,45,0.62))",
-                            color: "#79ffe1",
-                            boxShadow: "0 0 0 1px rgba(121,255,225,0.10), 0 0 16px rgba(121,255,225,0.14)",
-                          }}
-                        >
-                          Enter
-                        </button>
-
-                        <Link
-                          href={`https://basescan.org/address/${pool.pool}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="rounded-full border border-white/20 bg-white/5 px-3 py-1 text-[11px] text-white/80 hover:bg-white/10 transition-all active:scale-95"
-                        >
-                          Basescan ↗
-                        </Link>
-
-                        {isCreator && (
-                          <button
-                            type="button"
-                            onClick={() => openFundModal({ pool: pool.pool, rewardToken: pool.rewardToken })}
-                            className="rounded-full border px-3 py-1 text-[11px] font-semibold active:scale-95"
-                            style={{
-                              borderColor: "rgba(52,211,153,0.55)",
-                              background: "linear-gradient(135deg, rgba(16,185,129,0.18), rgba(0,0,0,0.20))",
-                              color: "rgba(236,253,245,0.96)",
-                              boxShadow: "0 0 0 1px rgba(52,211,153,0.10), 0 0 16px rgba(52,211,153,0.12)",
-                            }}
-                          >
-                            Fund
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
+        {/* ✅ Pools List (NOW USING YOUR COMPONENT) */}
+        <PoolsList
+          pools={filteredPools}
+          poolsLoading={poolsLoading}
+          poolsError={poolsError}
+          onRefresh={() => setRefreshNonce((n) => n + 1)}
+          address={address}
+          tokenMetaByAddr={tokenMetaMap}
+          basebotsNftAddress={BASEBOTS_NFT.address}
+          openFundModalForPool={(t) => openFundModal(t)}
+        />
       </div>
 
       {/* Fund Pool Modal */}
@@ -1147,7 +891,13 @@ function EnterPoolModal({
   const cardBg = "#070A16";
 
   return (
-    <div className="fixed inset-0 z-[999999] grid place-items-center px-4" role="dialog" aria-modal="true" aria-label="Enter pool modal" style={{ WebkitTapHighlightColor: "transparent" as any }}>
+    <div
+      className="fixed inset-0 z-[999999] grid place-items-center px-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Enter pool modal"
+      style={{ WebkitTapHighlightColor: "transparent" as any }}
+    >
       <button
         aria-label="Close"
         onClick={onClose}
