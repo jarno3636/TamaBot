@@ -20,7 +20,7 @@ import { CONFIG_STAKING_FACTORY, BASEBOTS_STAKING_POOL, BASEBOTS_NFT } from "@/l
 
 import CreatePoolCard from "@/components/staking/CreatePoolCard";
 import FundPoolModal from "@/components/staking/FundPoolModal";
-import PoolsList from "@/components/staking/PoolsList"; // ✅ make sure this path matches your project
+import PoolsList from "@/components/staking/PoolsList";
 
 /* ──────────────────────────────────────────────────────────────
  * Types
@@ -52,8 +52,7 @@ export type FundTarget = {
   rewardToken: `0x${string}`;
 };
 
-// viem returns tuples for multi-output functions
-type PoolUserRow = readonly [bigint, bigint, bigint]; // [amount, rewardDebt, pending]
+type PoolUserRow = readonly [bigint, bigint, bigint];
 
 /* ──────────────────────────────────────────────────────────────
  * Helpers
@@ -205,7 +204,6 @@ export default function StakingPage() {
   const [poolsLoading, setPoolsLoading] = useState(false);
   const [poolsError, setPoolsError] = useState<string | null>(null);
 
-  // toggled when user clicks Refresh
   const [refreshNonce, setRefreshNonce] = useState(0);
 
   useEffect(() => {
@@ -218,10 +216,7 @@ export default function StakingPage() {
 
         const params = new URLSearchParams();
 
-        // Keep server-side creator filter for "my-pools"
         if (activeFilter === "my-pools" && address) params.set("creator", address);
-
-        // ✅ IMPORTANT: if user clicked refresh, force scan + upsert
         if (refreshNonce > 0) params.set("refresh", "1");
 
         const url = `/api/pools${params.toString() ? `?${params.toString()}` : ""}`;
@@ -231,12 +226,7 @@ export default function StakingPage() {
         const json = await res.json();
         if (!json?.ok) throw new Error(json?.error ?? "Failed to load pools");
 
-        const pools = (json.pools ?? []) as Array<{
-          pool: string;
-          creator: string;
-          nft: string;
-          rewardToken: string;
-        }>;
+        const pools = (json.pools ?? []) as Array<{ pool: string; creator: string; nft: string; rewardToken: string }>;
 
         const items: FactoryPoolMeta[] = pools
           .filter((p) => p?.pool && p?.creator && p?.nft && p?.rewardToken)
@@ -247,7 +237,6 @@ export default function StakingPage() {
             rewardToken: p.rewardToken as `0x${string}`,
           }));
 
-        // de-dupe by pool address
         const unique = new Map<string, FactoryPoolMeta>();
         for (const p of items) {
           const key = p.pool.toLowerCase();
@@ -304,11 +293,7 @@ export default function StakingPage() {
           }),
           address
             ? client.multicall({
-                contracts: contractsBase.map((c) => ({
-                  ...c,
-                  functionName: "users",
-                  args: [address],
-                })),
+                contracts: contractsBase.map((c) => ({ ...c, functionName: "users", args: [address] })),
                 allowFailure: true,
               })
             : Promise.resolve(null),
@@ -328,13 +313,7 @@ export default function StakingPage() {
             hasMyStake = !!amt && amt > 0n;
           }
 
-          return {
-            ...p,
-            startTime: st ? Number(st) : 0,
-            endTime: et ? Number(et) : 0,
-            totalStaked: ts ?? 0n,
-            hasMyStake,
-          };
+          return { ...p, startTime: st ? Number(st) : 0, endTime: et ? Number(et) : 0, totalStaked: ts ?? 0n, hasMyStake };
         });
 
         setFactoryPoolDetails(details);
@@ -368,27 +347,15 @@ export default function StakingPage() {
       try {
         const [symRes, nameRes, decRes] = await Promise.all([
           pc.multicall({
-            contracts: missing.map((addr) => ({
-              address: addr as `0x${string}`,
-              abi: ERC20_METADATA_ABI,
-              functionName: "symbol",
-            })),
+            contracts: missing.map((addr) => ({ address: addr as `0x${string}`, abi: ERC20_METADATA_ABI, functionName: "symbol" })),
             allowFailure: true,
           }),
           pc.multicall({
-            contracts: missing.map((addr) => ({
-              address: addr as `0x${string}`,
-              abi: ERC20_METADATA_ABI,
-              functionName: "name",
-            })),
+            contracts: missing.map((addr) => ({ address: addr as `0x${string}`, abi: ERC20_METADATA_ABI, functionName: "name" })),
             allowFailure: true,
           }),
           pc.multicall({
-            contracts: missing.map((addr) => ({
-              address: addr as `0x${string}`,
-              abi: ERC20_METADATA_ABI,
-              functionName: "decimals",
-            })),
+            contracts: missing.map((addr) => ({ address: addr as `0x${string}`, abi: ERC20_METADATA_ABI, functionName: "decimals" })),
             allowFailure: true,
           }),
         ]);
@@ -495,7 +462,6 @@ export default function StakingPage() {
     }
   }
 
-  /* ───────────────── Render ───────────────── */
   return (
     <main className="min-h-[100svh] bg-deep text-white pb-16 overflow-x-hidden">
       <div className="container pt-6 px-5 stack space-y-6">
@@ -523,8 +489,7 @@ export default function StakingPage() {
                   Create pools for any ERC-721 on Base and stream rewards in any ERC-20.
                 </p>
                 <p className="mt-2 text-[11px] text-white/60 max-w-md">
-                  Creating a pool sets the schedule —{" "}
-                  <span className="font-semibold text-[#79ffe1]">you must fund it after</span>.
+                  Creating a pool sets the schedule — <span className="font-semibold text-[#79ffe1]">you must fund it after</span>.
                 </p>
               </div>
             </div>
@@ -536,8 +501,7 @@ export default function StakingPage() {
                   <span className="font-semibold text-[#79ffe1]">{protocolFeePercent}%</span>
                 </div>
                 <p className="mt-2 text-[11px] text-white/60">
-                  Tip: after creation, click{" "}
-                  <span className="text-white/80 font-semibold">Fund</span> to send reward tokens to the pool address.
+                  Tip: after creation, click <span className="text-white/80 font-semibold">Fund</span> to send reward tokens to the pool address.
                 </p>
               </div>
             </div>
@@ -589,7 +553,7 @@ export default function StakingPage() {
           </div>
         </section>
 
-        {/* ✅ Pools List (NOW USING YOUR COMPONENT) */}
+        {/* ✅ Pools List */}
         <PoolsList
           pools={filteredPools}
           poolsLoading={poolsLoading}
@@ -599,26 +563,15 @@ export default function StakingPage() {
           tokenMetaByAddr={tokenMetaMap}
           basebotsNftAddress={BASEBOTS_NFT.address}
           openFundModalForPool={(t) => openFundModal(t)}
+          onEnterPool={(poolAddr) => openPoolModal(poolAddr)} // ✅ FIX: Enter opens modal
         />
       </div>
 
       {/* Fund Pool Modal */}
-      <FundPoolModal
-        open={fundModalOpen}
-        onClose={() => setFundModalOpen(false)}
-        target={fundTarget}
-        suggestedAmount={fundSuggestedAmount || undefined}
-      />
+      <FundPoolModal open={fundModalOpen} onClose={() => setFundModalOpen(false)} target={fundTarget} suggestedAmount={fundSuggestedAmount || undefined} />
 
       {/* Enter Pool Modal */}
-      <EnterPoolModal
-        open={!!activePool}
-        onClose={closePoolModal}
-        pool={activePool}
-        address={address}
-        tokenMetaMap={tokenMetaMap}
-        fid={fid}
-      />
+      <EnterPoolModal open={!!activePool} onClose={closePoolModal} pool={activePool} address={address} tokenMetaMap={tokenMetaMap} fid={fid} />
     </main>
   );
 }
@@ -643,10 +596,7 @@ function EnterPoolModal({
 }) {
   const publicClient = usePublicClient({ chainId: base.id });
   const { writeContract, data: txHash, error: txErr } = useWriteContract();
-  const { isLoading: txPending, isSuccess: txMined } = useWaitForTransactionReceipt({
-    hash: txHash,
-    chainId: base.id,
-  });
+  const { isLoading: txPending, isSuccess: txMined } = useWaitForTransactionReceipt({ hash: txHash, chainId: base.id });
 
   const [mounted, setMounted] = useState(false);
   const [msg, setMsg] = useState("");
@@ -690,26 +640,9 @@ function EnterPoolModal({
 
     try {
       const [isApproved, pending, userRow] = await Promise.all([
-        pc.readContract({
-          address: pool.nft,
-          abi: ERC721_APPROVAL_ABI,
-          functionName: "isApprovedForAll",
-          args: [address, pool.pool],
-        }) as Promise<boolean>,
-
-        pc.readContract({
-          address: pool.pool,
-          abi: POOL_ACTIONS_ABI,
-          functionName: "pendingRewards",
-          args: [address],
-        }) as Promise<bigint>,
-
-        pc.readContract({
-          address: pool.pool,
-          abi: POOL_USERS_ABI,
-          functionName: "users",
-          args: [address],
-        }) as Promise<PoolUserRow>,
+        pc.readContract({ address: pool.nft, abi: ERC721_APPROVAL_ABI, functionName: "isApprovedForAll", args: [address, pool.pool] }) as Promise<boolean>,
+        pc.readContract({ address: pool.pool, abi: POOL_ACTIONS_ABI, functionName: "pendingRewards", args: [address] }) as Promise<bigint>,
+        pc.readContract({ address: pool.pool, abi: POOL_USERS_ABI, functionName: "users", args: [address] }) as Promise<PoolUserRow>,
       ]);
 
       const amount = userRow?.[0] ?? 0n;
@@ -732,12 +665,7 @@ function EnterPoolModal({
     setOwnedErr(null);
 
     try {
-      const bal = (await pc.readContract({
-        address: pool.nft,
-        abi: ERC721_ENUMERABLE_ABI,
-        functionName: "balanceOf",
-        args: [address],
-      })) as bigint;
+      const bal = (await pc.readContract({ address: pool.nft, abi: ERC721_ENUMERABLE_ABI, functionName: "balanceOf", args: [address] })) as bigint;
 
       const count = Number(bal ?? 0n);
       const capped = Math.min(count, 50);
@@ -785,13 +713,7 @@ function EnterPoolModal({
       if (!pool) return;
       if (!address) return setMsg("Connect your wallet.");
 
-      writeContract({
-        address: pool.nft,
-        abi: ERC721_APPROVAL_ABI,
-        functionName: "setApprovalForAll",
-        args: [pool.pool, true],
-        chainId: base.id,
-      });
+      writeContract({ address: pool.nft, abi: ERC721_APPROVAL_ABI, functionName: "setApprovalForAll", args: [pool.pool, true], chainId: base.id });
       setMsg("Approval submitted. Confirm in your wallet.");
     } catch (e) {
       setMsg(getErrText(e));
@@ -808,14 +730,7 @@ function EnterPoolModal({
       if (!tid) return setMsg("Pick or enter a tokenId.");
       if (!/^\d+$/.test(tid)) return setMsg("tokenId must be an integer.");
 
-      writeContract({
-        address: pool.pool,
-        abi: POOL_ACTIONS_ABI,
-        functionName: "stake",
-        args: [BigInt(tid)],
-        chainId: base.id,
-      });
-
+      writeContract({ address: pool.pool, abi: POOL_ACTIONS_ABI, functionName: "stake", args: [BigInt(tid)], chainId: base.id });
       setMsg("Stake submitted. Confirm in your wallet.");
     } catch (e) {
       setMsg(getErrText(e));
@@ -832,14 +747,7 @@ function EnterPoolModal({
       if (!tid) return setMsg("Pick or enter a tokenId.");
       if (!/^\d+$/.test(tid)) return setMsg("tokenId must be an integer.");
 
-      writeContract({
-        address: pool.pool,
-        abi: POOL_ACTIONS_ABI,
-        functionName: "unstake",
-        args: [BigInt(tid)],
-        chainId: base.id,
-      });
-
+      writeContract({ address: pool.pool, abi: POOL_ACTIONS_ABI, functionName: "unstake", args: [BigInt(tid)], chainId: base.id });
       setMsg("Unstake submitted. Confirm in your wallet.");
     } catch (e) {
       setMsg(getErrText(e));
@@ -852,14 +760,7 @@ function EnterPoolModal({
       if (!pool) return;
       if (!address) return setMsg("Connect your wallet.");
 
-      writeContract({
-        address: pool.pool,
-        abi: POOL_ACTIONS_ABI,
-        functionName: "claim",
-        args: [],
-        chainId: base.id,
-      });
-
+      writeContract({ address: pool.pool, abi: POOL_ACTIONS_ABI, functionName: "claim", args: [], chainId: base.id });
       setMsg("Claim submitted. Confirm in your wallet.");
     } catch (e) {
       setMsg(getErrText(e));
@@ -867,17 +768,6 @@ function EnterPoolModal({
   }
 
   if (!open || !pool || !mounted) return null;
-
-  const now = nowSeconds();
-  const status: "upcoming" | "live" | "closed" = (() => {
-    if (pool.startTime === 0) return "upcoming";
-    if (now < pool.startTime) return "upcoming";
-    if (pool.endTime !== 0 && now > pool.endTime) return "closed";
-    return "live";
-  })();
-
-  const isConnected = !!address;
-  const canAct = approved === true && !txPending;
 
   const rewardLower = pool.rewardToken.toLowerCase();
   const rewardMeta = tokenMetaMap[rewardLower];
@@ -889,33 +779,17 @@ function EnterPoolModal({
 
   const neon = "#79ffe1";
   const cardBg = "#070A16";
+  const isConnected = !!address;
+  const canAct = approved === true && !txPending;
 
   return (
-    <div
-      className="fixed inset-0 z-[999999] grid place-items-center px-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Enter pool modal"
-      style={{ WebkitTapHighlightColor: "transparent" as any }}
-    >
-      <button
-        aria-label="Close"
-        onClick={onClose}
-        className="absolute inset-0"
-        style={{
-          background: "rgba(0,0,0,0.78)",
-          backdropFilter: "blur(10px)",
-        }}
-      />
+    <div className="fixed inset-0 z-[999999] grid place-items-center px-4" role="dialog" aria-modal="true" aria-label="Enter pool modal" style={{ WebkitTapHighlightColor: "transparent" as any }}>
+      <button aria-label="Close" onClick={onClose} className="absolute inset-0" style={{ background: "rgba(0,0,0,0.78)", backdropFilter: "blur(10px)" }} />
 
       <div
         className="relative w-full max-w-md overflow-hidden rounded-3xl border"
         onClick={(e) => e.stopPropagation()}
-        style={{
-          borderColor: "rgba(255,255,255,0.16)",
-          background: cardBg,
-          boxShadow: "0 30px 90px rgba(0,0,0,0.95)",
-        }}
+        style={{ borderColor: "rgba(255,255,255,0.16)", background: cardBg, boxShadow: "0 30px 90px rgba(0,0,0,0.95)" }}
       >
         <div
           aria-hidden
@@ -926,85 +800,37 @@ function EnterPoolModal({
           }}
         />
 
-        <div
-          className="relative"
-          style={{
-            maxHeight: "min(78svh, 640px)",
-            overflow: "auto",
-            WebkitOverflowScrolling: "touch",
-          }}
-        >
+        <div className="relative" style={{ maxHeight: "min(78svh, 640px)", overflow: "auto", WebkitOverflowScrolling: "touch" }}>
           <div className="relative p-5" style={{ background: "rgba(7,10,22,0.92)" }}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h2 className="text-sm font-semibold">Stake / Claim</h2>
                 <p className="mt-1 text-[11px] text-white/60 break-all">
-                  Pool <span className="font-mono text-white/85">{shortenAddress(pool.pool, 4)}</span> •{" "}
-                  {status === "live" ? (
-                    <span className="text-emerald-300 font-semibold">Live</span>
-                  ) : status === "upcoming" ? (
-                    <span className="text-sky-300 font-semibold">Upcoming</span>
-                  ) : (
-                    <span className="text-rose-300 font-semibold">Closed</span>
-                  )}
+                  Pool <span className="font-mono text-white/85">{shortenAddress(pool.pool, 4)}</span>
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={onClose}
-                className="shrink-0 rounded-full border px-2.5 py-1 text-[11px]"
-                style={{
-                  borderColor: "rgba(255,255,255,0.16)",
-                  background: "rgba(255,255,255,0.10)",
-                  color: "rgba(255,255,255,0.88)",
-                }}
-              >
+              <button type="button" onClick={onClose} className="shrink-0 rounded-full border px-2.5 py-1 text-[11px]" style={{ borderColor: "rgba(255,255,255,0.16)", background: "rgba(255,255,255,0.10)", color: "rgba(255,255,255,0.88)" }}>
                 ✕
               </button>
             </div>
 
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-              <Link
-                href={`https://basescan.org/address/${pool.pool}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded-full border px-3 py-1 text-[11px]"
-                style={{
-                  borderColor: "rgba(255,255,255,0.18)",
-                  background: "rgba(255,255,255,0.10)",
-                  color: "rgba(255,255,255,0.90)",
-                }}
-              >
+              <Link href={`https://basescan.org/address/${pool.pool}`} target="_blank" rel="noopener noreferrer" className="rounded-full border px-3 py-1 text-[11px]" style={{ borderColor: "rgba(255,255,255,0.18)", background: "rgba(255,255,255,0.10)", color: "rgba(255,255,255,0.90)" }}>
                 Basescan ↗
               </Link>
 
               <div className="flex flex-wrap gap-2 justify-end">
-                <div
-                  className="rounded-full border px-3 py-1 text-[11px] font-mono"
-                  style={{
-                    borderColor: "rgba(121,255,225,0.30)",
-                    background: "rgba(121,255,225,0.08)",
-                    color: "rgba(217,255,248,0.95)",
-                  }}
-                >
+                <div className="rounded-full border px-3 py-1 text-[11px] font-mono" style={{ borderColor: "rgba(121,255,225,0.30)", background: "rgba(121,255,225,0.08)", color: "rgba(217,255,248,0.95)" }}>
                   Pending: {pendingPretty} {rewardSymbol}
                 </div>
 
-                <div
-                  className="rounded-full border px-3 py-1 text-[11px] font-mono"
-                  style={{
-                    borderColor: "rgba(255,255,255,0.16)",
-                    background: "rgba(255,255,255,0.08)",
-                    color: "rgba(255,255,255,0.90)",
-                  }}
-                >
+                <div className="rounded-full border px-3 py-1 text-[11px] font-mono" style={{ borderColor: "rgba(255,255,255,0.16)", background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.90)" }}>
                   Staked: {stakedPretty}
                 </div>
               </div>
             </div>
 
-            {/* Approval */}
             <div className="mt-3 rounded-2xl border p-3" style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.38)" }}>
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-white/60 uppercase tracking-wide">Approval</span>
@@ -1018,11 +844,7 @@ function EnterPoolModal({
                 className="mt-2 w-full rounded-full border px-3 py-2 text-[12px] font-semibold transition-all active:scale-[0.98]"
                 style={{
                   borderColor: !isConnected ? "rgba(255,255,255,0.10)" : approved ? "rgba(52,211,153,0.40)" : "rgba(121,255,225,0.45)",
-                  background: !isConnected
-                    ? "rgba(255,255,255,0.05)"
-                    : approved
-                    ? "rgba(16,185,129,0.10)"
-                    : "linear-gradient(135deg, rgba(3,28,27,0.92), rgba(6,30,45,0.62))",
+                  background: !isConnected ? "rgba(255,255,255,0.05)" : approved ? "rgba(16,185,129,0.10)" : "linear-gradient(135deg, rgba(3,28,27,0.92), rgba(6,30,45,0.62))",
                   color: !isConnected ? "rgba(255,255,255,0.35)" : approved ? "rgba(236,253,245,0.92)" : neon,
                   cursor: !isConnected || approved || txPending ? "not-allowed" : "pointer",
                 }}
@@ -1031,42 +853,20 @@ function EnterPoolModal({
               </button>
             </div>
 
-            {/* TokenId input */}
             <div className="mt-3 rounded-2xl border p-3" style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.38)" }}>
               <div className="flex items-center justify-between">
                 <span className="text-[11px] uppercase tracking-wide text-white/60">Your NFT</span>
-                <button
-                  type="button"
-                  onClick={() => refreshOwnedNfts()}
-                  disabled={!isConnected || ownedLoading}
-                  className="rounded-full border px-2.5 py-1 text-[11px]"
-                  style={{
-                    borderColor: "rgba(255,255,255,0.14)",
-                    background: "rgba(255,255,255,0.06)",
-                    color: "rgba(255,255,255,0.78)",
-                    opacity: !isConnected || ownedLoading ? 0.6 : 1,
-                  }}
-                >
+                <button type="button" onClick={() => refreshOwnedNfts()} disabled={!isConnected || ownedLoading} className="rounded-full border px-2.5 py-1 text-[11px]" style={{ borderColor: "rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.78)", opacity: !isConnected || ownedLoading ? 0.6 : 1 }}>
                   {ownedLoading ? "Scanning…" : "Rescan"}
                 </button>
               </div>
 
-              {ownedErr && (
-                <p className="mt-2 text-[11px]" style={{ color: "rgba(255,211,107,0.95)" }}>
-                  {ownedErr}
-                </p>
-              )}
+              {ownedErr && <p className="mt-2 text-[11px]" style={{ color: "rgba(255,211,107,0.95)" }}>{ownedErr}</p>}
 
               {ownedTokenIds.length > 0 ? (
                 <label className="mt-2 block">
                   <span className="text-[11px] text-white/60">Select tokenId</span>
-                  <select
-                    value={tokenId}
-                    onChange={(e) => setTokenId(e.target.value)}
-                    className="mt-1 w-full rounded-xl border px-3 py-2 text-[13px] text-white focus:outline-none focus:ring-2"
-                    style={{ borderColor: "rgba(255,255,255,0.20)", background: "#0B1022" }}
-                    disabled={!isConnected}
-                  >
+                  <select value={tokenId} onChange={(e) => setTokenId(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2 text-[13px] text-white focus:outline-none focus:ring-2" style={{ borderColor: "rgba(255,255,255,0.20)", background: "#0B1022" }} disabled={!isConnected}>
                     {ownedTokenIds.map((id) => (
                       <option key={id} value={id}>
                         #{id}
@@ -1077,60 +877,22 @@ function EnterPoolModal({
               ) : (
                 <label className="mt-2 block">
                   <span className="text-[11px] text-white/60">Enter tokenId</span>
-                  <input
-                    value={tokenId}
-                    onChange={(e) => setTokenId(e.target.value)}
-                    placeholder={fid ? `e.g. ${fid}` : "e.g. 123"}
-                    className={inputBase}
-                    inputMode="numeric"
-                    disabled={!isConnected}
-                  />
+                  <input value={tokenId} onChange={(e) => setTokenId(e.target.value)} placeholder={fid ? `e.g. ${fid}` : "e.g. 123"} className={inputBase} inputMode="numeric" disabled={!isConnected} />
                 </label>
               )}
             </div>
 
-            {/* Actions */}
             <div className="mt-3 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={doStake}
-                disabled={!canAct}
-                className="rounded-full border py-2 text-[12px] font-semibold transition-all active:scale-[0.98]"
-                style={{
-                  borderColor: canAct ? "rgba(52,211,153,0.55)" : "rgba(255,255,255,0.10)",
-                  background: canAct ? "linear-gradient(135deg, rgba(16,185,129,0.16), rgba(0,0,0,0.20))" : "rgba(255,255,255,0.05)",
-                  color: canAct ? "rgba(236,253,245,0.96)" : "rgba(255,255,255,0.35)",
-                }}
-              >
+              <button type="button" onClick={doStake} disabled={!canAct} className="rounded-full border py-2 text-[12px] font-semibold transition-all active:scale-[0.98]" style={{ borderColor: canAct ? "rgba(52,211,153,0.55)" : "rgba(255,255,255,0.10)", background: canAct ? "linear-gradient(135deg, rgba(16,185,129,0.16), rgba(0,0,0,0.20))" : "rgba(255,255,255,0.05)", color: canAct ? "rgba(236,253,245,0.96)" : "rgba(255,255,255,0.35)" }}>
                 {txPending ? "Working…" : "Stake"}
               </button>
 
-              <button
-                type="button"
-                onClick={doUnstake}
-                disabled={!canAct}
-                className="rounded-full border py-2 text-[12px] font-semibold transition-all active:scale-[0.98]"
-                style={{
-                  borderColor: canAct ? "rgba(251,113,133,0.55)" : "rgba(255,255,255,0.10)",
-                  background: canAct ? "linear-gradient(135deg, rgba(244,63,94,0.14), rgba(0,0,0,0.20))" : "rgba(255,255,255,0.05)",
-                  color: canAct ? "rgba(255,241,242,0.96)" : "rgba(255,255,255,0.35)",
-                }}
-              >
+              <button type="button" onClick={doUnstake} disabled={!canAct} className="rounded-full border py-2 text-[12px] font-semibold transition-all active:scale-[0.98]" style={{ borderColor: canAct ? "rgba(251,113,133,0.55)" : "rgba(255,255,255,0.10)", background: canAct ? "linear-gradient(135deg, rgba(244,63,94,0.14), rgba(0,0,0,0.20))" : "rgba(255,255,255,0.05)", color: canAct ? "rgba(255,241,242,0.96)" : "rgba(255,255,255,0.35)" }}>
                 {txPending ? "Working…" : "Unstake"}
               </button>
             </div>
 
-            <button
-              type="button"
-              onClick={doClaim}
-              disabled={!canAct}
-              className="mt-2 w-full rounded-full border py-2 text-[12px] font-semibold transition-all active:scale-[0.98]"
-              style={{
-                borderColor: canAct ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.10)",
-                background: canAct ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.05)",
-                color: canAct ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.35)",
-              }}
-            >
+            <button type="button" onClick={doClaim} disabled={!canAct} className="mt-2 w-full rounded-full border py-2 text-[12px] font-semibold transition-all active:scale-[0.98]" style={{ borderColor: canAct ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.10)", background: canAct ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.05)", color: canAct ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.35)" }}>
               {txPending ? "Working…" : `Claim ${rewardSymbol}`}
             </button>
 
@@ -1138,13 +900,7 @@ function EnterPoolModal({
               {txHash && (
                 <div>
                   Tx:{" "}
-                  <Link
-                    href={`https://basescan.org/tx/${txHash}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline decoration-dotted underline-offset-4"
-                    style={{ color: neon }}
-                  >
+                  <Link href={`https://basescan.org/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="underline decoration-dotted underline-offset-4" style={{ color: neon }}>
                     view ↗
                   </Link>
                 </div>
@@ -1153,9 +909,7 @@ function EnterPoolModal({
               {(msg || txErr) && <div className="text-rose-300 break-words">{msg || getErrText(txErr)}</div>}
             </div>
 
-            <div className="mt-4 text-[10px] text-white/45">
-              Tip: if tokenId scanning fails, the NFT may not be enumerable — manual tokenId entry still works.
-            </div>
+            <div className="mt-4 text-[10px] text-white/45">Tip: if tokenId scanning fails, the NFT may not be enumerable — manual tokenId entry still works.</div>
           </div>
         </div>
       </div>
