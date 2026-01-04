@@ -236,21 +236,24 @@ function poolCardStyle(poolAddr: string): { isBlue: boolean; outer: React.CSSPro
 
 /* ──────────────────────────────────────────────────────────────
  * Share helper (Farcaster miniapp -> navigator.share -> warpcast URL)
+ * FIX: no @ts-expect-error (Next fails builds if it’s unused)
  * ──────────────────────────────────────────────────────────── */
 async function smartShare({ text, url }: { text: string; url: string }) {
+  // 1) Farcaster miniapp: native composer
   try {
-    // @ts-expect-error - sdk types differ across versions
-    if (sdk?.actions?.composeCast) {
-      // @ts-expect-error
-      await sdk.actions.composeCast({ text, embeds: [url] });
+    const anySdk = sdk as any;
+    const composeCast = anySdk?.actions?.composeCast;
+    if (typeof composeCast === "function") {
+      await composeCast({ text, embeds: [url] });
       return;
     }
   } catch (e) {
     console.warn("composeCast failed; falling back", e);
   }
 
+  // 2) Web share sheet
   try {
-    if (typeof navigator !== "undefined" && (navigator as any).share) {
+    if (typeof navigator !== "undefined" && typeof (navigator as any).share === "function") {
       await (navigator as any).share({ text, url });
       return;
     }
@@ -258,6 +261,7 @@ async function smartShare({ text, url }: { text: string; url: string }) {
     console.warn("navigator.share failed; falling back", e);
   }
 
+  // 3) Warpcast compose URL
   try {
     const shareUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(url)}`;
     window.open(shareUrl, "_blank", "noopener,noreferrer");
@@ -275,7 +279,7 @@ export default function PoolsList({
   tokenMetaByAddr,
   basebotsNftAddress,
   openFundModalForPool,
-  onEnterPool, // ✅ NOW OPTIONAL (prevents TS build failures)
+  onEnterPool,
 }: {
   pools: FactoryPoolDetails[];
   poolsLoading: boolean;
@@ -286,7 +290,7 @@ export default function PoolsList({
   basebotsNftAddress: `0x${string}`;
   openFundModalForPool: (p: { pool: `0x${string}`; rewardToken: `0x${string}` }) => void;
 
-  // ✅ Make optional, so page.tsx won’t break builds if it forgets this prop
+  // optional: if provided, "Enter" opens your modal, otherwise it navigates via link
   onEnterPool?: (poolAddr: `0x${string}`) => void;
 }) {
   const pc = usePublicClient({ chainId: base.id });
@@ -474,8 +478,13 @@ export default function PoolsList({
 
             return (
               <div key={pool.pool} className="relative overflow-hidden rounded-3xl border p-4 md:p-5" style={{ ...card.outer }}>
+                {/* left accent bar */}
                 <div aria-hidden className="pointer-events-none absolute left-0 top-0 bottom-0 w-[6px] opacity-90" style={card.accent} />
+
+                {/* color wash */}
                 <div aria-hidden className="pointer-events-none absolute inset-0 opacity-95" style={card.wash} />
+
+                {/* shine strip */}
                 <div
                   aria-hidden
                   className="pointer-events-none absolute -top-16 left-0 right-0 h-32 opacity-50"
@@ -509,7 +518,7 @@ export default function PoolsList({
                         Basescan ↗
                       </ActionBtn>
 
-                      {/* ✅ If onEnterPool provided -> open modal. Otherwise -> navigate to pool URL */}
+                      {/* If onEnterPool provided -> open modal. Otherwise -> navigate */}
                       <ActionBtn
                         tone="teal"
                         onClick={onEnterPool ? () => onEnterPool(pool.pool) : undefined}
