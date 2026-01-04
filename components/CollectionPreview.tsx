@@ -4,17 +4,21 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useMemo, useRef, useState } from "react";
 
 type MintCard = { tokenId: string; image: string | null };
+type ApiResp =
+  | { ok: true; cards: MintCard[]; warning?: string; rpcUrl?: string; latest?: string; scanned?: string }
+  | { ok: false; error: string; hint?: string };
 
 export default function CollectionPreview() {
   const title = useMemo(() => "Recently Minted", []);
   const [loading, setLoading] = useState(false);
   const [cards, setCards] = useState<MintCard[]>([]);
   const [error, setError] = useState("");
+  const [warning, setWarning] = useState("");
 
   // popup viewer
   const [active, setActive] = useState<MintCard | null>(null);
 
-  // prevent overlapping requests + allow abort
+  // prevent overlapping requests
   const inFlight = useRef<AbortController | null>(null);
 
   async function refresh() {
@@ -22,7 +26,9 @@ export default function CollectionPreview() {
 
     setLoading(true);
     setError("");
+    setWarning("");
 
+    // abort any previous request
     if (inFlight.current) {
       inFlight.current.abort();
       inFlight.current = null;
@@ -31,37 +37,46 @@ export default function CollectionPreview() {
     const controller = new AbortController();
     inFlight.current = controller;
 
-    // Give API time (it does RPC + log scan). Client timeout longer.
-    const timeout = setTimeout(() => controller.abort(), 35_000);
+    // Client timeout (UI) — server route has its own longer internal timeouts too
+    const timeout = setTimeout(() => controller.abort(), 25_000);
 
     try {
       const res = await fetch("/api/basebots/recent?n=4&deployBlock=37969324", {
         method: "GET",
         cache: "no-store",
         signal: controller.signal,
-        headers: {
-          // helps avoid some intermediary caching weirdness
-          "cache-control": "no-store",
-        },
       });
 
       const text = await res.text();
-      if (!res.ok) throw new Error(`API ${res.status}: ${text}`);
 
-      const json = JSON.parse(text);
-      if (!json?.ok) throw new Error(json?.error || text || "API returned ok=false");
+      let json: ApiResp;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        throw new Error(`Bad response: ${text.slice(0, 240)}`);
+      }
 
-      const next = Array.isArray(json.cards) ? (json.cards as MintCard[]) : [];
+      if (!res.ok || !json || (json as any).ok === false) {
+        const msg =
+          (json as any)?.error ||
+          `API ${res.status}: ${text.slice(0, 240)}`;
+        throw new Error(msg);
+      }
+
+      const ok = json as Extract<ApiResp, { ok: true }>;
+      const next = Array.isArray(ok.cards) ? ok.cards : [];
+
       setCards(next);
 
+      if (ok.warning) setWarning(ok.warning);
       if (next.length < 4) {
-        setError(`Loaded ${next.length}/4. Try Refresh again—RPC/log scan may still be catching up.`);
+        setWarning(
+          `Loaded ${next.length}/4. Try Refresh again — RPCs can temporarily rate-limit log reads.`
+        );
       }
     } catch (e: any) {
       if (e?.name === "AbortError") {
-        setError(
-          "Request timed out. Try Refresh again. (If this keeps happening, set BASE_RPC_URLS to a paid RPC like Alchemy/QuickNode.)"
-        );
+        setError("Request timed out. Tap Refresh again (RPC may be slow/rate-limited).");
       } else {
         setError(e?.message || "HTTP request failed.");
       }
@@ -74,9 +89,10 @@ export default function CollectionPreview() {
 
   return (
     <section className="w-full flex justify-center">
-      <div className="glass glass-pad w-full max-w-md sm:max-w-lg md:max-w-2xl">
+      <div className="glass glass-pad w-full max-w-md sm:max-w-lg md:max-w-2xl relative">
+        {/* Header */}
         <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
+          <div className="min-w-0 w-full">
             <h2 className="text-center font-extrabold tracking-tight text-3xl md:text-4xl bg-gradient-to-r from-cyan-300 via-blue-400 to-fuchsia-500 bg-clip-text text-transparent">
               {title}
             </h2>
@@ -90,7 +106,7 @@ export default function CollectionPreview() {
             type="button"
             onClick={() => void refresh()}
             disabled={loading}
-            className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-white/80 hover:bg-white/10 disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/60 active:scale-95 transition-transform"
+            className="shrink-0 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-white/80 hover:bg-white/10 disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/60 active:scale-95 transition-transform"
           >
             {loading ? (
               <span className="h-3 w-3 animate-spin rounded-full border border-white/50 border-t-transparent" />
@@ -101,31 +117,36 @@ export default function CollectionPreview() {
           </button>
         </div>
 
-        {/* ✅ Error/status box that never goes off screen */}
-        {(error || (loading && cards.length === 0)) && (
-          <div
-            className={`mt-3 rounded-xl border p-3 text-[11px] leading-relaxed ${
-              error ? "border-rose-400/20 bg-rose-500/10 text-rose-200" : "border-white/10 bg-black/25 text-white/70"
-            }`}
-            style={{
-              maxHeight: 120,
-              overflow: "auto",
-              wordBreak: "break-word",
-              overflowWrap: "anywhere",
-            }}
-            role="status"
-            aria-live="polite"
-          >
-            {error ? error : "Loading recently minted…"}
-          </div>
-        )}
+        {/* Sticky message box that never “goes off screen” */}
+        <AnimatePresence>
+          {(error || warning) && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              className="mt-3 rounded-2xl border border-white/10 bg-black/30 p-3"
+            >
+              {error && (
+                <div className="text-[11px] text-rose-300 whitespace-pre-wrap break-words max-h-[140px] overflow-auto">
+                  {error}
+                </div>
+              )}
+              {!error && warning && (
+                <div className="text-[11px] text-amber-200 whitespace-pre-wrap break-words max-h-[140px] overflow-auto">
+                  {warning}
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-        {!loading && !error && cards.length === 0 && (
+        {!loading && cards.length === 0 && !error && (
           <p className="mt-3 text-center text-sm text-white/70">
-            Click <span className="font-semibold text-white/80">Refresh</span> to load the last 4 mints.
+            Tap <span className="font-semibold text-white/80">Refresh</span> to load the last 4 mints.
           </p>
         )}
 
+        {/* Grid */}
         {cards.length > 0 && (
           <div className="mt-5 flex flex-wrap -mx-2 min-w-0">
             {cards.map((bot) => (
@@ -134,7 +155,7 @@ export default function CollectionPreview() {
                 whileHover={{ scale: 1.03, y: -2 }}
                 whileTap={{ scale: 0.98 }}
                 transition={{ type: "spring", stiffness: 240, damping: 18 }}
-                className="w-1/2 px-2 mb-6 min-w-0"
+                className="w-1/2 px-2 mb-5 min-w-0"
               >
                 <button
                   type="button"
@@ -154,7 +175,7 @@ export default function CollectionPreview() {
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center text-white/60">
                         <div className="h-6 w-6 animate-spin rounded-full border border-white/30 border-t-transparent" />
-                        <div className="mt-2 text-[11px]">Missing SVG image</div>
+                        <div className="mt-2 text-[11px]">No SVG returned</div>
                       </div>
                     )}
 
@@ -163,7 +184,7 @@ export default function CollectionPreview() {
                     </div>
                   </div>
 
-                  {/* ✅ green pill under each NFT */}
+                  {/* ✅ Green FID pill UNDER the image */}
                   <div className="mt-2 flex justify-center">
                     <span className="inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-200">
                       FID #{bot.tokenId}
@@ -176,10 +197,10 @@ export default function CollectionPreview() {
         )}
 
         <p className="mt-1 text-center text-[11px] text-white/45">
-          Pulled from on-chain mint events and rendered from on-chain tokenURI SVG.
+          Pulled from on-chain mint events and rendered from on-chain tokenURI SVG
         </p>
 
-        {/* ✅ POPUP VIEWER */}
+        {/* Popup */}
         <AnimatePresence>
           {active && (
             <motion.div
@@ -202,9 +223,12 @@ export default function CollectionPreview() {
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-                  <span className="inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-[12px] font-semibold text-emerald-200">
-                    FID #{active.tokenId}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-[12px] font-semibold text-emerald-200">
+                      FID #{active.tokenId}
+                    </span>
+                    <span className="text-[12px] text-white/60">Recently minted</span>
+                  </div>
 
                   <button
                     type="button"
@@ -227,12 +251,14 @@ export default function CollectionPreview() {
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center text-white/60">
                         <div className="h-7 w-7 animate-spin rounded-full border border-white/30 border-t-transparent" />
-                        <div className="mt-2 text-[12px]">Missing SVG image</div>
+                        <div className="mt-2 text-[12px]">No SVG returned</div>
                       </div>
                     )}
                   </div>
 
-                  <p className="mt-3 text-center text-[11px] text-white/55">Tap outside to close.</p>
+                  <p className="mt-3 text-center text-[11px] text-white/55">
+                    Tap outside to close.
+                  </p>
                 </div>
               </motion.div>
             </motion.div>
