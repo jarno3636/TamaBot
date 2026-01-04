@@ -14,7 +14,7 @@ export default function CollectionPreview() {
   // popup viewer
   const [active, setActive] = useState<MintCard | null>(null);
 
-  // prevent double-click overlapping requests
+  // prevent overlapping requests
   const inFlight = useRef<AbortController | null>(null);
 
   async function refresh() {
@@ -23,6 +23,7 @@ export default function CollectionPreview() {
     setLoading(true);
     setError("");
 
+    // Abort any previous request
     if (inFlight.current) {
       inFlight.current.abort();
       inFlight.current = null;
@@ -31,7 +32,8 @@ export default function CollectionPreview() {
     const controller = new AbortController();
     inFlight.current = controller;
 
-    const timeout = setTimeout(() => controller.abort(), 15_000);
+    // Give RPC/log scanning enough time to succeed
+    const timeout = setTimeout(() => controller.abort(), 30_000);
 
     try {
       const res = await fetch("/api/basebots/recent?n=4&deployBlock=37969324", {
@@ -49,14 +51,14 @@ export default function CollectionPreview() {
       const next = Array.isArray(json.cards) ? (json.cards as MintCard[]) : [];
       setCards(next);
 
-      if (next.length === 0) {
-        setError("No mints found in the scanned window yet. Try again in a moment.");
-      } else if (next.length < 4) {
-        setError(`Loaded ${next.length}/4. Try Refresh again to fill remaining.`);
+      if (next.length < 4) {
+        setError(
+          `Loaded ${next.length}/4. Base RPC may be busy—tap Refresh again in a few seconds.`
+        );
       }
     } catch (e: any) {
       if (e?.name === "AbortError") {
-        setError("Request timed out. Tap Refresh again (RPC may be slow).");
+        setError("Request timed out. Tap Refresh again (Base RPC may be slow/busy).");
       } else {
         setError(e?.message || "HTTP request failed.");
       }
@@ -70,6 +72,7 @@ export default function CollectionPreview() {
   return (
     <section className="w-full flex justify-center">
       <div className="glass glass-pad w-full max-w-md sm:max-w-lg md:max-w-2xl">
+        {/* Header */}
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <h2 className="text-center font-extrabold tracking-tight text-3xl md:text-4xl bg-gradient-to-r from-cyan-300 via-blue-400 to-fuchsia-500 bg-clip-text text-transparent">
@@ -96,20 +99,32 @@ export default function CollectionPreview() {
           </button>
         </div>
 
+        {/* Error box that never goes off-screen */}
         {error && (
           <div className="mt-3 rounded-xl border border-white/10 bg-black/30 p-3">
-            <pre className="whitespace-pre-wrap text-[11px] text-rose-300 max-h-[160px] overflow-auto">
+            <div className="flex items-start justify-between gap-2">
+              <div className="text-[11px] font-semibold text-rose-200">Notice</div>
+              <button
+                type="button"
+                className="text-[11px] text-white/60 hover:text-white/80"
+                onClick={() => setError("")}
+              >
+                Dismiss
+              </button>
+            </div>
+            <pre className="mt-2 max-h-[160px] overflow-auto whitespace-pre-wrap text-[11px] text-rose-300">
               {error}
             </pre>
           </div>
         )}
 
-        {!loading && cards.length === 0 && (
+        {!loading && cards.length === 0 && !error && (
           <p className="mt-3 text-center text-sm text-white/70">
-            Click <span className="font-semibold text-white/80">Refresh</span> to load the last 4 mints.
+            Tap <span className="font-semibold text-white/80">Refresh</span> to load the last 4 mints.
           </p>
         )}
 
+        {/* 2x2 grid */}
         {cards.length > 0 && (
           <div className="mt-5 flex flex-wrap -mx-2 min-w-0">
             {cards.map((bot) => (
@@ -147,6 +162,7 @@ export default function CollectionPreview() {
                     </div>
                   </div>
 
+                  {/* ✅ Green pill UNDER each NFT */}
                   <div className="mt-2 flex justify-center">
                     <span className="inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-200">
                       FID #{bot.tokenId}
@@ -159,9 +175,10 @@ export default function CollectionPreview() {
         )}
 
         <p className="mt-1 text-center text-[11px] text-white/45">
-          Pulled from on-chain mint events and rendered from on-chain tokenURI SVG
+          Pulled from on-chain mint events and rendered from on-chain tokenURI SVG.
         </p>
 
+        {/* Popup viewer */}
         <AnimatePresence>
           {active && (
             <motion.div
