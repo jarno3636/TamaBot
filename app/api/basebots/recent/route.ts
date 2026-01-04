@@ -36,6 +36,7 @@ function safeB64ToUtf8(b64: string) {
 function extractSvgFromTokenUri(tokenUri: string): string | null {
   if (!tokenUri) return null;
 
+  // data:application/json;base64,<...>
   if (tokenUri.startsWith("data:application/json;base64,")) {
     const b64 = tokenUri.slice("data:application/json;base64,".length);
     const jsonStr = safeB64ToUtf8(b64);
@@ -44,10 +45,12 @@ function extractSvgFromTokenUri(tokenUri: string): string | null {
     try {
       const meta = JSON.parse(jsonStr);
 
-      if (typeof meta?.image_data === "string" && meta.image_data.trim().startsWith("<svg")) {
+      // common: image_data contains raw <svg>
+      if (typeof meta?.image_data === "string" && meta.image_data.trim().includes("<svg")) {
         return meta.image_data;
       }
 
+      // meta.image can be svg data urls
       if (typeof meta?.image === "string") {
         const img: string = meta.image;
 
@@ -72,19 +75,30 @@ function extractSvgFromTokenUri(tokenUri: string): string | null {
   return null;
 }
 
+// Make it “image-like” + force it to scale correctly
+function svgToDataUrl(svg: string) {
+  // ensure xmlns exists
+  let s = svg.includes('xmlns="http://www.w3.org/2000/svg"')
+    ? svg
+    : svg.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"');
+
+  // force scaling if the svg is missing sizing
+  if (!/width=/.test(s)) s = s.replace("<svg", '<svg width="100%"');
+  if (!/height=/.test(s)) s = s.replace("<svg", '<svg height="100%"');
+  if (!/preserveAspectRatio=/.test(s)) s = s.replace("<svg", '<svg preserveAspectRatio="xMidYMid meet"');
+
+  // encode into a data URL
+  return `data:image/svg+xml;utf8,${encodeURIComponent(s)}`;
+}
+
 function getRpcList() {
-  // Prefer a paid RPC here. This endpoint is often rate limited for logs.
-  // You can set BASE_RPC_URLS="url1,url2,url3"
   const env = (process.env.BASE_RPC_URLS || "").trim();
   const list = env
     ? env.split(",").map((s) => s.trim()).filter(Boolean)
-    : [
-        process.env.BASE_RPC_URL || "",
-        "https://mainnet.base.org",
-        "https://base.publicnode.com",
-      ].map((s) => s.trim()).filter(Boolean);
+    : [process.env.BASE_RPC_URL || "", "https://mainnet.base.org", "https://base.publicnode.com"]
+        .map((s) => s.trim())
+        .filter(Boolean);
 
-  // de-dupe
   return Array.from(new Set(list));
 }
 
@@ -117,7 +131,6 @@ export async function GET(req: Request) {
     );
   }
 
-  // Smaller chunk = fewer RPC timeouts; more loops = more reliable.
   const CHUNK = 4_000n;
   const MAX_LOOPS = 35;
 
@@ -127,10 +140,7 @@ export async function GET(req: Request) {
     try {
       const pc = createPublicClient({
         chain: base,
-        transport: http(rpcUrl, {
-          timeout: 25_000,
-          batch: false, // IMPORTANT: some RPCs choke on batch for multicall/logs
-        }),
+        transport: http(rpcUrl, { timeout: 25_000, batch: false }),
       });
 
       const latest = await tryWith(() => pc.getBlockNumber(), 2);
@@ -153,7 +163,6 @@ export async function GET(req: Request) {
           2
         );
 
-        // newest first
         logs.sort((a, b) => {
           if (a.blockNumber === b.blockNumber) return (b.logIndex ?? 0) - (a.logIndex ?? 0);
           return Number((b.blockNumber ?? 0n) - (a.blockNumber ?? 0n));
@@ -185,7 +194,6 @@ export async function GET(req: Request) {
         .slice(0, n)
         .map((x) => x.fid);
 
-      // multicall tokenURI (no batch)
       const urisRes = await tryWith(
         () =>
           pc.multicall({
@@ -203,22 +211,16 @@ export async function GET(req: Request) {
       const cards = tokenIds.map((tid, i) => {
         const uri = (urisRes as any)[i]?.result as string | undefined;
         const svg = uri ? extractSvgFromTokenUri(uri) : null;
-        return { tokenId: tid.toString(), svg };
+        const image = svg ? svgToDataUrl(svg) : null;
+        return { tokenId: tid.toString(), image };
       });
 
       return NextResponse.json(
-        {
-          ok: true,
-          contract,
-          rpcUrl,
-          latest: latest.toString(),
-          cards,
-        },
+        { ok: true, contract, rpcUrl, latest: latest.toString(), cards },
         { headers: { "cache-control": "no-store" } }
       );
     } catch (e: any) {
       lastErr = e;
-      // try next rpc
     }
   }
 
@@ -227,7 +229,7 @@ export async function GET(req: Request) {
     {
       ok: false,
       error: msg,
-      hint: "This is usually an RPC eth_getLogs restriction/rate-limit. Set BASE_RPC_URLS to a better RPC (Alchemy/QuickNode).",
+      hint: "Often an RPC eth_getLogs rate-limit. Set BASE_RPC_URLS to Alchemy/QuickNode for reliability.",
       contract: BASEBOTS.address,
       rpcsTried: rpcs,
     },
