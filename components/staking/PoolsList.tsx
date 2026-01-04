@@ -168,6 +168,55 @@ type PoolExtra = {
 
 type UsersRowTuple = readonly [bigint, bigint, bigint];
 
+/* ──────────────────────────────────────────────────────────────
+ * Alternating per-pool card backgrounds (deterministic by address)
+ * ──────────────────────────────────────────────────────────── */
+type CardTheme = "blue" | "amber";
+
+function hashAddrToTheme(addr: string): CardTheme {
+  // simple deterministic hash of the address characters
+  let h = 0;
+  for (let i = 0; i < addr.length; i++) {
+    h = (h * 31 + addr.charCodeAt(i)) >>> 0;
+  }
+  return h % 2 === 0 ? "blue" : "amber";
+}
+
+function poolCardStyle(poolAddr: string): { theme: CardTheme; outer: React.CSSProperties; wash: React.CSSProperties } {
+  const theme = hashAddrToTheme(poolAddr.toLowerCase());
+
+  if (theme === "blue") {
+    return {
+      theme,
+      outer: {
+        borderColor: "rgba(56,189,248,0.22)",
+        background: "linear-gradient(180deg, rgba(2,6,23,0.70), rgba(3,7,18,0.55))",
+        boxShadow:
+          "0 30px 90px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 1px rgba(56,189,248,0.06)",
+      },
+      wash: {
+        background:
+          "radial-gradient(900px 320px at 15% -10%, rgba(56,189,248,0.18), transparent 60%), radial-gradient(900px 360px at 90% 0%, rgba(99,102,241,0.10), transparent 55%), radial-gradient(700px 260px at 30% 120%, rgba(121,255,225,0.08), transparent 60%)",
+      },
+    };
+  }
+
+  // amber theme
+  return {
+    theme,
+    outer: {
+      borderColor: "rgba(251,191,36,0.22)",
+      background: "linear-gradient(180deg, rgba(2,6,23,0.70), rgba(16,10,0,0.18))",
+      boxShadow:
+        "0 30px 90px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 1px rgba(251,191,36,0.06)",
+    },
+    wash: {
+      background:
+        "radial-gradient(900px 320px at 15% -10%, rgba(251,191,36,0.18), transparent 60%), radial-gradient(900px 360px at 90% 0%, rgba(245,158,11,0.10), transparent 55%), radial-gradient(700px 260px at 30% 120%, rgba(56,189,248,0.06), transparent 60%)",
+    },
+  };
+}
+
 export default function PoolsList({
   pools,
   poolsLoading,
@@ -286,7 +335,7 @@ export default function PoolsList({
 
           let myAmount = 0n;
           if (address && userRes) {
-            // ✅ FIX: tuple access
+            // ✅ tuple access
             const u = (userRes as any)?.[i]?.result as UsersRowTuple | undefined;
             myAmount = u?.[0] ?? 0n;
           }
@@ -394,15 +443,33 @@ export default function PoolsList({
 
             const enterHref = `/staking?pool=${pool.pool}&nft=${pool.nft}&rewardToken=${pool.rewardToken}`;
 
+            // ✅ Deterministic blue/amber card background per pool
+            const card = poolCardStyle(pool.pool);
+
             return (
-              <div key={pool.pool} className="relative overflow-hidden rounded-3xl border border-white/12 bg-black/35 p-4 md:p-5">
+              <div
+                key={pool.pool}
+                className="relative overflow-hidden rounded-3xl border p-4 md:p-5"
+                style={{
+                  ...card.outer,
+                  // small lift for each card; feels “separate”
+                  transform: "translateZ(0)",
+                }}
+              >
                 <div
                   aria-hidden
-                  className="pointer-events-none absolute inset-0 opacity-80"
+                  className="pointer-events-none absolute inset-0 opacity-95"
+                  style={card.wash}
+                />
+
+                {/* extra subtle “shine” strip */}
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute -top-16 left-0 right-0 h-32 opacity-60"
                   style={{
-                    background: isBasebotsNft
-                      ? "radial-gradient(700px 260px at 10% 0%, rgba(121,255,225,0.14), transparent 60%), radial-gradient(700px 260px at 90% 0%, rgba(56,189,248,0.10), transparent 55%)"
-                      : "radial-gradient(700px 260px at 10% 0%, rgba(56,189,248,0.10), transparent 60%)",
+                    background:
+                      "linear-gradient(90deg, transparent, rgba(255,255,255,0.10), transparent)",
+                    transform: "rotate(-6deg)",
                   }}
                 />
 
@@ -414,6 +481,9 @@ export default function PoolsList({
 
                         {isBasebotsNft && <Chip tone="teal">Featured</Chip>}
                         <Chip tone={statusTone}>{status === "live" ? "Live" : status === "upcoming" ? "Upcoming" : "Closed"}</Chip>
+
+                        {/* show theme chip (optional but fun) */}
+                        <Chip tone={card.theme === "blue" ? "sky" : "amber"}>{card.theme === "blue" ? "Blue" : "Amber"}</Chip>
 
                         {isCreator && <Chip tone="amber">Creator</Chip>}
                         {pool.hasMyStake && <Chip tone="emerald">You’re staked</Chip>}
