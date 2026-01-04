@@ -1,150 +1,210 @@
 // app/api/basebots/recent/route.ts
-import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { createPublicClient, http, parseAbiItem } from "viem";
+import { createPublicClient, http } from "viem";
 import { base } from "viem/chains";
 import { BASEBOTS } from "@/lib/abi";
 
-export const runtime = "nodejs";
+export const runtime = "nodejs"; // important for reliability on Vercel
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
 
-// Transfer(address indexed from, address indexed to, uint256 indexed tokenId)
-const TRANSFER = parseAbiItem(
-  "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)"
-);
-const ZERO = "0x0000000000000000000000000000000000000000" as const;
+const MINTED_EVENT = {
+  type: "event",
+  name: "Minted",
+  inputs: [
+    { indexed: true, name: "minter", type: "address" },
+    { indexed: true, name: "fid", type: "uint256" },
+  ],
+} as const;
 
-// --- Minimal client shape to avoid viem type collisions ---------------------
-type LogClient = {
-  getLogs: (args: {
-    address?: `0x${string}` | `0x${string}`[];
-    event?: any;
-    fromBlock?: bigint;
-    toBlock?: bigint;
-    args?: any;
-  }) => Promise<any[]>;
-};
+const ERC721_TOKENURI_ABI = [
+  {
+    name: "tokenURI",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ name: "", type: "string" }],
+  },
+] as const;
 
-// Provider-safe chunking (Base RPC often limits long ranges)
-async function getLogsChunked({
-  client,
-  address,
-  fromBlock,
-  toBlock,
-  chunkSize = 5_000n,
-}: {
-  client: LogClient;               // 👈 decoupled from viem’s concrete type
-  address: `0x${string}`;
-  fromBlock: bigint;
-  toBlock: bigint;
-  chunkSize?: bigint;
-}) {
-  const logs: any[] = [];
-  let start = fromBlock;
-  while (start <= toBlock) {
-    const end = start + chunkSize - 1n > toBlock ? toBlock : start + chunkSize - 1n;
-    // eslint-disable-next-line no-await-in-loop
-    const part = await client.getLogs({
-      address,
-      event: TRANSFER,
-      fromBlock: start,
-      toBlock: end,
-      args: { from: ZERO },
-    });
-    logs.push(...part);
-    start = end + 1n;
+function safeAtobNode(b64: string): string {
+  try {
+    return Buffer.from(b64, "base64").toString("utf8");
+  } catch {
+    return "";
   }
-  return logs;
 }
 
-export async function GET(req: NextRequest) {
+function extractSvgFromTokenUri(tokenUri: string): string | null {
+  if (!tokenUri) return null;
+
+  if (tokenUri.startsWith("data:application/json;base64,")) {
+    const b64 = tokenUri.slice("data:application/json;base64,".length);
+    const jsonStr = safeAtobNode(b64);
+    if (!jsonStr) return null;
+
+    try {
+      const meta = JSON.parse(jsonStr);
+
+      if (typeof meta?.image_data === "string" && meta.image_data.trim().startsWith("<svg")) {
+        return meta.image_data;
+      }
+
+      if (typeof meta?.image === "string") {
+        const img: string = meta.image;
+
+        if (img.startsWith("data:image/svg+xml;base64,")) {
+          const svgB64 = img.slice("data:image/svg+xml;base64,".length);
+          const svg = safeAtobNode(svgB64);
+          return svg?.includes("<svg") ? svg : null;
+        }
+
+        if (img.startsWith("data:image/svg+xml;utf8,")) {
+          const svg = decodeURIComponent(img.slice("data:image/svg+xml;utf8,".length));
+          return svg?.includes("<svg") ? svg : null;
+        }
+      }
+
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  if (tokenUri.trim().startsWith("{")) {
+    try {
+      const meta = JSON.parse(tokenUri);
+      if (typeof meta?.image_data === "string" && meta.image_data.trim().startsWith("<svg")) return meta.image_data;
+      if (typeof meta?.image === "string" && meta.image.startsWith("data:image/svg+xml;base64,")) {
+        const svgB64 = meta.image.slice("data:image/svg+xml;base64,".length);
+        const svg = safeAtobNode(svgB64);
+        return svg?.includes("<svg") ? svg : null;
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+async function withRetry<T>(fn: () => Promise<T>, tries = 3) {
+  let last: unknown;
+  for (let i = 0; i < tries; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      last = e;
+      await new Promise((r) => setTimeout(r, 250 + i * 400));
+    }
+  }
+  throw last;
+}
+
+export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
 
-    // how many items to return
-    const limit = Math.max(1, Math.min(25, Number(searchParams.get("limit") || 3)));
+    // Optional overrides
+    const want = Math.max(1, Math.min(8, Number(searchParams.get("n") || "4"))); // default 4
+    const deployBlock = BigInt(searchParams.get("deployBlock") || "37969324");
 
-    // choose lookback strategy
-    const sinceBlocksParam = searchParams.get("sinceBlocks");
-    const hoursParam = searchParams.get("hours");
+    // IMPORTANT: server-side RPC (not NEXT_PUBLIC)
+    // Set BASE_RPC_URL in Vercel env for best reliability.
+    const rpcUrl = (process.env.BASE_RPC_URL || process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org").trim();
 
-    // RPC
-    const rpc =
-      process.env.NEXT_PUBLIC_BASE_RPC ||
-      process.env.RPC_URL ||
-      "https://mainnet.base.org";
+    const pc = createPublicClient({
+      chain: base,
+      transport: http(rpcUrl, { timeout: 25_000 }),
+    });
 
-    const client = createPublicClient({ chain: base, transport: http(rpc) });
+    const latest = await withRetry(() => pc.getBlockNumber(), 3);
 
-    const latest = await client.getBlockNumber();
+    const CHUNK = 8_000n;
+    let toBlock = latest;
+    let fromBlock = toBlock > CHUNK ? toBlock - CHUNK : 0n;
+    if (fromBlock < deployBlock) fromBlock = deployBlock;
 
-    // Default: ~200k blocks. You can override: ?sinceBlocks=50000  OR  ?hours=2
-    let lookback = 200_000n;
-    if (sinceBlocksParam) {
-      const sb = BigInt(Math.max(1, Number(sinceBlocksParam)));
-      lookback = sb;
-    } else if (hoursParam) {
-      // Base ~2s/block ≈ 1800 blocks/hour — be generous
-      const hrs = Math.max(1, Number(hoursParam));
-      lookback = BigInt(hrs * 2_200); // buffer
+    const found: Array<{ fid: bigint; blockNumber: bigint; logIndex: number }> = [];
+
+    for (let tries = 0; tries < 25 && found.length < want; tries++) {
+      const logs = await withRetry(
+        () =>
+          pc.getLogs({
+            address: BASEBOTS.address,
+            event: MINTED_EVENT,
+            fromBlock,
+            toBlock,
+          }),
+        3
+      );
+
+      const sorted = [...logs].sort((a, b) => {
+        if (a.blockNumber === b.blockNumber) return (b.logIndex ?? 0) - (a.logIndex ?? 0);
+        return Number((b.blockNumber ?? 0n) - (a.blockNumber ?? 0n));
+      });
+
+      for (const l of sorted) {
+        const fid = (l.args as any)?.fid as bigint | undefined;
+        if (fid === undefined) continue;
+        if (!found.some((x) => x.fid === fid)) {
+          found.push({ fid, blockNumber: l.blockNumber!, logIndex: l.logIndex ?? 0 });
+          if (found.length >= want) break;
+        }
+      }
+
+      if (toBlock <= deployBlock) break;
+
+      toBlock = fromBlock > 0n ? fromBlock - 1n : 0n;
+      const nextFrom = toBlock > CHUNK ? toBlock - CHUNK : 0n;
+      fromBlock = nextFrom < deployBlock ? deployBlock : nextFrom;
+
+      if (toBlock < deployBlock) break;
     }
 
-    const fromBlock = latest > lookback ? latest - lookback : 0n;
-    const toBlock = latest;
-
-    // Pull logs in chunks to avoid RPC 413/timeout issues
-    const logs = await getLogsChunked({
-      client: client as unknown as LogClient, // 👈 sidestep type collision
-      address: BASEBOTS.address as `0x${string}`,
-      fromBlock,
-      toBlock,
-      chunkSize: 5_000n,
-    });
-
-    // Sort newest first (blockNumber desc, then txIndex desc, then logIndex desc)
-    logs.sort((a, b) => {
-      if (a.blockNumber !== b.blockNumber) return Number(b.blockNumber - a.blockNumber);
-      if (a.transactionIndex !== b.transactionIndex)
-        return Number(b.transactionIndex - a.transactionIndex);
-      return Number((b.logIndex ?? 0n) - (a.logIndex ?? 0n));
-    });
-
-    const pick = logs.slice(0, limit);
-
-    // Batch fetch block timestamps
-    const uniqueBlocks = Array.from(new Set(pick.map((l: any) => l.blockNumber.toString()))).map(
-      (s) => BigInt(s)
-    );
-    const blockMap = new Map<bigint, number>();
-    await Promise.all(
-      uniqueBlocks.map(async (bn) => {
-        // Use includeTransactions: false to keep a narrow return shape
-        const blk = await client.getBlock({ blockNumber: bn, includeTransactions: false } as any);
-        blockMap.set(bn, Number((blk as any).timestamp) * 1000);
+    const tokenIds = found
+      .sort((a, b) => {
+        if (a.blockNumber === b.blockNumber) return b.logIndex - a.logIndex;
+        return Number(b.blockNumber - a.blockNumber);
       })
-    );
+      .slice(0, want)
+      .map((x) => x.fid);
 
-    const items = pick.map((l: any) => ({
-      tokenId: l.args.tokenId?.toString() || "",
-      to: l.args.to as `0x${string}`,
-      txHash: l.transactionHash as `0x${string}`,
-      blockNumber: Number(l.blockNumber),
-      timestamp: blockMap.get(l.blockNumber),
-    }));
-
-    return NextResponse.json(
-      { ok: true, items, latestBlock: Number(latest) },
-      { headers: { "cache-control": "no-store, max-age=0" } }
-    );
-  } catch (e: any) {
-    const msg = String(e?.message || e || "failed");
-    if (/timeout|ECONN|ENOTFOUND|fetch failed|503/i.test(msg)) {
+    if (tokenIds.length === 0) {
       return NextResponse.json(
-        { ok: false, error: "Upstream RPC is busy. Try again shortly." },
-        { status: 503 }
+        { ok: true, tokenIds: [], cards: [] },
+        { headers: { "cache-control": "no-store" } }
       );
     }
-    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+
+    const urisRes = await withRetry(
+      () =>
+        pc.multicall({
+          allowFailure: true,
+          contracts: tokenIds.map((tid) => ({
+            address: BASEBOTS.address,
+            abi: ERC721_TOKENURI_ABI,
+            functionName: "tokenURI",
+            args: [tid],
+          })),
+        }),
+      3
+    );
+
+    const cards = tokenIds.map((tid, i) => {
+      const uri = (urisRes as any)[i]?.result as string | undefined;
+      const svg = uri ? extractSvgFromTokenUri(uri) : null;
+      return { tokenId: tid.toString(), svg };
+    });
+
+    return NextResponse.json(
+      { ok: true, tokenIds: tokenIds.map((t) => t.toString()), cards, rpc: rpcUrl },
+      { headers: { "cache-control": "no-store" } }
+    );
+  } catch (e: any) {
+    const msg = e?.shortMessage || e?.message || "HTTP request failed.";
+    return NextResponse.json(
+      { ok: false, error: msg },
+      { status: 500, headers: { "cache-control": "no-store" } }
+    );
   }
 }
