@@ -236,6 +236,8 @@ export default function StakingPage() {
   const [factoryPoolDetails, setFactoryPoolDetails] = useState<FactoryPoolDetails[]>([]);
   const [poolsLoading, setPoolsLoading] = useState(false);
   const [poolsError, setPoolsError] = useState<string | null>(null);
+
+  // toggled when user clicks Refresh
   const [refreshNonce, setRefreshNonce] = useState(0);
 
   useEffect(() => {
@@ -247,7 +249,12 @@ export default function StakingPage() {
         setPoolsError(null);
 
         const params = new URLSearchParams();
+
+        // Keep server-side creator filter for "my-pools"
         if (activeFilter === "my-pools" && address) params.set("creator", address);
+
+        // ✅ IMPORTANT: if user clicked refresh, force scan + upsert
+        if (refreshNonce > 0) params.set("refresh", "1");
 
         const url = `/api/pools${params.toString() ? `?${params.toString()}` : ""}`;
         const res = await fetch(url, { cache: "no-store" });
@@ -272,6 +279,7 @@ export default function StakingPage() {
             rewardToken: p.rewardToken as `0x${string}`,
           }));
 
+        // de-dupe by pool address
         const unique = new Map<string, FactoryPoolMeta>();
         for (const p of items) {
           const key = p.pool.toLowerCase();
@@ -348,7 +356,7 @@ export default function StakingPage() {
           let hasMyStake = false;
           if (address && userRes) {
             const u = (userRes as any)[i]?.result as PoolUserRow | undefined;
-            const amt = u?.[0]; // ✅ tuple access
+            const amt = u?.[0];
             hasMyStake = !!amt && amt > 0n;
           }
 
