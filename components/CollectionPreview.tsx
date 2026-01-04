@@ -14,7 +14,7 @@ export default function CollectionPreview() {
   // popup viewer
   const [active, setActive] = useState<MintCard | null>(null);
 
-  // prevent double-click overlapping requests
+  // prevent overlapping requests + allow abort
   const inFlight = useRef<AbortController | null>(null);
 
   async function refresh() {
@@ -23,7 +23,6 @@ export default function CollectionPreview() {
     setLoading(true);
     setError("");
 
-    // Abort any previous request
     if (inFlight.current) {
       inFlight.current.abort();
       inFlight.current = null;
@@ -32,14 +31,18 @@ export default function CollectionPreview() {
     const controller = new AbortController();
     inFlight.current = controller;
 
-    // Hard timeout so it can never “spin forever”
-    const timeout = setTimeout(() => controller.abort(), 15_000);
+    // Give API time (it does RPC + log scan). Client timeout longer.
+    const timeout = setTimeout(() => controller.abort(), 35_000);
 
     try {
       const res = await fetch("/api/basebots/recent?n=4&deployBlock=37969324", {
         method: "GET",
         cache: "no-store",
         signal: controller.signal,
+        headers: {
+          // helps avoid some intermediary caching weirdness
+          "cache-control": "no-store",
+        },
       });
 
       const text = await res.text();
@@ -52,11 +55,13 @@ export default function CollectionPreview() {
       setCards(next);
 
       if (next.length < 4) {
-        setError(`Loaded ${next.length}/4. RPC scan may be rate-limited—try Refresh again in a moment.`);
+        setError(`Loaded ${next.length}/4. Try Refresh again—RPC/log scan may still be catching up.`);
       }
     } catch (e: any) {
       if (e?.name === "AbortError") {
-        setError("Request timed out. Tap Refresh again (RPC may be slow/rate-limited).");
+        setError(
+          "Request timed out. Try Refresh again. (If this keeps happening, set BASE_RPC_URLS to a paid RPC like Alchemy/QuickNode.)"
+        );
       } else {
         setError(e?.message || "HTTP request failed.");
       }
@@ -96,13 +101,26 @@ export default function CollectionPreview() {
           </button>
         </div>
 
-        {error && (
-          <pre className="mt-3 whitespace-pre-wrap rounded-xl border border-white/10 bg-black/30 p-3 text-[11px] text-rose-300">
-            {error}
-          </pre>
+        {/* ✅ Error/status box that never goes off screen */}
+        {(error || (loading && cards.length === 0)) && (
+          <div
+            className={`mt-3 rounded-xl border p-3 text-[11px] leading-relaxed ${
+              error ? "border-rose-400/20 bg-rose-500/10 text-rose-200" : "border-white/10 bg-black/25 text-white/70"
+            }`}
+            style={{
+              maxHeight: 120,
+              overflow: "auto",
+              wordBreak: "break-word",
+              overflowWrap: "anywhere",
+            }}
+            role="status"
+            aria-live="polite"
+          >
+            {error ? error : "Loading recently minted…"}
+          </div>
         )}
 
-        {!loading && cards.length === 0 && (
+        {!loading && !error && cards.length === 0 && (
           <p className="mt-3 text-center text-sm text-white/70">
             Click <span className="font-semibold text-white/80">Refresh</span> to load the last 4 mints.
           </p>
@@ -116,9 +134,8 @@ export default function CollectionPreview() {
                 whileHover={{ scale: 1.03, y: -2 }}
                 whileTap={{ scale: 0.98 }}
                 transition={{ type: "spring", stiffness: 240, damping: 18 }}
-                className="w-1/2 px-2 mb-5 min-w-0"
+                className="w-1/2 px-2 mb-6 min-w-0"
               >
-                {/* clickable tile */}
                 <button
                   type="button"
                   onClick={() => setActive(bot)}
@@ -137,17 +154,16 @@ export default function CollectionPreview() {
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center text-white/60">
                         <div className="h-6 w-6 animate-spin rounded-full border border-white/30 border-t-transparent" />
-                        <div className="mt-2 text-[11px]">No SVG returned</div>
+                        <div className="mt-2 text-[11px]">Missing SVG image</div>
                       </div>
                     )}
 
-                    {/* subtle “tap” hint */}
                     <div className="absolute right-2 top-2 rounded-full border border-white/15 bg-black/35 px-2 py-[2px] text-[10px] text-white/70">
                       Tap
                     </div>
                   </div>
 
-                  {/* ✅ FID pill UNDER the NFT */}
+                  {/* ✅ green pill under each NFT */}
                   <div className="mt-2 flex justify-center">
                     <span className="inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-200">
                       FID #{bot.tokenId}
@@ -160,7 +176,7 @@ export default function CollectionPreview() {
         )}
 
         <p className="mt-1 text-center text-[11px] text-white/45">
-          Pulled from on-chain mint events (Transfer from zero address) and rendered from on-chain tokenURI SVG
+          Pulled from on-chain mint events and rendered from on-chain tokenURI SVG.
         </p>
 
         {/* ✅ POPUP VIEWER */}
@@ -175,10 +191,8 @@ export default function CollectionPreview() {
               role="dialog"
               onClick={() => setActive(null)}
             >
-              {/* backdrop */}
               <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
 
-              {/* modal card */}
               <motion.div
                 className="relative w-full max-w-xl rounded-3xl border border-white/15 bg-[#0b0f18]/90 shadow-2xl overflow-hidden"
                 initial={{ scale: 0.96, y: 12, opacity: 0 }}
@@ -188,12 +202,9 @@ export default function CollectionPreview() {
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-[12px] font-semibold text-emerald-200">
-                      FID #{active.tokenId}
-                    </span>
-                    <span className="text-[12px] text-white/60">Recently minted</span>
-                  </div>
+                  <span className="inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-[12px] font-semibold text-emerald-200">
+                    FID #{active.tokenId}
+                  </span>
 
                   <button
                     type="button"
@@ -216,14 +227,12 @@ export default function CollectionPreview() {
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center text-white/60">
                         <div className="h-7 w-7 animate-spin rounded-full border border-white/30 border-t-transparent" />
-                        <div className="mt-2 text-[12px]">No SVG returned</div>
+                        <div className="mt-2 text-[12px]">Missing SVG image</div>
                       </div>
                     )}
                   </div>
 
-                  <p className="mt-3 text-center text-[11px] text-white/55">
-                    Tap outside to close.
-                  </p>
+                  <p className="mt-3 text-center text-[11px] text-white/55">Tap outside to close.</p>
                 </div>
               </motion.div>
             </motion.div>
