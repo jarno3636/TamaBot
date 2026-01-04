@@ -1,4 +1,3 @@
-// app/api/basebots/recent/route.ts
 import { NextResponse } from "next/server";
 import { createPublicClient, http } from "viem";
 import { base } from "viem/chains";
@@ -8,8 +7,6 @@ import { BASEBOTS } from "@/lib/abi";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// ✅ Canonical mint signal for ERC721:
-// Transfer(from = 0x0, to = someone, tokenId = minted id)
 const TRANSFER_EVENT = {
   type: "event",
   name: "Transfer",
@@ -41,7 +38,6 @@ function safeB64ToUtf8(b64: string) {
 function extractSvgFromTokenUri(tokenUri: string): string | null {
   if (!tokenUri) return null;
 
-  // data:application/json;base64,<...>
   if (tokenUri.startsWith("data:application/json;base64,")) {
     const b64 = tokenUri.slice("data:application/json;base64,".length);
     const jsonStr = safeB64ToUtf8(b64);
@@ -50,12 +46,10 @@ function extractSvgFromTokenUri(tokenUri: string): string | null {
     try {
       const meta = JSON.parse(jsonStr);
 
-      // common: image_data contains raw <svg>
       if (typeof meta?.image_data === "string" && meta.image_data.trim().includes("<svg")) {
         return meta.image_data;
       }
 
-      // meta.image can be svg data urls
       if (typeof meta?.image === "string") {
         const img: string = meta.image;
 
@@ -77,7 +71,6 @@ function extractSvgFromTokenUri(tokenUri: string): string | null {
     }
   }
 
-  // If your contract ever returns raw JSON (not base64)
   if (tokenUri.trim().startsWith("{")) {
     try {
       const meta = JSON.parse(tokenUri);
@@ -103,31 +96,21 @@ function extractSvgFromTokenUri(tokenUri: string): string | null {
   return null;
 }
 
-// Make it “image-like” + force it to scale correctly
 function svgToDataUrl(svg: string) {
   let s = svg;
-
-  // ensure xmlns exists
   if (!s.includes('xmlns="http://www.w3.org/2000/svg"')) {
     s = s.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"');
   }
-
-  // helpful scaling hints if missing
   if (!/preserveAspectRatio=/.test(s)) {
     s = s.replace("<svg", '<svg preserveAspectRatio="xMidYMid meet"');
   }
-
-  // Encode into a data URL
   return `data:image/svg+xml;utf8,${encodeURIComponent(s)}`;
 }
 
 function getRpcList() {
   const env = (process.env.BASE_RPC_URLS || "").trim();
   const list = env
-    ? env
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean)
+    ? env.split(",").map((s) => s.trim()).filter(Boolean)
     : [process.env.BASE_RPC_URL || "", "https://mainnet.base.org", "https://base.publicnode.com"]
         .map((s) => s.trim())
         .filter(Boolean);
@@ -135,22 +118,28 @@ function getRpcList() {
   return Array.from(new Set(list));
 }
 
-async function tryWith<T>(fn: () => Promise<T>, tries = 3) {
+async function sleep(ms: number) {
+  await new Promise((r) => setTimeout(r, ms));
+}
+
+async function tryWith<T>(fn: () => Promise<T>, tries = 2) {
   let last: any;
   for (let i = 0; i < tries; i++) {
     try {
       return await fn();
     } catch (e) {
       last = e;
-      await new Promise((r) => setTimeout(r, 250 + i * 350));
+      await sleep(250 + i * 350);
     }
   }
   throw last;
 }
 
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
+  const started = Date.now();
+  const BUDGET_MS = 9_000; // ✅ hard cap so request returns (Vercel function won’t hang)
 
+  const { searchParams } = new URL(req.url);
   const n = Math.max(1, Math.min(8, Number(searchParams.get("n") || "4")));
   const deployBlock = BigInt(searchParams.get("deployBlock") || "0");
 
@@ -164,9 +153,9 @@ export async function GET(req: Request) {
     );
   }
 
-  // ✅ bigger scan window so you actually find 4 mints
-  const CHUNK = 20_000n;
-  const MAX_LOOPS = 60;
+  // ✅ scanning settings: fewer RPC calls, larger window per call
+  const CHUNK = 35_000n;
+  const MAX_LOOPS = 20;
 
   let lastErr: any = null;
 
@@ -174,7 +163,7 @@ export async function GET(req: Request) {
     try {
       const pc = createPublicClient({
         chain: base,
-        transport: http(rpcUrl, { timeout: 25_000, batch: false }),
+        transport: http(rpcUrl, { timeout: 18_000, batch: false }),
       });
 
       const latest = await tryWith(() => pc.getBlockNumber(), 2);
@@ -186,7 +175,9 @@ export async function GET(req: Request) {
       const found: Array<{ tokenId: bigint; blockNumber: bigint; logIndex: number }> = [];
 
       for (let loop = 0; loop < MAX_LOOPS && found.length < n; loop++) {
-        // ✅ pull only mints: Transfer(from=0x0)
+        // ✅ time budget check
+        if (Date.now() - started > BUDGET_MS) break;
+
         const logs = await tryWith(
           () =>
             pc.getLogs({
@@ -232,6 +223,23 @@ export async function GET(req: Request) {
         .slice(0, n)
         .map((x) => x.tokenId);
 
+      // ✅ If we timed out before finding anything, return quickly (don’t hang)
+      if (tokenIds.length === 0) {
+        return NextResponse.json(
+          {
+            ok: true,
+            contract,
+            rpcUrl,
+            latest: latest.toString(),
+            cards: [],
+            partial: true,
+            note: "No mints found within time budget. Try Refresh again.",
+          },
+          { headers: { "cache-control": "no-store" } }
+        );
+      }
+
+      // tokenURI calls (fast)
       const urisRes = await tryWith(
         () =>
           pc.multicall({
@@ -254,7 +262,14 @@ export async function GET(req: Request) {
       });
 
       return NextResponse.json(
-        { ok: true, contract, rpcUrl, latest: latest.toString(), cards },
+        {
+          ok: true,
+          contract,
+          rpcUrl,
+          latest: latest.toString(),
+          cards,
+          partial: cards.length < n || Date.now() - started > BUDGET_MS,
+        },
         { headers: { "cache-control": "no-store" } }
       );
     } catch (e: any) {
@@ -267,7 +282,7 @@ export async function GET(req: Request) {
     {
       ok: false,
       error: msg,
-      hint: "Often an RPC eth_getLogs rate-limit. Set BASE_RPC_URLS to Alchemy/QuickNode for reliability.",
+      hint: "This is usually RPC eth_getLogs rate-limiting. For reliability, set BASE_RPC_URLS to include Alchemy/QuickNode.",
       contract: BASEBOTS.address,
       rpcsTried: rpcs,
     },
