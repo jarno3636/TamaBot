@@ -1,19 +1,17 @@
 import { NextResponse } from "next/server";
 import { createPublicClient, http } from "viem";
 import { base } from "viem/chains";
-import { zeroAddress } from "viem";
 import { BASEBOTS } from "@/lib/abi";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const TRANSFER_EVENT = {
+const MINTED_EVENT = {
   type: "event",
-  name: "Transfer",
+  name: "Minted",
   inputs: [
-    { indexed: true, name: "from", type: "address" },
-    { indexed: true, name: "to", type: "address" },
-    { indexed: true, name: "tokenId", type: "uint256" },
+    { indexed: true, name: "minter", type: "address" },
+    { indexed: true, name: "fid", type: "uint256" },
   ],
 } as const;
 
@@ -26,6 +24,8 @@ const ERC721_TOKENURI_ABI = [
     outputs: [{ name: "", type: "string" }],
   },
 ] as const;
+
+/** ---------- tiny helpers ---------- */
 
 function safeB64ToUtf8(b64: string) {
   try {
@@ -46,7 +46,7 @@ function extractSvgFromTokenUri(tokenUri: string): string | null {
     try {
       const meta = JSON.parse(jsonStr);
 
-      if (typeof meta?.image_data === "string" && meta.image_data.trim().includes("<svg")) {
+      if (typeof meta?.image_data === "string" && meta.image_data.includes("<svg")) {
         return meta.image_data;
       }
 
@@ -71,40 +71,28 @@ function extractSvgFromTokenUri(tokenUri: string): string | null {
     }
   }
 
-  if (tokenUri.trim().startsWith("{")) {
-    try {
-      const meta = JSON.parse(tokenUri);
-      if (typeof meta?.image_data === "string" && meta.image_data.trim().includes("<svg")) return meta.image_data;
-
-      if (typeof meta?.image === "string") {
-        const img: string = meta.image;
-        if (img.startsWith("data:image/svg+xml;base64,")) {
-          const svgB64 = img.slice("data:image/svg+xml;base64,".length);
-          const svg = safeB64ToUtf8(svgB64);
-          return svg.includes("<svg") ? svg : null;
-        }
-        if (img.startsWith("data:image/svg+xml;utf8,")) {
-          const svg = decodeURIComponent(img.slice("data:image/svg+xml;utf8,".length));
-          return svg.includes("<svg") ? svg : null;
-        }
-      }
-    } catch {
-      return null;
-    }
-  }
-
   return null;
 }
 
-function svgToDataUrl(svg: string) {
+/**
+ * ✅ Most reliable way to embed SVG in <img>: base64 data URL.
+ * Avoids weird characters / URL encoding issues.
+ */
+function svgToDataUrlBase64(svg: string) {
   let s = svg;
+
+  // ensure xmlns exists (some renderers fail without it)
   if (!s.includes('xmlns="http://www.w3.org/2000/svg"')) {
     s = s.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"');
   }
+
+  // encourage proper scaling
   if (!/preserveAspectRatio=/.test(s)) {
     s = s.replace("<svg", '<svg preserveAspectRatio="xMidYMid meet"');
   }
-  return `data:image/svg+xml;utf8,${encodeURIComponent(s)}`;
+
+  const b64 = Buffer.from(s, "utf8").toString("base64");
+  return `data:image/svg+xml;base64,${b64}`;
 }
 
 function getRpcList() {
@@ -115,31 +103,40 @@ function getRpcList() {
         .map((s) => s.trim())
         .filter(Boolean);
 
+  // de-dupe
   return Array.from(new Set(list));
 }
 
-async function sleep(ms: number) {
-  await new Promise((r) => setTimeout(r, ms));
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
-async function tryWith<T>(fn: () => Promise<T>, tries = 2) {
-  let last: any;
-  for (let i = 0; i < tries; i++) {
-    try {
-      return await fn();
-    } catch (e) {
-      last = e;
-      await sleep(250 + i * 350);
-    }
+async function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  let t: NodeJS.Timeout | null = null;
+  try {
+    return await Promise.race([
+      p,
+      new Promise<T>((_, reject) => {
+        t = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+      }),
+    ]);
+  } finally {
+    if (t) clearTimeout(t);
   }
-  throw last;
+}
+
+// tiny in-memory cache (per server instance)
+type CacheEntry = { ts: number; payload: any };
+const CACHE_KEY = "__basebots_recent_cache__";
+function getCache(): Map<string, CacheEntry> {
+  const g = globalThis as any;
+  if (!g[CACHE_KEY]) g[CACHE_KEY] = new Map<string, CacheEntry>();
+  return g[CACHE_KEY] as Map<string, CacheEntry>;
 }
 
 export async function GET(req: Request) {
-  const started = Date.now();
-  const BUDGET_MS = 9_000; // ✅ hard cap so request returns (Vercel function won’t hang)
-
   const { searchParams } = new URL(req.url);
+
   const n = Math.max(1, Math.min(8, Number(searchParams.get("n") || "4")));
   const deployBlock = BigInt(searchParams.get("deployBlock") || "0");
 
@@ -153,9 +150,14 @@ export async function GET(req: Request) {
     );
   }
 
-  // ✅ scanning settings: fewer RPC calls, larger window per call
-  const CHUNK = 35_000n;
-  const MAX_LOOPS = 20;
+  // ✅ Cache: makes repeat refreshes nearly instant
+  const cache = getCache();
+  const cacheId = `${contract.toLowerCase()}:${n}:${deployBlock.toString()}`;
+  const cached = cache.get(cacheId);
+  const now = Date.now();
+  if (cached && now - cached.ts < 30_000) {
+    return NextResponse.json(cached.payload, { headers: { "cache-control": "no-store" } });
+  }
 
   let lastErr: any = null;
 
@@ -163,56 +165,55 @@ export async function GET(req: Request) {
     try {
       const pc = createPublicClient({
         chain: base,
-        transport: http(rpcUrl, { timeout: 18_000, batch: false }),
+        transport: http(rpcUrl, {
+          timeout: 25_000,
+          batch: false,
+          retryCount: 0,
+        }),
       });
 
-      const latest = await tryWith(() => pc.getBlockNumber(), 2);
+      const latest = await withTimeout(pc.getBlockNumber(), 12_000, "getBlockNumber");
 
-      let toBlock = latest;
-      let fromBlock = toBlock > CHUNK ? toBlock - CHUNK : 0n;
-      if (fromBlock < deployBlock) fromBlock = deployBlock;
+      // ✅ Fast-first scanning: start small, expand only if needed
+      // 2k blocks is usually enough for "recent mints" without big RPC load.
+      const WINDOWS = [2_000n, 8_000n, 25_000n, 80_000n, 200_000n];
 
-      const found: Array<{ tokenId: bigint; blockNumber: bigint; logIndex: number }> = [];
+      const found: Array<{ fid: bigint; blockNumber: bigint; logIndex: number }> = [];
 
-      for (let loop = 0; loop < MAX_LOOPS && found.length < n; loop++) {
-        // ✅ time budget check
-        if (Date.now() - started > BUDGET_MS) break;
+      for (const win of WINDOWS) {
+        const fromBlock = (() => {
+          const raw = latest > win ? latest - win : 0n;
+          return raw < deployBlock ? deployBlock : raw;
+        })();
 
-        const logs = await tryWith(
-          () =>
-            pc.getLogs({
-              address: contract,
-              event: TRANSFER_EVENT,
-              args: { from: zeroAddress },
-              fromBlock,
-              toBlock,
-            }),
-          2
+        const logs = await withTimeout(
+          pc.getLogs({
+            address: contract,
+            event: MINTED_EVENT,
+            fromBlock,
+            toBlock: latest,
+          }),
+          15_000,
+          "getLogs"
         );
 
         logs.sort((a, b) => {
-          if (a.blockNumber === b.blockNumber) return (b.logIndex ?? 0) - (a.logIndex ?? 0);
-          return Number((b.blockNumber ?? 0n) - (a.blockNumber ?? 0n));
+          const ab = a.blockNumber ?? 0n;
+          const bb = b.blockNumber ?? 0n;
+          if (ab === bb) return (b.logIndex ?? 0) - (a.logIndex ?? 0);
+          return Number(bb - ab);
         });
 
         for (const l of logs) {
-          const tokenId = (l.args as any)?.tokenId as bigint | undefined;
-          if (tokenId === undefined) continue;
-
-          if (!found.some((x) => x.tokenId === tokenId)) {
-            found.push({ tokenId, blockNumber: l.blockNumber!, logIndex: l.logIndex ?? 0 });
+          const fid = (l.args as any)?.fid as bigint | undefined;
+          if (fid === undefined) continue;
+          if (!found.some((x) => x.fid === fid)) {
+            found.push({ fid, blockNumber: l.blockNumber!, logIndex: l.logIndex ?? 0 });
             if (found.length >= n) break;
           }
         }
 
-        if (toBlock <= deployBlock) break;
-
-        toBlock = fromBlock > 0n ? fromBlock - 1n : 0n;
-        const nextFrom = toBlock > CHUNK ? toBlock - CHUNK : 0n;
-        fromBlock = nextFrom < deployBlock ? deployBlock : nextFrom;
-
-        if (toBlock < deployBlock) break;
-        if (toBlock === 0n && fromBlock === 0n) break;
+        if (found.length >= n) break;
       }
 
       const tokenIds = found
@@ -221,59 +222,51 @@ export async function GET(req: Request) {
           return Number(b.blockNumber - a.blockNumber);
         })
         .slice(0, n)
-        .map((x) => x.tokenId);
+        .map((x) => x.fid);
 
-      // ✅ If we timed out before finding anything, return quickly (don’t hang)
+      // If we found nothing, don’t hang—return a fast ok with empty cards
       if (tokenIds.length === 0) {
-        return NextResponse.json(
-          {
-            ok: true,
-            contract,
-            rpcUrl,
-            latest: latest.toString(),
-            cards: [],
-            partial: true,
-            note: "No mints found within time budget. Try Refresh again.",
-          },
-          { headers: { "cache-control": "no-store" } }
-        );
+        const payload = { ok: true, contract, rpcUrl, latest: latest.toString(), cards: [] as any[] };
+        cache.set(cacheId, { ts: now, payload });
+        return NextResponse.json(payload, { headers: { "cache-control": "no-store" } });
       }
 
-      // tokenURI calls (fast)
-      const urisRes = await tryWith(
-        () =>
-          pc.multicall({
-            allowFailure: true,
-            contracts: tokenIds.map((tid) => ({
-              address: contract,
-              abi: ERC721_TOKENURI_ABI,
-              functionName: "tokenURI",
-              args: [tid],
-            })),
-          }),
-        2
+      // tokenURI multicall
+      const urisRes = await withTimeout(
+        pc.multicall({
+          allowFailure: true,
+          contracts: tokenIds.map((tid) => ({
+            address: contract,
+            abi: ERC721_TOKENURI_ABI,
+            functionName: "tokenURI",
+            args: [tid],
+          })),
+        }),
+        15_000,
+        "multicall(tokenURI)"
       );
 
       const cards = tokenIds.map((tid, i) => {
         const uri = (urisRes as any)[i]?.result as string | undefined;
         const svg = uri ? extractSvgFromTokenUri(uri) : null;
-        const image = svg ? svgToDataUrl(svg) : null;
+        const image = svg ? svgToDataUrlBase64(svg) : null;
         return { tokenId: tid.toString(), image };
       });
 
-      return NextResponse.json(
-        {
-          ok: true,
-          contract,
-          rpcUrl,
-          latest: latest.toString(),
-          cards,
-          partial: cards.length < n || Date.now() - started > BUDGET_MS,
-        },
-        { headers: { "cache-control": "no-store" } }
-      );
+      const payload = {
+        ok: true,
+        contract,
+        rpcUrl,
+        latest: latest.toString(),
+        cards,
+      };
+
+      cache.set(cacheId, { ts: now, payload });
+      return NextResponse.json(payload, { headers: { "cache-control": "no-store" } });
     } catch (e: any) {
       lastErr = e;
+      // small stagger so we don’t instantly hammer the next RPC
+      await sleep(250);
     }
   }
 
@@ -282,8 +275,9 @@ export async function GET(req: Request) {
     {
       ok: false,
       error: msg,
-      hint: "This is usually RPC eth_getLogs rate-limiting. For reliability, set BASE_RPC_URLS to include Alchemy/QuickNode.",
-      contract: BASEBOTS.address,
+      hint:
+        "RPC likely rate-limited or slow. For best reliability set BASE_RPC_URLS to paid RPC endpoints (Alchemy/QuickNode), comma-separated.",
+      contract,
       rpcsTried: rpcs,
     },
     { status: 500, headers: { "cache-control": "no-store" } }
