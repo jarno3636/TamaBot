@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useMemo, useRef, useState } from "react";
 
 type MintCard = { tokenId: string; image: string | null };
@@ -10,6 +10,9 @@ export default function CollectionPreview() {
   const [loading, setLoading] = useState(false);
   const [cards, setCards] = useState<MintCard[]>([]);
   const [error, setError] = useState("");
+
+  // popup viewer
+  const [active, setActive] = useState<MintCard | null>(null);
 
   // prevent double-click overlapping requests
   const inFlight = useRef<AbortController | null>(null);
@@ -40,19 +43,16 @@ export default function CollectionPreview() {
       });
 
       const text = await res.text();
-
       if (!res.ok) throw new Error(`API ${res.status}: ${text}`);
 
       const json = JSON.parse(text);
       if (!json?.ok) throw new Error(json?.error || text || "API returned ok=false");
 
       const next = Array.isArray(json.cards) ? (json.cards as MintCard[]) : [];
-
       setCards(next);
+
       if (next.length < 4) {
-        setError(
-          `Loaded ${next.length}/4. RPC scan may be rate-limited—try Refresh again in a moment.`
-        );
+        setError(`Loaded ${next.length}/4. RPC scan may be rate-limited—try Refresh again in a moment.`);
       }
     } catch (e: any) {
       if (e?.name === "AbortError") {
@@ -113,31 +113,47 @@ export default function CollectionPreview() {
             {cards.map((bot) => (
               <motion.div
                 key={bot.tokenId}
-                whileHover={{ scale: 1.05, y: -3 }}
-                whileTap={{ scale: 0.97 }}
-                transition={{ type: "spring", stiffness: 220, damping: 16 }}
-                className="w-1/2 px-2 mb-4 min-w-0"
+                whileHover={{ scale: 1.03, y: -2 }}
+                whileTap={{ scale: 0.98 }}
+                transition={{ type: "spring", stiffness: 240, damping: 18 }}
+                className="w-1/2 px-2 mb-5 min-w-0"
               >
-                <div className="aspect-square rounded-xl border border-white/10 bg-gradient-to-br from-[#141820] to-[#0b0e14] shadow-md overflow-hidden relative">
-                  {bot.image ? (
-                    <img
-                      src={bot.image}
-                      alt={`Basebot FID #${bot.tokenId}`}
-                      className="w-full h-full object-contain p-2 block"
-                      draggable={false}
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-white/60">
-                      <div className="h-6 w-6 animate-spin rounded-full border border-white/30 border-t-transparent" />
-                      <div className="mt-2 text-[11px]">No SVG returned</div>
-                    </div>
-                  )}
+                {/* clickable tile */}
+                <button
+                  type="button"
+                  onClick={() => setActive(bot)}
+                  className="w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/60 rounded-xl"
+                  title="Tap to expand"
+                >
+                  <div className="aspect-square rounded-xl border border-white/10 bg-gradient-to-br from-[#141820] to-[#0b0e14] shadow-md overflow-hidden relative">
+                    {bot.image ? (
+                      <img
+                        src={bot.image}
+                        alt={`Basebot FID #${bot.tokenId}`}
+                        className="w-full h-full object-contain p-2 block"
+                        draggable={false}
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center text-white/60">
+                        <div className="h-6 w-6 animate-spin rounded-full border border-white/30 border-t-transparent" />
+                        <div className="mt-2 text-[11px]">No SVG returned</div>
+                      </div>
+                    )}
 
-                  <div className="absolute left-2 bottom-2 rounded-full border border-white/15 bg-black/35 px-2 py-[2px] text-[11px] text-white/75">
-                    FID #{bot.tokenId}
+                    {/* subtle “tap” hint */}
+                    <div className="absolute right-2 top-2 rounded-full border border-white/15 bg-black/35 px-2 py-[2px] text-[10px] text-white/70">
+                      Tap
+                    </div>
                   </div>
-                </div>
+
+                  {/* ✅ FID pill UNDER the NFT */}
+                  <div className="mt-2 flex justify-center">
+                    <span className="inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-200">
+                      FID #{bot.tokenId}
+                    </span>
+                  </div>
+                </button>
               </motion.div>
             ))}
           </div>
@@ -146,6 +162,73 @@ export default function CollectionPreview() {
         <p className="mt-1 text-center text-[11px] text-white/45">
           Pulled from on-chain mint events (Transfer from zero address) and rendered from on-chain tokenURI SVG
         </p>
+
+        {/* ✅ POPUP VIEWER */}
+        <AnimatePresence>
+          {active && (
+            <motion.div
+              className="fixed inset-0 z-[80] flex items-center justify-center p-4"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              aria-modal="true"
+              role="dialog"
+              onClick={() => setActive(null)}
+            >
+              {/* backdrop */}
+              <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+
+              {/* modal card */}
+              <motion.div
+                className="relative w-full max-w-xl rounded-3xl border border-white/15 bg-[#0b0f18]/90 shadow-2xl overflow-hidden"
+                initial={{ scale: 0.96, y: 12, opacity: 0 }}
+                animate={{ scale: 1, y: 0, opacity: 1 }}
+                exit={{ scale: 0.97, y: 10, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 240, damping: 22 }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-[12px] font-semibold text-emerald-200">
+                      FID #{active.tokenId}
+                    </span>
+                    <span className="text-[12px] text-white/60">Recently minted</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[12px] font-semibold text-white/80 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/60"
+                    onClick={() => setActive(null)}
+                  >
+                    Close
+                  </button>
+                </div>
+
+                <div className="p-4">
+                  <div className="aspect-square rounded-2xl border border-white/10 bg-gradient-to-br from-[#141820] to-[#0b0e14] overflow-hidden flex items-center justify-center">
+                    {active.image ? (
+                      <img
+                        src={active.image}
+                        alt={`Basebot FID #${active.tokenId}`}
+                        className="w-full h-full object-contain p-3 block"
+                        draggable={false}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center text-white/60">
+                        <div className="h-7 w-7 animate-spin rounded-full border border-white/30 border-t-transparent" />
+                        <div className="mt-2 text-[12px]">No SVG returned</div>
+                      </div>
+                    )}
+                  </div>
+
+                  <p className="mt-3 text-center text-[11px] text-white/55">
+                    Tap outside to close.
+                  </p>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </section>
   );
