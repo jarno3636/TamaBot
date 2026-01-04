@@ -59,7 +59,9 @@ function normalizePools(pools: any[]) {
     const rewardToken = p.rewardToken ? String(p.rewardToken).toLowerCase() : undefined;
 
     if (!pool || !creator || !nft || !rewardToken) continue;
-    if (![pool, creator, nft, rewardToken].every(isAddress)) continue;
+
+    // ✅ FIX: wrap isAddress so .every() doesn’t pass index as options
+    if (![pool, creator, nft, rewardToken].every((a) => isAddress(a))) continue;
 
     map.set(pool, {
       ...p,
@@ -67,7 +69,7 @@ function normalizePools(pools: any[]) {
       creator,
       nft,
       rewardToken,
-      chainId: Number(p.chainId ?? p.chain_id ?? 8453),
+      chainId: Number(p.chainId ?? (p as any).chain_id ?? 8453),
     });
   }
 
@@ -122,7 +124,7 @@ async function upsertToSupabaseBestEffort(pools: any[]) {
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const creatorParam = searchParams.get("creator");
-  const refreshParam = searchParams.get("refresh"); // <-- NEW
+  const refreshParam = searchParams.get("refresh");
 
   const creator =
     creatorParam && isAddress(creatorParam)
@@ -136,9 +138,7 @@ export async function GET(req: Request) {
     );
   }
 
-  const forceScan = refreshParam === "1" || refreshParam === "true"; // <-- NEW
-
-  // If forceScan, bypass cache so Refresh always “does something”
+  const forceScan = refreshParam === "1" || refreshParam === "true";
   const cacheKey = `creator=${creator ?? "all"}`;
   const now = Date.now();
 
@@ -162,10 +162,10 @@ export async function GET(req: Request) {
   const job = (async () => {
     const results: any[] = [];
 
-    // 1) Seed pools (instant)
+    // 1) Seed pools
     results.push(...SEED_POOLS.filter((p) => (creator ? p.creator === creator : true)));
 
-    // 2) Supabase (fast)
+    // 2) Supabase
     try {
       const dbPools = await fetchFromSupabase(creator);
       results.push(...dbPools);
@@ -173,8 +173,7 @@ export async function GET(req: Request) {
       console.warn("[/api/pools] supabase read failed; continuing");
     }
 
-    // 3) Chain scan
-    // ✅ NOW: scan if forced OR if we still have nothing
+    // 3) Chain scan on refresh (or if nothing found)
     if (forceScan || results.length === 0) {
       const scanned = creator
         ? await fetchPoolsByCreator(creator)
@@ -183,16 +182,14 @@ export async function GET(req: Request) {
 
       results.push(...scanned);
 
-      // Persist findings so next load is fast
+      // persist
       void upsertToSupabaseBestEffort([...SEED_POOLS, ...scanned]);
     } else {
-      // Optional: ensure seeds are in DB
       void upsertToSupabaseBestEffort(SEED_POOLS);
     }
 
     const normalized = normalizePools(results);
 
-    // Cache
     POOLS_CACHE.set(cacheKey, {
       value: normalized,
       expiresAt: Date.now() + 30_000,
