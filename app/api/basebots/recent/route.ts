@@ -1,17 +1,20 @@
 import { NextResponse } from "next/server";
 import { createPublicClient, http } from "viem";
 import { base } from "viem/chains";
+import { zeroAddress } from "viem";
 import { BASEBOTS } from "@/lib/abi";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const MINTED_EVENT = {
+/** ERC721 Transfer event */
+const TRANSFER_EVENT = {
   type: "event",
-  name: "Minted",
+  name: "Transfer",
   inputs: [
-    { indexed: true, name: "minter", type: "address" },
-    { indexed: true, name: "fid", type: "uint256" },
+    { indexed: true, name: "from", type: "address" },
+    { indexed: true, name: "to", type: "address" },
+    { indexed: true, name: "tokenId", type: "uint256" },
   ],
 } as const;
 
@@ -25,21 +28,82 @@ const ERC721_TOKENURI_ABI = [
   },
 ] as const;
 
-/* ───────────────── helpers ───────────────── */
+/* ───────────────── server cache (no RPC leaks) ─────────────────
+   NOTE: This is in-memory per server instance. On Vercel, it works
+   well when warm; if cold, it just fetches fresh.
+*/
+type CacheValue = { ts: number; cards: Array<{ tokenId: string; image: string | null }> };
+declare global {
+  // eslint-disable-next-line no-var
+  var __basebots_recent_cache__: CacheValue | undefined;
+}
+const CACHE_TTL_MS = 60_000; // 60s “fresh”, but we can serve stale too
+
+function getCache(): CacheValue | null {
+  const v = globalThis.__basebots_recent_cache__;
+  if (!v) return null;
+  return v;
+}
+function setCache(cards: CacheValue["cards"]) {
+  globalThis.__basebots_recent_cache__ = { ts: Date.now(), cards };
+}
 
 function getRpcList(): string[] {
-  // 🔒 Dedicated env var, Base only, never exposed
   const env = (process.env.BASEBOTS_RPC_URLS || "").trim();
+  const list = env
+    ? env.split(",").map((s) => s.trim()).filter(Boolean)
+    : ["https://mainnet.base.org", "https://base.publicnode.com"];
+  return Array.from(new Set(list));
+}
 
-  if (!env) {
-    // hard fallback (still Base)
-    return ["https://mainnet.base.org"];
+function safeB64ToUtf8(b64: string) {
+  try {
+    return Buffer.from(b64, "base64").toString("utf8");
+  } catch {
+    return "";
   }
+}
 
-  return env
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+function extractSvgFromTokenUri(tokenUri: string): string | null {
+  if (!tokenUri?.startsWith("data:application/json;base64,")) return null;
+
+  const jsonStr = safeB64ToUtf8(tokenUri.slice("data:application/json;base64,".length));
+  if (!jsonStr) return null;
+
+  try {
+    const meta = JSON.parse(jsonStr);
+
+    if (typeof meta?.image_data === "string" && meta.image_data.includes("<svg")) {
+      return meta.image_data;
+    }
+
+    if (typeof meta?.image === "string") {
+      const img: string = meta.image;
+
+      if (img.startsWith("data:image/svg+xml;base64,")) {
+        const svgB64 = img.slice("data:image/svg+xml;base64,".length);
+        const svg = safeB64ToUtf8(svgB64);
+        return svg.includes("<svg") ? svg : null;
+      }
+
+      if (img.startsWith("data:image/svg+xml;utf8,")) {
+        const svg = decodeURIComponent(img.slice("data:image/svg+xml;utf8,".length));
+        return svg.includes("<svg") ? svg : null;
+      }
+    }
+  } catch {}
+
+  return null;
+}
+
+function svgToDataUrl(svg: string) {
+  let s = svg;
+  if (!s.includes('xmlns="http://www.w3.org/2000/svg"')) {
+    s = s.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"');
+  }
+  // base64 is safest for <img> across browsers
+  const b64 = Buffer.from(s, "utf8").toString("base64");
+  return `data:image/svg+xml;base64,${b64}`;
 }
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
@@ -55,110 +119,67 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   });
 }
 
-function safeB64ToUtf8(b64: string) {
-  try {
-    return Buffer.from(b64, "base64").toString("utf8");
-  } catch {
-    return "";
-  }
-}
-
-function extractSvgFromTokenUri(tokenUri: string): string | null {
-  if (!tokenUri?.startsWith("data:application/json;base64,")) return null;
-
-  const jsonStr = safeB64ToUtf8(
-    tokenUri.slice("data:application/json;base64,".length)
-  );
-  if (!jsonStr) return null;
-
-  try {
-    const meta = JSON.parse(jsonStr);
-
-    if (typeof meta?.image_data === "string" && meta.image_data.includes("<svg")) {
-      return meta.image_data;
-    }
-
-    if (typeof meta?.image === "string") {
-      if (meta.image.startsWith("data:image/svg+xml;base64,")) {
-        return safeB64ToUtf8(
-          meta.image.slice("data:image/svg+xml;base64,".length)
-        );
-      }
-      if (meta.image.startsWith("data:image/svg+xml;utf8,")) {
-        return decodeURIComponent(
-          meta.image.slice("data:image/svg+xml;utf8,".length)
-        );
-      }
-    }
-  } catch {}
-
-  return null;
-}
-
-function svgToDataUrl(svg: string) {
-  let s = svg;
-  if (!s.includes('xmlns="http://www.w3.org/2000/svg"')) {
-    s = s.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"');
-  }
-  const b64 = Buffer.from(s, "utf8").toString("base64");
-  return `data:image/svg+xml;base64,${b64}`;
-}
-
-/* ───────────────── route ───────────────── */
-
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
 
   const n = Math.max(1, Math.min(8, Number(searchParams.get("n") || "4")));
   const deployBlock = BigInt(searchParams.get("deployBlock") || "0");
+
   const contract = BASEBOTS.address as `0x${string}`;
-
   const rpcs = getRpcList();
-  let lastError: string | null = null;
 
-  // fast-first scan windows
-  const WINDOWS = [800n, 2_500n, 8_000n, 25_000n, 80_000n, 250_000n];
+  // Return “fresh cache” instantly
+  const cached = getCache();
+  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+    return NextResponse.json(
+      { ok: true, cards: cached.cards.slice(0, n), cached: true },
+      { headers: { "cache-control": "no-store" } }
+    );
+  }
+
+  // Scan windows (fast → bigger)
+  const WINDOWS = [1_500n, 5_000n, 20_000n, 80_000n, 250_000n];
+
+  let lastErr: string | null = null;
 
   for (const rpc of rpcs) {
     try {
       const pc = createPublicClient({
         chain: base,
-        transport: http(rpc, {
-          timeout: 35_000,
-          batch: false,
-        }),
+        transport: http(rpc, { timeout: 35_000, batch: false }),
       });
 
       const latest = await withTimeout(pc.getBlockNumber(), 12_000);
 
-      const found: Array<{ fid: bigint; blockNumber: bigint; logIndex: number }> =
-        [];
+      const found: Array<{ tokenId: bigint; blockNumber: bigint; logIndex: number }> = [];
 
       for (const win of WINDOWS) {
-        const from = latest > win ? latest - win : 0n;
-        const fromBlock = from < deployBlock ? deployBlock : from;
+        const from0 = latest > win ? latest - win : 0n;
+        const fromBlock = from0 < deployBlock ? deployBlock : from0;
 
+        // mint = Transfer(from=0x0)
         const logs = await withTimeout(
           pc.getLogs({
             address: contract,
-            event: MINTED_EVENT,
+            event: TRANSFER_EVENT,
+            args: { from: zeroAddress },
             fromBlock,
             toBlock: latest,
           }),
-          30_000
+          20_000
         );
 
+        // newest first
         logs.sort((a, b) => {
-          if (a.blockNumber === b.blockNumber)
-            return (b.logIndex ?? 0) - (a.logIndex ?? 0);
+          if (a.blockNumber === b.blockNumber) return (b.logIndex ?? 0) - (a.logIndex ?? 0);
           return Number((b.blockNumber ?? 0n) - (a.blockNumber ?? 0n));
         });
 
         for (const l of logs) {
-          const fid = (l.args as any)?.fid as bigint | undefined;
-          if (!fid) continue;
-          if (!found.some((x) => x.fid === fid)) {
-            found.push({ fid, blockNumber: l.blockNumber!, logIndex: l.logIndex ?? 0 });
+          const tid = (l.args as any)?.tokenId as bigint | undefined;
+          if (!tid) continue;
+          if (!found.some((x) => x.tokenId === tid)) {
+            found.push({ tokenId: tid, blockNumber: l.blockNumber!, logIndex: l.logIndex ?? 0 });
             if (found.length >= n) break;
           }
         }
@@ -167,58 +188,58 @@ export async function GET(req: Request) {
       }
 
       const tokenIds = found
-        .sort((a, b) =>
-          a.blockNumber === b.blockNumber
-            ? b.logIndex - a.logIndex
-            : Number(b.blockNumber - a.blockNumber)
-        )
+        .sort((a, b) => (a.blockNumber === b.blockNumber ? b.logIndex - a.logIndex : Number(b.blockNumber - a.blockNumber)))
         .slice(0, n)
-        .map((x) => x.fid);
+        .map((x) => x.tokenId);
 
       if (tokenIds.length === 0) {
-        return NextResponse.json(
-          { ok: true, cards: [] },
-          { headers: { "cache-control": "no-store" } }
-        );
+        setCache([]);
+        return NextResponse.json({ ok: true, cards: [] }, { headers: { "cache-control": "no-store" } });
       }
 
+      // tokenURI multicall
       const uris = await withTimeout(
         pc.multicall({
           allowFailure: true,
-          contracts: tokenIds.map((fid) => ({
+          contracts: tokenIds.map((tid) => ({
             address: contract,
             abi: ERC721_TOKENURI_ABI,
             functionName: "tokenURI",
-            args: [fid],
+            args: [tid],
           })),
         }),
-        25_000
+        20_000
       );
 
-      const cards = tokenIds.map((fid, i) => {
+      const cards = tokenIds.map((tid, i) => {
         const uri = (uris as any)[i]?.result as string | undefined;
         const svg = uri ? extractSvgFromTokenUri(uri) : null;
-        return {
-          tokenId: fid.toString(),
-          image: svg ? svgToDataUrl(svg) : null,
-        };
+        return { tokenId: tid.toString(), image: svg ? svgToDataUrl(svg) : null };
       });
 
+      // Cache last good result
+      setCache(cards);
+
       return NextResponse.json(
-        { ok: true, cards },
+        { ok: true, cards, cached: false },
         { headers: { "cache-control": "no-store" } }
       );
-    } catch (e: any) {
-      lastError = "Base RPC temporarily unavailable";
+    } catch {
+      // 🔒 Do NOT leak rpc or raw error
+      lastErr = "Base RPC temporarily unavailable";
     }
   }
 
+  // If we have ANY cached result, serve it even if stale
+  if (cached?.cards?.length) {
+    return NextResponse.json(
+      { ok: true, cards: cached.cards.slice(0, n), cached: true, stale: true, note: "Served last known result." },
+      { headers: { "cache-control": "no-store" } }
+    );
+  }
+
   return NextResponse.json(
-    {
-      ok: false,
-      error: lastError || "Unable to fetch recent mints",
-      hint: "Base mainnet RPC may be under load. Try again shortly.",
-    },
+    { ok: false, error: lastErr || "Unable to fetch recent mints right now." },
     { status: 500, headers: { "cache-control": "no-store" } }
   );
 }
