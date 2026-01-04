@@ -3,35 +3,38 @@
 import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
 
-type MintCard = {
-  tokenId: string; // fid
-  svg: string | null;
-};
+type MintCard = { tokenId: string; svg: string | null };
 
 export default function CollectionPreview() {
   const title = useMemo(() => "Recently Minted", []);
-
   const [loading, setLoading] = useState(false);
   const [cards, setCards] = useState<MintCard[]>([]);
   const [error, setError] = useState("");
 
   async function refresh() {
-    try {
-      setLoading(true);
-      setError("");
+    setLoading(true);
+    setError("");
 
-      const r = await fetch("/api/basebots/recent?n=4&deployBlock=37969324", {
+    try {
+      const res = await fetch("/api/basebots/recent?n=4&deployBlock=37969324", {
         method: "GET",
         cache: "no-store",
       });
 
-      const j = await r.json();
+      const text = await res.text();
 
-      if (!r.ok || !j?.ok) {
-        throw new Error(j?.error || "HTTP request failed.");
+      // show exact server response if not OK
+      if (!res.ok) {
+        throw new Error(`API ${res.status}: ${text}`);
       }
 
-      setCards(Array.isArray(j.cards) ? j.cards : []);
+      const json = JSON.parse(text);
+
+      if (!json?.ok) {
+        throw new Error(json?.error || text || "API returned ok=false");
+      }
+
+      setCards(Array.isArray(json.cards) ? json.cards : []);
     } catch (e: any) {
       setError(e?.message || "HTTP request failed.");
     } finally {
@@ -68,7 +71,11 @@ export default function CollectionPreview() {
           </button>
         </div>
 
-        {error && <p className="mt-3 text-center text-sm text-rose-300 break-words">{error}</p>}
+        {error && (
+          <pre className="mt-3 whitespace-pre-wrap rounded-xl border border-white/10 bg-black/30 p-3 text-[11px] text-rose-300">
+            {error}
+          </pre>
+        )}
 
         {!loading && !error && cards.length === 0 && (
           <p className="mt-3 text-center text-sm text-white/70">
@@ -88,14 +95,11 @@ export default function CollectionPreview() {
               >
                 <div className="aspect-square rounded-xl border border-white/10 bg-gradient-to-br from-[#141820] to-[#0b0e14] shadow-md overflow-hidden flex items-center justify-center relative">
                   {bot.svg ? (
-                    <div
-                      className="w-full h-full p-2 flex items-center justify-center"
-                      dangerouslySetInnerHTML={{ __html: bot.svg }}
-                    />
+                    <div className="w-full h-full p-2 flex items-center justify-center" dangerouslySetInnerHTML={{ __html: bot.svg }} />
                   ) : (
                     <div className="flex flex-col items-center justify-center text-white/60">
                       <div className="h-6 w-6 animate-spin rounded-full border border-white/30 border-t-transparent" />
-                      <div className="mt-2 text-[11px]">Rendering…</div>
+                      <div className="mt-2 text-[11px]">No on-chain SVG</div>
                     </div>
                   )}
 
