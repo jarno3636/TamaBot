@@ -2,12 +2,25 @@ import { NextResponse } from "next/server";
 import { createPublicClient, http } from "viem";
 import { base } from "viem/chains";
 import { zeroAddress } from "viem";
-import { BASEBOTS } from "@/lib/abi";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** ERC721 Transfer event */
+/**
+ * ✅ HARD-CODED CONTRACT (the “224b contract”)
+ * Basebots: 0x92E2...224B
+ */
+const BASEBOTS_RECENT_CONTRACT = "0x92E29025fd6bAdD17c3005084fe8C43D928222B4" as const;
+
+const MINTED_EVENT = {
+  type: "event",
+  name: "Minted",
+  inputs: [
+    { indexed: true, name: "minter", type: "address" },
+    { indexed: true, name: "fid", type: "uint256" },
+  ],
+} as const;
+
 const TRANSFER_EVENT = {
   type: "event",
   name: "Transfer",
@@ -28,26 +41,6 @@ const ERC721_TOKENURI_ABI = [
   },
 ] as const;
 
-/* ───────────────── server cache (no RPC leaks) ─────────────────
-   NOTE: This is in-memory per server instance. On Vercel, it works
-   well when warm; if cold, it just fetches fresh.
-*/
-type CacheValue = { ts: number; cards: Array<{ tokenId: string; image: string | null }> };
-declare global {
-  // eslint-disable-next-line no-var
-  var __basebots_recent_cache__: CacheValue | undefined;
-}
-const CACHE_TTL_MS = 60_000; // 60s “fresh”, but we can serve stale too
-
-function getCache(): CacheValue | null {
-  const v = globalThis.__basebots_recent_cache__;
-  if (!v) return null;
-  return v;
-}
-function setCache(cards: CacheValue["cards"]) {
-  globalThis.__basebots_recent_cache__ = { ts: Date.now(), cards };
-}
-
 function getRpcList(): string[] {
   const env = (process.env.BASEBOTS_RPC_URLS || "").trim();
   const list = env
@@ -65,33 +58,38 @@ function safeB64ToUtf8(b64: string) {
 }
 
 function extractSvgFromTokenUri(tokenUri: string): string | null {
-  if (!tokenUri?.startsWith("data:application/json;base64,")) return null;
+  if (!tokenUri) return null;
 
-  const jsonStr = safeB64ToUtf8(tokenUri.slice("data:application/json;base64,".length));
-  if (!jsonStr) return null;
+  if (tokenUri.startsWith("data:application/json;base64,")) {
+    const b64 = tokenUri.slice("data:application/json;base64,".length);
+    const jsonStr = safeB64ToUtf8(b64);
+    if (!jsonStr) return null;
 
-  try {
-    const meta = JSON.parse(jsonStr);
+    try {
+      const meta = JSON.parse(jsonStr);
 
-    if (typeof meta?.image_data === "string" && meta.image_data.includes("<svg")) {
-      return meta.image_data;
-    }
-
-    if (typeof meta?.image === "string") {
-      const img: string = meta.image;
-
-      if (img.startsWith("data:image/svg+xml;base64,")) {
-        const svgB64 = img.slice("data:image/svg+xml;base64,".length);
-        const svg = safeB64ToUtf8(svgB64);
-        return svg.includes("<svg") ? svg : null;
+      if (typeof meta?.image_data === "string" && meta.image_data.includes("<svg")) {
+        return meta.image_data;
       }
 
-      if (img.startsWith("data:image/svg+xml;utf8,")) {
-        const svg = decodeURIComponent(img.slice("data:image/svg+xml;utf8,".length));
-        return svg.includes("<svg") ? svg : null;
+      if (typeof meta?.image === "string") {
+        const img: string = meta.image;
+
+        if (img.startsWith("data:image/svg+xml;base64,")) {
+          const svgB64 = img.slice("data:image/svg+xml;base64,".length);
+          const svg = safeB64ToUtf8(svgB64);
+          return svg.includes("<svg") ? svg : null;
+        }
+
+        if (img.startsWith("data:image/svg+xml;utf8,")) {
+          const svg = decodeURIComponent(img.slice("data:image/svg+xml;utf8,".length));
+          return svg.includes("<svg") ? svg : null;
+        }
       }
+    } catch {
+      return null;
     }
-  } catch {}
+  }
 
   return null;
 }
@@ -101,145 +99,174 @@ function svgToDataUrl(svg: string) {
   if (!s.includes('xmlns="http://www.w3.org/2000/svg"')) {
     s = s.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"');
   }
-  // base64 is safest for <img> across browsers
   const b64 = Buffer.from(s, "utf8").toString("base64");
   return `data:image/svg+xml;base64,${b64}`;
 }
 
-function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error("timeout")), ms);
-    p.then((v) => {
-      clearTimeout(t);
-      resolve(v);
-    }).catch((e) => {
-      clearTimeout(t);
-      reject(e);
-    });
-  });
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function tryWith<T>(fn: () => Promise<T>, tries = 2) {
+  let last: any;
+  for (let i = 0; i < tries; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      last = e;
+      await sleep(250 + i * 350);
+    }
+  }
+  throw last;
+}
+
+function safeErrorMessage() {
+  // 🔒 Never leak RPC URLs or raw provider errors
+  return "Base RPC temporarily unavailable";
 }
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
 
   const n = Math.max(1, Math.min(8, Number(searchParams.get("n") || "4")));
-  const deployBlock = BigInt(searchParams.get("deployBlock") || "0");
+  const deployBlockRaw = searchParams.get("deployBlock");
+  const deployBlock = BigInt(deployBlockRaw || "0");
 
-  const contract = BASEBOTS.address as `0x${string}`;
+  const contract = BASEBOTS_RECENT_CONTRACT;
   const rpcs = getRpcList();
 
-  // Return “fresh cache” instantly
-  const cached = getCache();
-  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+  if (!rpcs.length) {
     return NextResponse.json(
-      { ok: true, cards: cached.cards.slice(0, n), cached: true },
-      { headers: { "cache-control": "no-store" } }
+      { ok: false, error: "No RPC configured. Set BASEBOTS_RPC_URLS." },
+      { status: 500, headers: { "cache-control": "no-store" } }
     );
   }
 
-  // Scan windows (fast → bigger)
-  const WINDOWS = [1_500n, 5_000n, 20_000n, 80_000n, 250_000n];
+  // Progressive scan windows (fast → bigger)
+  const WINDOWS = [2_000n, 8_000n, 25_000n, 80_000n, 250_000n];
 
-  let lastErr: string | null = null;
-
-  for (const rpc of rpcs) {
+  for (const rpcUrl of rpcs) {
     try {
       const pc = createPublicClient({
         chain: base,
-        transport: http(rpc, { timeout: 35_000, batch: false }),
+        transport: http(rpcUrl, { timeout: 35_000, batch: false }),
       });
 
-      const latest = await withTimeout(pc.getBlockNumber(), 12_000);
+      const latest = await tryWith(() => pc.getBlockNumber(), 2);
 
-      const found: Array<{ tokenId: bigint; blockNumber: bigint; logIndex: number }> = [];
+      const clampFrom = (from: bigint) => {
+        if (from < deployBlock) return deployBlock;
+        return from;
+      };
+
+      // 1) Prefer Minted(fid) events (usually lighter)
+      let ids: bigint[] = [];
 
       for (const win of WINDOWS) {
         const from0 = latest > win ? latest - win : 0n;
-        const fromBlock = from0 < deployBlock ? deployBlock : from0;
+        const fromBlock = clampFrom(from0);
 
-        // mint = Transfer(from=0x0)
-        const logs = await withTimeout(
-          pc.getLogs({
-            address: contract,
-            event: TRANSFER_EVENT,
-            args: { from: zeroAddress },
-            fromBlock,
-            toBlock: latest,
-          }),
-          20_000
+        const logs = await tryWith(
+          () =>
+            pc.getLogs({
+              address: contract,
+              event: MINTED_EVENT,
+              fromBlock,
+              toBlock: latest,
+            }),
+          2
         );
 
-        // newest first
         logs.sort((a, b) => {
           if (a.blockNumber === b.blockNumber) return (b.logIndex ?? 0) - (a.logIndex ?? 0);
           return Number((b.blockNumber ?? 0n) - (a.blockNumber ?? 0n));
         });
 
         for (const l of logs) {
-          const tid = (l.args as any)?.tokenId as bigint | undefined;
-          if (!tid) continue;
-          if (!found.some((x) => x.tokenId === tid)) {
-            found.push({ tokenId: tid, blockNumber: l.blockNumber!, logIndex: l.logIndex ?? 0 });
-            if (found.length >= n) break;
-          }
+          const fid = (l.args as any)?.fid as bigint | undefined;
+          if (fid === undefined) continue;
+          if (!ids.includes(fid)) ids.push(fid);
+          if (ids.length >= n) break;
         }
 
-        if (found.length >= n) break;
+        if (ids.length >= n) break;
       }
 
-      const tokenIds = found
-        .sort((a, b) => (a.blockNumber === b.blockNumber ? b.logIndex - a.logIndex : Number(b.blockNumber - a.blockNumber)))
-        .slice(0, n)
-        .map((x) => x.tokenId);
+      // 2) Fallback: Transfer(from=0x0)
+      if (ids.length < n) {
+        for (const win of WINDOWS) {
+          const from0 = latest > win ? latest - win : 0n;
+          const fromBlock = clampFrom(from0);
 
-      if (tokenIds.length === 0) {
-        setCache([]);
-        return NextResponse.json({ ok: true, cards: [] }, { headers: { "cache-control": "no-store" } });
+          const logs = await tryWith(
+            () =>
+              pc.getLogs({
+                address: contract,
+                event: TRANSFER_EVENT,
+                args: { from: zeroAddress },
+                fromBlock,
+                toBlock: latest,
+              }),
+            2
+          );
+
+          logs.sort((a, b) => {
+            if (a.blockNumber === b.blockNumber) return (b.logIndex ?? 0) - (a.logIndex ?? 0);
+            return Number((b.blockNumber ?? 0n) - (a.blockNumber ?? 0n));
+          });
+
+          for (const l of logs) {
+            const tid = (l.args as any)?.tokenId as bigint | undefined;
+            if (tid === undefined) continue;
+            if (!ids.includes(tid)) ids.push(tid);
+            if (ids.length >= n) break;
+          }
+
+          if (ids.length >= n) break;
+        }
       }
 
-      // tokenURI multicall
-      const uris = await withTimeout(
-        pc.multicall({
-          allowFailure: true,
-          contracts: tokenIds.map((tid) => ({
-            address: contract,
-            abi: ERC721_TOKENURI_ABI,
-            functionName: "tokenURI",
-            args: [tid],
-          })),
-        }),
-        20_000
+      ids = ids.slice(0, n);
+
+      if (ids.length === 0) {
+        return NextResponse.json(
+          { ok: true, contract, cards: [] },
+          { headers: { "cache-control": "no-store" } }
+        );
+      }
+
+      const urisRes = await tryWith(
+        () =>
+          pc.multicall({
+            allowFailure: true,
+            contracts: ids.map((tid) => ({
+              address: contract,
+              abi: ERC721_TOKENURI_ABI,
+              functionName: "tokenURI",
+              args: [tid],
+            })),
+          }),
+        2
       );
 
-      const cards = tokenIds.map((tid, i) => {
-        const uri = (uris as any)[i]?.result as string | undefined;
+      const cards = ids.map((tid, i) => {
+        const uri = (urisRes as any)[i]?.result as string | undefined;
         const svg = uri ? extractSvgFromTokenUri(uri) : null;
-        return { tokenId: tid.toString(), image: svg ? svgToDataUrl(svg) : null };
+        const image = svg ? svgToDataUrl(svg) : null;
+        return { tokenId: tid.toString(), image };
       });
 
-      // Cache last good result
-      setCache(cards);
-
       return NextResponse.json(
-        { ok: true, cards, cached: false },
+        { ok: true, contract, cards },
         { headers: { "cache-control": "no-store" } }
       );
     } catch {
-      // 🔒 Do NOT leak rpc or raw error
-      lastErr = "Base RPC temporarily unavailable";
+      // try next RPC
     }
   }
 
-  // If we have ANY cached result, serve it even if stale
-  if (cached?.cards?.length) {
-    return NextResponse.json(
-      { ok: true, cards: cached.cards.slice(0, n), cached: true, stale: true, note: "Served last known result." },
-      { headers: { "cache-control": "no-store" } }
-    );
-  }
-
   return NextResponse.json(
-    { ok: false, error: lastErr || "Unable to fetch recent mints right now." },
+    { ok: false, error: safeErrorMessage(), contract: BASEBOTS_RECENT_CONTRACT },
     { status: 500, headers: { "cache-control": "no-store" } }
   );
 }
