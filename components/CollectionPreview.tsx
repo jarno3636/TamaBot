@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
 
-type MintCard = { tokenId: string; svg: string | null };
+type MintCard = { tokenId: string; image: string | null };
 
 export default function CollectionPreview() {
   const title = useMemo(() => "Recently Minted", []);
@@ -22,17 +22,10 @@ export default function CollectionPreview() {
       });
 
       const text = await res.text();
-
-      // show exact server response if not OK
-      if (!res.ok) {
-        throw new Error(`API ${res.status}: ${text}`);
-      }
+      if (!res.ok) throw new Error(`API ${res.status}: ${text}`);
 
       const json = JSON.parse(text);
-
-      if (!json?.ok) {
-        throw new Error(json?.error || text || "API returned ok=false");
-      }
+      if (!json?.ok) throw new Error(json?.error || text || "API returned ok=false");
 
       setCards(Array.isArray(json.cards) ? json.cards : []);
     } catch (e: any) {
@@ -93,13 +86,18 @@ export default function CollectionPreview() {
                 transition={{ type: "spring", stiffness: 220, damping: 16 }}
                 className="w-1/2 px-2 mb-4 min-w-0"
               >
-                <div className="aspect-square rounded-xl border border-white/10 bg-gradient-to-br from-[#141820] to-[#0b0e14] shadow-md overflow-hidden flex items-center justify-center relative">
-                  {bot.svg ? (
-                    <div className="w-full h-full p-2 flex items-center justify-center" dangerouslySetInnerHTML={{ __html: bot.svg }} />
+                <div className="aspect-square rounded-xl border border-white/10 bg-gradient-to-br from-[#141820] to-[#0b0e14] shadow-md overflow-hidden relative">
+                  {bot.image ? (
+                    <img
+                      src={bot.image}
+                      alt={`Basebot FID #${bot.tokenId}`}
+                      className="w-full h-full object-contain p-2 block"
+                      draggable={false}
+                    />
                   ) : (
-                    <div className="flex flex-col items-center justify-center text-white/60">
+                    <div className="w-full h-full flex flex-col items-center justify-center text-white/60">
                       <div className="h-6 w-6 animate-spin rounded-full border border-white/30 border-t-transparent" />
-                      <div className="mt-2 text-[11px]">No on-chain SVG</div>
+                      <div className="mt-2 text-[11px]">No SVG returned</div>
                     </div>
                   )}
 
