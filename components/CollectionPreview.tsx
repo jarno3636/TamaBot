@@ -1,8 +1,7 @@
-// components/CollectionPreview.tsx
 "use client";
 
 import { motion } from "framer-motion";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 type MintCard = { tokenId: string; image: string | null };
 
@@ -12,28 +11,58 @@ export default function CollectionPreview() {
   const [cards, setCards] = useState<MintCard[]>([]);
   const [error, setError] = useState("");
 
+  // prevent double-click overlapping requests
+  const inFlight = useRef<AbortController | null>(null);
+
   async function refresh() {
+    if (loading) return;
+
     setLoading(true);
     setError("");
 
+    // Abort any previous request
+    if (inFlight.current) {
+      inFlight.current.abort();
+      inFlight.current = null;
+    }
+
+    const controller = new AbortController();
+    inFlight.current = controller;
+
+    // Hard timeout so it can never “spin forever”
+    const timeout = setTimeout(() => controller.abort(), 15_000);
+
     try {
-      // ✅ no auto-refresh; user clicks button
-      // ✅ no deployBlock by default (it can cause “only 1 found” if too recent)
-      const res = await fetch("/api/basebots/recent?n=4", {
+      const res = await fetch("/api/basebots/recent?n=4&deployBlock=37969324", {
         method: "GET",
         cache: "no-store",
+        signal: controller.signal,
       });
 
       const text = await res.text();
+
       if (!res.ok) throw new Error(`API ${res.status}: ${text}`);
 
       const json = JSON.parse(text);
       if (!json?.ok) throw new Error(json?.error || text || "API returned ok=false");
 
-      setCards(Array.isArray(json.cards) ? json.cards : []);
+      const next = Array.isArray(json.cards) ? (json.cards as MintCard[]) : [];
+
+      setCards(next);
+      if (next.length < 4) {
+        setError(
+          `Loaded ${next.length}/4. RPC scan may be rate-limited—try Refresh again in a moment.`
+        );
+      }
     } catch (e: any) {
-      setError(e?.message || "HTTP request failed.");
+      if (e?.name === "AbortError") {
+        setError("Request timed out. Tap Refresh again (RPC may be slow/rate-limited).");
+      } else {
+        setError(e?.message || "HTTP request failed.");
+      }
     } finally {
+      clearTimeout(timeout);
+      inFlight.current = null;
       setLoading(false);
     }
   }
@@ -73,7 +102,7 @@ export default function CollectionPreview() {
           </pre>
         )}
 
-        {!loading && !error && cards.length === 0 && (
+        {!loading && cards.length === 0 && (
           <p className="mt-3 text-center text-sm text-white/70">
             Click <span className="font-semibold text-white/80">Refresh</span> to load the last 4 mints.
           </p>
@@ -96,6 +125,7 @@ export default function CollectionPreview() {
                       alt={`Basebot FID #${bot.tokenId}`}
                       className="w-full h-full object-contain p-2 block"
                       draggable={false}
+                      loading="lazy"
                     />
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center text-white/60">
