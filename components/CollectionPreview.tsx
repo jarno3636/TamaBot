@@ -5,19 +5,16 @@ import { useMemo, useRef, useState } from "react";
 
 type MintCard = { tokenId: string; image: string | null };
 
-type ApiResp =
-  | { ok: true; cards: MintCard[]; cached?: boolean; stale?: boolean; note?: string }
-  | { ok: false; error: string };
-
 export default function CollectionPreview() {
   const title = useMemo(() => "Recently Minted", []);
   const [loading, setLoading] = useState(false);
   const [cards, setCards] = useState<MintCard[]>([]);
   const [error, setError] = useState("");
-  const [note, setNote] = useState<string>("");
 
+  // popup viewer
   const [active, setActive] = useState<MintCard | null>(null);
 
+  // prevent double-click overlapping requests
   const inFlight = useRef<AbortController | null>(null);
 
   async function refresh() {
@@ -25,7 +22,6 @@ export default function CollectionPreview() {
 
     setLoading(true);
     setError("");
-    setNote("");
 
     if (inFlight.current) {
       inFlight.current.abort();
@@ -35,8 +31,7 @@ export default function CollectionPreview() {
     const controller = new AbortController();
     inFlight.current = controller;
 
-    // Slightly longer; server now also protects itself
-    const timeout = setTimeout(() => controller.abort(), 25_000);
+    const timeout = setTimeout(() => controller.abort(), 15_000);
 
     try {
       const res = await fetch("/api/basebots/recent?n=4&deployBlock=37969324", {
@@ -45,22 +40,25 @@ export default function CollectionPreview() {
         signal: controller.signal,
       });
 
-      const json = (await res.json()) as ApiResp;
+      const text = await res.text();
+      if (!res.ok) throw new Error(`API ${res.status}: ${text}`);
 
-      if (!res.ok || !json.ok) {
-        const msg = (json as any)?.error || `API ${res.status}`;
-        throw new Error(msg);
+      const json = JSON.parse(text);
+      if (!json?.ok) throw new Error(json?.error || text || "API returned ok=false");
+
+      const next = Array.isArray(json.cards) ? (json.cards as MintCard[]) : [];
+      setCards(next);
+
+      if (next.length === 0) {
+        setError("No mints found in the scanned window yet. Try again in a moment.");
+      } else if (next.length < 4) {
+        setError(`Loaded ${next.length}/4. Try Refresh again to fill remaining.`);
       }
-
-      setCards(Array.isArray(json.cards) ? json.cards : []);
-      if (json.note) setNote(json.note);
-      if (json.stale) setNote((prev) => (prev ? prev : "Showing last known results (RPC busy)."));
-      if (json.cards.length < 4) setNote((prev) => prev || `Loaded ${json.cards.length}/4 (recent mints not found in scan window).`);
     } catch (e: any) {
       if (e?.name === "AbortError") {
-        setError("Request timed out. Try again in a few seconds (Base RPC busy).");
+        setError("Request timed out. Tap Refresh again (RPC may be slow).");
       } else {
-        setError(e?.message || "Request failed.");
+        setError(e?.message || "HTTP request failed.");
       }
     } finally {
       clearTimeout(timeout);
@@ -98,22 +96,15 @@ export default function CollectionPreview() {
           </button>
         </div>
 
-        {note && (
-          <div className="mt-3 rounded-xl border border-emerald-400/25 bg-emerald-500/10 p-3 text-[11px] text-emerald-200">
-            {note}
-          </div>
-        )}
-
         {error && (
           <div className="mt-3 rounded-xl border border-white/10 bg-black/30 p-3">
-            <div className="text-[11px] font-semibold text-rose-300">Error</div>
-            <div className="mt-1 max-h-[120px] overflow-auto whitespace-pre-wrap break-words text-[11px] text-rose-200/90">
+            <pre className="whitespace-pre-wrap text-[11px] text-rose-300 max-h-[160px] overflow-auto">
               {error}
-            </div>
+            </pre>
           </div>
         )}
 
-        {!loading && !error && cards.length === 0 && (
+        {!loading && cards.length === 0 && (
           <p className="mt-3 text-center text-sm text-white/70">
             Click <span className="font-semibold text-white/80">Refresh</span> to load the last 4 mints.
           </p>
@@ -168,7 +159,7 @@ export default function CollectionPreview() {
         )}
 
         <p className="mt-1 text-center text-[11px] text-white/45">
-          Pulled from on-chain mint events (Transfer from zero address) and rendered from on-chain tokenURI SVG
+          Pulled from on-chain mint events and rendered from on-chain tokenURI SVG
         </p>
 
         <AnimatePresence>
@@ -226,9 +217,7 @@ export default function CollectionPreview() {
                     )}
                   </div>
 
-                  <p className="mt-3 text-center text-[11px] text-white/55">
-                    Tap outside to close.
-                  </p>
+                  <p className="mt-3 text-center text-[11px] text-white/55">Tap outside to close.</p>
                 </div>
               </motion.div>
             </motion.div>
