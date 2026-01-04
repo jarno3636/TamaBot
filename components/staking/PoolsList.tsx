@@ -136,27 +136,42 @@ function ActionBtn({
   onClick,
   children,
   external,
+  disabled,
+  title,
 }: {
   tone: Tone;
   href?: string;
   onClick?: () => void;
   external?: boolean;
+  disabled?: boolean;
+  title?: string;
   children: React.ReactNode;
 }) {
   const cls =
-    "inline-flex items-center justify-center rounded-full border px-3 py-1 text-[11px] font-semibold transition-transform active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/60 hover:brightness-110";
+    "inline-flex items-center justify-center rounded-full border px-3 py-1 text-[11px] font-semibold transition-transform active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/60 hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed";
   const style = toneStyle(tone);
 
   if (href) {
     return (
-      <Link href={href} target={external ? "_blank" : undefined} rel={external ? "noopener noreferrer" : undefined} className={cls} style={style}>
+      <Link
+        href={href}
+        target={external ? "_blank" : undefined}
+        rel={external ? "noopener noreferrer" : undefined}
+        className={cls}
+        style={style}
+        aria-disabled={disabled ? true : undefined}
+        title={title}
+        onClick={(e) => {
+          if (disabled) e.preventDefault();
+        }}
+      >
         {children}
       </Link>
     );
   }
 
   return (
-    <button type="button" onClick={onClick} className={cls} style={style}>
+    <button type="button" onClick={onClick} className={cls} style={style} disabled={disabled} title={title}>
       {children}
     </button>
   );
@@ -187,7 +202,7 @@ function poolCardStyle(poolAddr: string): { isBlue: boolean; outer: React.CSSPro
       isBlue,
       outer: {
         borderColor: "rgba(56,189,248,0.32)",
-        backgroundColor: "rgba(2, 18, 34, 0.92)", // <- OBVIOUS
+        backgroundColor: "rgba(2, 18, 34, 0.92)",
         backgroundImage: "linear-gradient(180deg, rgba(2,18,34,0.92), rgba(2,6,23,0.78))",
         boxShadow: "0 30px 90px rgba(0,0,0,0.60), 0 0 0 1px rgba(56,189,248,0.10)",
       },
@@ -205,7 +220,7 @@ function poolCardStyle(poolAddr: string): { isBlue: boolean; outer: React.CSSPro
     isBlue,
     outer: {
       borderColor: "rgba(251,191,36,0.32)",
-      backgroundColor: "rgba(34, 18, 2, 0.92)", // <- OBVIOUS
+      backgroundColor: "rgba(34, 18, 2, 0.92)",
       backgroundImage: "linear-gradient(180deg, rgba(34,18,2,0.92), rgba(2,6,23,0.78))",
       boxShadow: "0 30px 90px rgba(0,0,0,0.60), 0 0 0 1px rgba(251,191,36,0.10)",
     },
@@ -223,9 +238,7 @@ function poolCardStyle(poolAddr: string): { isBlue: boolean; outer: React.CSSPro
  * Share helper (Farcaster miniapp -> navigator.share -> warpcast URL)
  * ──────────────────────────────────────────────────────────── */
 async function smartShare({ text, url }: { text: string; url: string }) {
-  // 1) Farcaster miniapp: native composer (prevents “download app” behavior)
   try {
-    // Some SDK versions expose composeCast under actions; types vary.
     // @ts-expect-error - sdk types differ across versions
     if (sdk?.actions?.composeCast) {
       // @ts-expect-error
@@ -236,7 +249,6 @@ async function smartShare({ text, url }: { text: string; url: string }) {
     console.warn("composeCast failed; falling back", e);
   }
 
-  // 2) Base app / mobile: native share sheet
   try {
     if (typeof navigator !== "undefined" && (navigator as any).share) {
       await (navigator as any).share({ text, url });
@@ -246,7 +258,6 @@ async function smartShare({ text, url }: { text: string; url: string }) {
     console.warn("navigator.share failed; falling back", e);
   }
 
-  // 3) Fallback: warpcast compose URL
   try {
     const shareUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(url)}`;
     window.open(shareUrl, "_blank", "noopener,noreferrer");
@@ -264,7 +275,7 @@ export default function PoolsList({
   tokenMetaByAddr,
   basebotsNftAddress,
   openFundModalForPool,
-  onEnterPool, // ✅ NEW: opens modal instead of navigating
+  onEnterPool, // ✅ NOW OPTIONAL (prevents TS build failures)
 }: {
   pools: FactoryPoolDetails[];
   poolsLoading: boolean;
@@ -274,7 +285,9 @@ export default function PoolsList({
   tokenMetaByAddr: Record<string, TokenMeta>;
   basebotsNftAddress: `0x${string}`;
   openFundModalForPool: (p: { pool: `0x${string}`; rewardToken: `0x${string}` }) => void;
-  onEnterPool: (poolAddr: `0x${string}`) => void;
+
+  // ✅ Make optional, so page.tsx won’t break builds if it forgets this prop
+  onEnterPool?: (poolAddr: `0x${string}`) => void;
 }) {
   const pc = usePublicClient({ chainId: base.id });
 
@@ -461,13 +474,8 @@ export default function PoolsList({
 
             return (
               <div key={pool.pool} className="relative overflow-hidden rounded-3xl border p-4 md:p-5" style={{ ...card.outer }}>
-                {/* left accent bar */}
                 <div aria-hidden className="pointer-events-none absolute left-0 top-0 bottom-0 w-[6px] opacity-90" style={card.accent} />
-
-                {/* color wash */}
                 <div aria-hidden className="pointer-events-none absolute inset-0 opacity-95" style={card.wash} />
-
-                {/* shine strip */}
                 <div
                   aria-hidden
                   className="pointer-events-none absolute -top-16 left-0 right-0 h-32 opacity-50"
@@ -501,8 +509,14 @@ export default function PoolsList({
                         Basescan ↗
                       </ActionBtn>
 
-                      {/* ✅ FIX: Enter opens modal (no navigation / reload) */}
-                      <ActionBtn tone="teal" onClick={() => onEnterPool(pool.pool)}>
+                      {/* ✅ If onEnterPool provided -> open modal. Otherwise -> navigate to pool URL */}
+                      <ActionBtn
+                        tone="teal"
+                        onClick={onEnterPool ? () => onEnterPool(pool.pool) : undefined}
+                        href={!onEnterPool ? enterHref : undefined}
+                        disabled={!onEnterPool && !enterHref}
+                        title={onEnterPool ? "Enter (opens modal)" : "Enter (opens pool page)"}
+                      >
                         Enter
                       </ActionBtn>
 
@@ -560,7 +574,6 @@ export default function PoolsList({
                         </div>
 
                         <div className="flex flex-wrap gap-2">
-                          {/* ✅ FIX: Share works in Farcaster miniapp + Base app */}
                           <ActionBtn
                             tone="purple"
                             onClick={async () => {
