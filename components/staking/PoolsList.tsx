@@ -1,3 +1,4 @@
+// components/staking/PoolsList.tsx
 "use client";
 
 import type React from "react";
@@ -6,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePublicClient } from "wagmi";
 import { base } from "viem/chains";
 import { formatUnits } from "viem";
+import { sdk } from "@farcaster/miniapp-sdk";
 
 import type { FactoryPoolDetails, TokenMeta } from "./stakingUtils";
 import { shortenAddress, getAppUrl } from "./stakingUtils";
@@ -40,7 +42,7 @@ const POOL_STATS_ABI = [
 
 /* ──────────────────────────────────────────────────────────────
  * Helpers
- * ────────────────────────────────────────────────────────────── */
+ * ──────────────────────────────────────────────────────────── */
 function nowSec() {
   return Math.floor(Date.now() / 1000);
 }
@@ -170,7 +172,7 @@ type UsersRowTuple = readonly [bigint, bigint, bigint];
 
 /* ──────────────────────────────────────────────────────────────
  * VERY OBVIOUS alternating per-pool card backgrounds
- * ────────────────────────────────────────────────────────────── */
+ * ──────────────────────────────────────────────────────────── */
 function hashEven(addr: string) {
   let h = 0;
   for (let i = 0; i < addr.length; i++) h = (h * 33 + addr.charCodeAt(i)) >>> 0;
@@ -217,6 +219,42 @@ function poolCardStyle(poolAddr: string): { isBlue: boolean; outer: React.CSSPro
   };
 }
 
+/* ──────────────────────────────────────────────────────────────
+ * Share helper (Farcaster miniapp -> navigator.share -> warpcast URL)
+ * ──────────────────────────────────────────────────────────── */
+async function smartShare({ text, url }: { text: string; url: string }) {
+  // 1) Farcaster miniapp: native composer (prevents “download app” behavior)
+  try {
+    // Some SDK versions expose composeCast under actions; types vary.
+    // @ts-expect-error - sdk types differ across versions
+    if (sdk?.actions?.composeCast) {
+      // @ts-expect-error
+      await sdk.actions.composeCast({ text, embeds: [url] });
+      return;
+    }
+  } catch (e) {
+    console.warn("composeCast failed; falling back", e);
+  }
+
+  // 2) Base app / mobile: native share sheet
+  try {
+    if (typeof navigator !== "undefined" && (navigator as any).share) {
+      await (navigator as any).share({ text, url });
+      return;
+    }
+  } catch (e) {
+    console.warn("navigator.share failed; falling back", e);
+  }
+
+  // 3) Fallback: warpcast compose URL
+  try {
+    const shareUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(url)}`;
+    window.open(shareUrl, "_blank", "noopener,noreferrer");
+  } catch (e) {
+    console.warn("share fallback failed", e);
+  }
+}
+
 export default function PoolsList({
   pools,
   poolsLoading,
@@ -226,6 +264,7 @@ export default function PoolsList({
   tokenMetaByAddr,
   basebotsNftAddress,
   openFundModalForPool,
+  onEnterPool, // ✅ NEW: opens modal instead of navigating
 }: {
   pools: FactoryPoolDetails[];
   poolsLoading: boolean;
@@ -235,6 +274,7 @@ export default function PoolsList({
   tokenMetaByAddr: Record<string, TokenMeta>;
   basebotsNftAddress: `0x${string}`;
   openFundModalForPool: (p: { pool: `0x${string}`; rewardToken: `0x${string}` }) => void;
+  onEnterPool: (poolAddr: `0x${string}`) => void;
 }) {
   const pc = usePublicClient({ chainId: base.id });
 
@@ -331,7 +371,7 @@ export default function PoolsList({
     return () => {
       cancelled = true;
     };
-  }, [pc, poolsKey, address]);
+  }, [pc, poolsKey, address, sorted]);
 
   return (
     <section className="glass glass-pad relative overflow-hidden rounded-3xl border border-white/10 bg-[#020617]/85 space-y-4">
@@ -420,17 +460,9 @@ export default function PoolsList({
             const card = poolCardStyle(pool.pool);
 
             return (
-              <div
-                key={pool.pool}
-                className="relative overflow-hidden rounded-3xl border p-4 md:p-5"
-                style={{ ...card.outer }}
-              >
+              <div key={pool.pool} className="relative overflow-hidden rounded-3xl border p-4 md:p-5" style={{ ...card.outer }}>
                 {/* left accent bar */}
-                <div
-                  aria-hidden
-                  className="pointer-events-none absolute left-0 top-0 bottom-0 w-[6px] opacity-90"
-                  style={card.accent}
-                />
+                <div aria-hidden className="pointer-events-none absolute left-0 top-0 bottom-0 w-[6px] opacity-90" style={card.accent} />
 
                 {/* color wash */}
                 <div aria-hidden className="pointer-events-none absolute inset-0 opacity-95" style={card.wash} />
@@ -469,7 +501,8 @@ export default function PoolsList({
                         Basescan ↗
                       </ActionBtn>
 
-                      <ActionBtn tone="teal" href={enterHref}>
+                      {/* ✅ FIX: Enter opens modal (no navigation / reload) */}
+                      <ActionBtn tone="teal" onClick={() => onEnterPool(pool.pool)}>
                         Enter
                       </ActionBtn>
 
@@ -527,9 +560,10 @@ export default function PoolsList({
                         </div>
 
                         <div className="flex flex-wrap gap-2">
+                          {/* ✅ FIX: Share works in Farcaster miniapp + Base app */}
                           <ActionBtn
                             tone="purple"
-                            onClick={() => {
+                            onClick={async () => {
                               const url = getAppUrl(enterHref);
                               const text =
                                 `I just launched an NFT staking pool on Base 🚀\n\n` +
@@ -537,12 +571,11 @@ export default function PoolsList({
                                 `NFT: ${shortenAddress(pool.nft, 4)}\n` +
                                 `Reward token: ${shortenAddress(pool.rewardToken, 4)}\n\n` +
                                 `Stake + earn rewards here:`;
-                              const shareUrl =
-                                `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(url)}`;
-                              window.open(shareUrl, "_blank", "noopener,noreferrer");
+
+                              await smartShare({ text, url });
                             }}
                           >
-                            Share Farcaster
+                            Share
                           </ActionBtn>
 
                           <ActionBtn
@@ -555,8 +588,7 @@ export default function PoolsList({
                                 `NFT: ${shortenAddress(pool.nft, 4)}\n` +
                                 `Reward token: ${shortenAddress(pool.rewardToken, 4)}\n\n` +
                                 `Stake + earn rewards here:`;
-                              const shareUrl =
-                                `https://x.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
+                              const shareUrl = `https://x.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
                               window.open(shareUrl, "_blank", "noopener,noreferrer");
                             }}
                           >
