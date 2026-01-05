@@ -6,6 +6,9 @@ import { zeroAddress } from "viem";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// Ask Vercel for longer execution (works on plans that support it)
+export const maxDuration = 40;
+
 /**
  * ✅ Hard-coded Basebots contract (0x...222B4)
  */
@@ -50,11 +53,42 @@ const ABI = [
   },
 ] as const;
 
+const ERC721_TOKENURI_ABI = [
+  {
+    name: "tokenURI",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ name: "", type: "string" }],
+  },
+] as const;
+
+/**
+ * ✅ IMPORTANT FIX:
+ * Do NOT type helper params as ReturnType<typeof createPublicClient>
+ * (avoids viem type conflicts in monorepos / wagmi installs)
+ */
+type PublicClientLike = {
+  getBlockNumber: (...args: any[]) => Promise<bigint>;
+  getLogs: (...args: any[]) => Promise<any[]>;
+  readContract: (...args: any[]) => Promise<any>;
+  multicall: (...args: any[]) => Promise<any>;
+};
+
 /**
  * Small in-memory cache (per server instance)
  */
 type ApiCard = { tokenId: string; image: string | null };
-type ApiPayload = { ok: boolean; contract: string; latest?: string; cards?: ApiCard[]; error?: string; detail?: string; hint?: string; rpcsTriedCount?: number };
+type ApiPayload = {
+  ok: boolean;
+  contract: string;
+  latest?: string;
+  cards?: ApiCard[];
+  error?: string;
+  detail?: string;
+  hint?: string;
+  rpcsTriedCount?: number;
+};
 
 type Cached = { at: number; key: string; value: ApiPayload };
 let CACHE: Cached | null = null;
@@ -79,10 +113,9 @@ function safeErrMsg(e: any): string {
 }
 
 /**
- * ✅ Important: decode base64 safely (NOT utf8-only)
- * Basebots embeds SVG base64 inside JSON, and utf8 decoding can break it.
+ * ✅ base64 decode (NOT utf8-only)
  */
-function safeB64ToString(b64: string) {
+function b64ToString(b64: string) {
   try {
     return Buffer.from(b64, "base64").toString();
   } catch {
@@ -100,21 +133,21 @@ function safeB64ToString(b64: string) {
 function extractSvgFromTokenUri(tokenUri: string): string | null {
   if (!tokenUri) return null;
 
+  // Most common: data:application/json;base64,...
   if (tokenUri.startsWith("data:application/json;base64,")) {
     const jsonB64 = tokenUri.slice("data:application/json;base64,".length);
-    const jsonStr = safeB64ToString(jsonB64);
+    const jsonStr = b64ToString(jsonB64);
     if (!jsonStr) return null;
 
     try {
       const meta = JSON.parse(jsonStr);
 
-      // Basebots commonly uses meta.image as base64 svg data URL
       if (typeof meta?.image === "string") {
         const img = meta.image as string;
 
         if (img.startsWith("data:image/svg+xml;base64,")) {
           const svgB64 = img.slice("data:image/svg+xml;base64,".length);
-          const svg = safeB64ToString(svgB64);
+          const svg = b64ToString(svgB64);
           return svg.includes("<svg") ? svg : null;
         }
 
@@ -124,7 +157,6 @@ function extractSvgFromTokenUri(tokenUri: string): string | null {
         }
       }
 
-      // fallback: image_data raw svg
       if (typeof meta?.image_data === "string" && meta.image_data.includes("<svg")) {
         return meta.image_data;
       }
@@ -135,17 +167,19 @@ function extractSvgFromTokenUri(tokenUri: string): string | null {
     }
   }
 
-  // Some contracts return raw JSON (not typical here, but safe)
+  // Rare: raw JSON string
   if (tokenUri.trim().startsWith("{")) {
     try {
       const meta = JSON.parse(tokenUri);
       if (typeof meta?.image === "string") {
         const img = meta.image as string;
+
         if (img.startsWith("data:image/svg+xml;base64,")) {
           const svgB64 = img.slice("data:image/svg+xml;base64,".length);
-          const svg = safeB64ToString(svgB64);
+          const svg = b64ToString(svgB64);
           return svg.includes("<svg") ? svg : null;
         }
+
         if (img.startsWith("data:image/svg+xml;utf8,")) {
           const svg = decodeURIComponent(img.slice("data:image/svg+xml;utf8,".length));
           return svg.includes("<svg") ? svg : null;
@@ -162,7 +196,6 @@ function extractSvgFromTokenUri(tokenUri: string): string | null {
 
 /**
  * Convert SVG string to a data URL that <img> can render.
- * (Keep utf8 here; it’s fine after we already have valid SVG text.)
  */
 function svgToDataUrl(svg: string) {
   let s = svg.includes('xmlns="http://www.w3.org/2000/svg"')
@@ -191,9 +224,6 @@ async function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/**
- * Retry helper with small backoff
- */
 async function retry<T>(fn: () => Promise<T>, tries = 2) {
   let last: any;
   for (let i = 0; i < tries; i++) {
@@ -207,10 +237,6 @@ async function retry<T>(fn: () => Promise<T>, tries = 2) {
   throw last;
 }
 
-/**
- * Hard timeout wrapper for slow RPC calls.
- * (You asked for reliability even if it needs 30–40 seconds overall.)
- */
 async function withTimeout<T>(p: Promise<T>, ms: number, label = "timeout"): Promise<T> {
   let t: NodeJS.Timeout | null = null;
   const timeout = new Promise<T>((_, rej) => {
@@ -232,13 +258,13 @@ async function withTimeout<T>(p: Promise<T>, ms: number, label = "timeout"): Pro
  * log scan Minted / Transfer(from=0) if totalMinted fails.
  */
 async function findRecentTokenIds(
-  pc: ReturnType<typeof createPublicClient>,
+  pc: PublicClientLike,
   n: number,
   deployBlock: bigint
 ): Promise<{ latest: bigint; tokenIds: bigint[] }> {
   const latest = await retry(() => pc.getBlockNumber(), 2);
 
-  // 1) Prefer totalMinted (fast, deterministic)
+  // 1) Prefer totalMinted
   try {
     const totalMinted = await withTimeout(
       pc.readContract({ address: CONTRACT, abi: ABI, functionName: "totalMinted" }),
@@ -259,7 +285,7 @@ async function findRecentTokenIds(
     // fall through to log scan
   }
 
-  // 2) Fallback: Scan logs in small windows backwards until N unique tokenIds
+  // 2) Fallback: log scan (adaptive window)
   let window = 1_200n;
   const maxWindow = 20_000n;
   const maxLoops = 18;
@@ -289,7 +315,7 @@ async function findRecentTokenIds(
     const fromBlock = latest > window ? latest - window : 0n;
     const from = fromBlock < deployBlock ? deployBlock : fromBlock;
 
-    // Minted event
+    // Minted event (returns fid)
     try {
       const logs = await withTimeout(
         retry(
@@ -306,21 +332,22 @@ async function findRecentTokenIds(
         "getLogs(Minted) timeout"
       );
 
-      sortLogsNewestFirst(logs as any[]);
+      sortLogsNewestFirst(logs);
 
       const ids: bigint[] = [];
-      for (const l of logs as any[]) {
+      for (const l of logs) {
         const fid = (l.args as any)?.fid as bigint | undefined;
         if (fid !== undefined) ids.push(fid);
         if (ids.length >= n * 3) break;
       }
+
       await pushUnique(ids);
       if (found.length >= n) break;
     } catch {
       // ignore
     }
 
-    // Transfer(from=0) fallback
+    // Transfer(from=0) fallback (returns tokenId)
     try {
       const logs = await withTimeout(
         retry(
@@ -338,14 +365,15 @@ async function findRecentTokenIds(
         "getLogs(Transfer) timeout"
       );
 
-      sortLogsNewestFirst(logs as any[]);
+      sortLogsNewestFirst(logs);
 
       const ids: bigint[] = [];
-      for (const l of logs as any[]) {
+      for (const l of logs) {
         const tid = (l.args as any)?.tokenId as bigint | undefined;
         if (tid !== undefined) ids.push(tid);
         if (ids.length >= n * 3) break;
       }
+
       await pushUnique(ids);
       if (found.length >= n) break;
     } catch {
@@ -367,9 +395,7 @@ export async function GET(req: Request) {
 
   const cacheKey = `n=${n}&deploy=${deployBlock.toString()}`;
   const cached = cacheGet(cacheKey);
-  if (cached) {
-    return NextResponse.json(cached, { headers: { "cache-control": "no-store" } });
-  }
+  if (cached) return NextResponse.json(cached, { headers: { "cache-control": "no-store" } });
 
   const rpcs = getRpcList();
   if (!rpcs.length) {
@@ -381,18 +407,14 @@ export async function GET(req: Request) {
 
   let lastErr: any = null;
 
-  // You asked for “even if it needs 30–40 seconds”
-  // We’ll allow trying multiple RPCs; each has its own timeouts.
-  for (let i = 0; i < rpcs.length; i++) {
-    const rpcUrl = rpcs[i];
-
+  for (const rpcUrl of rpcs) {
     try {
       const pc = createPublicClient({
         chain: base,
         transport: http(rpcUrl, { timeout: 25_000, batch: false }),
       });
 
-      const { latest, tokenIds } = await findRecentTokenIds(pc, n, deployBlock);
+      const { latest, tokenIds } = await findRecentTokenIds(pc as unknown as PublicClientLike, n, deployBlock);
 
       if (tokenIds.length === 0) {
         const payload: ApiPayload = {
@@ -405,7 +427,6 @@ export async function GET(req: Request) {
         return NextResponse.json(payload, { headers: { "cache-control": "no-store" } });
       }
 
-      // tokenURI multicall (wrap with generous timeout)
       const urisRes = await withTimeout(
         retry(
           () =>
@@ -446,7 +467,6 @@ export async function GET(req: Request) {
     }
   }
 
-  // No RPC succeeded (never include rpcUrl or rpcs list)
   return NextResponse.json(
     {
       ok: false,
