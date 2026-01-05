@@ -29,6 +29,13 @@ const TOKEN_URI_ABI = [
 
 type Card = { tokenId: string; image: string | null };
 
+// ✅ Minimal client interface to avoid viem type mismatches in Next build
+type PublicClientLike = {
+  getBlockNumber: () => Promise<bigint>;
+  getLogs: (args: any) => Promise<any[]>;
+  multicall: (args: any) => Promise<any[]>;
+};
+
 function getRpcs() {
   const env = (process.env.BASEBOTS_RPC_URLS || "").trim();
   const envList = env ? env.split(",").map((s) => s.trim()).filter(Boolean) : [];
@@ -37,7 +44,6 @@ function getRpcs() {
 
 function decodeB64(b64: string) {
   try {
-    // Important: default .toString() is fine here; Basebots embeds valid UTF-8 JSON
     return Buffer.from(b64, "base64").toString();
   } catch {
     return "";
@@ -89,7 +95,6 @@ function svgToDataUrl(svg: string) {
     s = s.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"');
   }
 
-  // (optional) lock aspect behavior so it renders nicely in <img>
   if (!/preserveAspectRatio=/.test(s)) {
     s = s.replace("<svg", '<svg preserveAspectRatio="xMidYMid meet"');
   }
@@ -114,14 +119,25 @@ async function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-// Scan backwards in windows until we have enough candidate FIDs
-async function collectRecentFids(pc: ReturnType<typeof createPublicClient>, want: number) {
-  const latest = await pc.getBlockNumber();
+async function withTimeout<T>(p: Promise<T>, ms: number) {
+  let t: NodeJS.Timeout | null = null;
+  const timeout = new Promise<T>((_, rej) => {
+    t = setTimeout(() => rej(new Error("timeout")), ms);
+  });
+  try {
+    return await Promise.race([p, timeout]);
+  } finally {
+    if (t) clearTimeout(t);
+  }
+}
 
-  // Bigger coverage than 50k. Adjust as needed.
-  const WINDOW = 200_000n;     // scan 200k blocks at a time
-  const MAX_WINDOWS = 12;      // up to 2.4M blocks scanned
-  const OVERFETCH = Math.max(want * 8, 32); // pull many candidates to survive failures
+// Scan backwards in windows until we have enough candidate FIDs
+async function collectRecentFids(pc: PublicClientLike, want: number) {
+  const latest = await withTimeout(pc.getBlockNumber(), 20_000);
+
+  const WINDOW = 250_000n; // larger window = fewer calls
+  const MAX_WINDOWS = 14;  // up to 3.5M blocks scanned
+  const OVERFETCH = Math.max(want * 10, 40);
 
   const collected: bigint[] = [];
 
@@ -129,12 +145,15 @@ async function collectRecentFids(pc: ReturnType<typeof createPublicClient>, want
     const toBlock = latest - BigInt(w) * WINDOW;
     const fromBlock = toBlock > WINDOW ? toBlock - WINDOW : 0n;
 
-    const logs = await pc.getLogs({
-      address: CONTRACT,
-      event: MINTED_EVENT,
-      fromBlock,
-      toBlock,
-    });
+    const logs = await withTimeout(
+      pc.getLogs({
+        address: CONTRACT,
+        event: MINTED_EVENT,
+        fromBlock,
+        toBlock,
+      }),
+      25_000
+    );
 
     // newest first
     logs.sort((a, b) => {
@@ -146,34 +165,36 @@ async function collectRecentFids(pc: ReturnType<typeof createPublicClient>, want
 
     for (const l of logs) {
       const fid = (l.args as any)?.fid as bigint | undefined;
-      if (fid !== undefined) collected.push(fid);
+      if (typeof fid === "bigint") collected.push(fid);
       if (collected.length >= OVERFETCH) break;
     }
 
-    // tiny pause to be nicer to public RPCs
-    await sleep(80);
+    await sleep(90);
   }
 
   return uniqNewestBigints(collected);
 }
 
 // Turn candidate FIDs into actual SVG cards, skipping failures/nulls until we fill n
-async function buildCards(pc: ReturnType<typeof createPublicClient>, fids: bigint[], n: number) {
+async function buildCards(pc: PublicClientLike, fids: bigint[], n: number) {
   const cards: Card[] = [];
-  const BATCH = 12; // small-ish batches = less likely to blow up
+  const BATCH = 16;
 
   for (let i = 0; i < fids.length && cards.length < n; i += BATCH) {
     const batch = fids.slice(i, i + BATCH);
 
-    const uris = await pc.multicall({
-      allowFailure: true,
-      contracts: batch.map((fid) => ({
-        address: CONTRACT,
-        abi: TOKEN_URI_ABI,
-        functionName: "tokenURI",
-        args: [fid],
-      })),
-    });
+    const uris = await withTimeout(
+      pc.multicall({
+        allowFailure: true,
+        contracts: batch.map((fid) => ({
+          address: CONTRACT,
+          abi: TOKEN_URI_ABI,
+          functionName: "tokenURI",
+          args: [fid],
+        })),
+      }),
+      25_000
+    );
 
     for (let j = 0; j < batch.length && cards.length < n; j++) {
       const fid = batch[j];
@@ -183,13 +204,10 @@ async function buildCards(pc: ReturnType<typeof createPublicClient>, fids: bigin
       const svg = extractSvg(uri);
       if (!svg) continue;
 
-      cards.push({
-        tokenId: fid.toString(), // fid == tokenId
-        image: svgToDataUrl(svg),
-      });
+      cards.push({ tokenId: fid.toString(), image: svgToDataUrl(svg) });
     }
 
-    await sleep(50);
+    await sleep(60);
   }
 
   return cards;
@@ -204,7 +222,7 @@ export async function GET(req: Request) {
       const pc = createPublicClient({
         chain: base,
         transport: http(rpc, { timeout: 30_000, batch: false }),
-      });
+      }) as unknown as PublicClientLike;
 
       const fids = await collectRecentFids(pc, n);
       const cards = await buildCards(pc, fids, n);
@@ -213,7 +231,6 @@ export async function GET(req: Request) {
         {
           ok: true,
           contract: CONTRACT,
-          // helpful for debugging without leaking RPCs
           foundFids: fids.length,
           returned: cards.length,
           cards,
@@ -221,7 +238,7 @@ export async function GET(req: Request) {
         { headers: { "cache-control": "no-store" } }
       );
     } catch {
-      continue; // try next rpc
+      continue;
     }
   }
 
