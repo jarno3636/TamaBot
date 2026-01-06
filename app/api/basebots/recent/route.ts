@@ -1,8 +1,8 @@
 // app/api/basebots/recent/route.ts
 import { NextResponse } from "next/server";
-import { createPublicClient, http } from "viem";
+import { createPublicClient, http, zeroAddress } from "viem";
 import { base } from "viem/chains";
-import { BASEBOTS, BASEBOTS_RECENT_ABI } from "@/lib/abi"; // <-- update path if yours differs
+import { BASEBOTS } from "@/lib/abi"; // <-- adjust path if needed
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,15 +10,48 @@ export const dynamic = "force-dynamic";
 type Card = { tokenId: string; image: string | null };
 
 type PublicClientLike = {
-  readContract: (args: any) => Promise<any>;
+  getBlockNumber: () => Promise<bigint>;
+  getLogs: (args: any) => Promise<any[]>;
   multicall: (args: any) => Promise<any[]>;
 };
+
+const CONTRACT = BASEBOTS.address;
+
+// Minted(minter, fid) where fid == tokenId
+const MINTED_EVENT = {
+  type: "event",
+  name: "Minted",
+  inputs: [
+    { indexed: true, name: "minter", type: "address" },
+    { indexed: true, name: "fid", type: "uint256" },
+  ],
+} as const;
+
+const TRANSFER_EVENT = {
+  type: "event",
+  name: "Transfer",
+  inputs: [
+    { indexed: true, name: "from", type: "address" },
+    { indexed: true, name: "to", type: "address" },
+    { indexed: true, name: "tokenId", type: "uint256" },
+  ],
+} as const;
+
+const TOKEN_URI_ABI = [
+  {
+    name: "tokenURI",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ type: "string" }],
+  },
+] as const;
 
 function getRpcs() {
   const env = (process.env.BASEBOTS_RPC_URLS || "").trim();
   const envList = env ? env.split(",").map((s) => s.trim()).filter(Boolean) : [];
 
-  // Add more public fallbacks to reduce 503s.
+  // add more public fallbacks to reduce 503s
   const fallbacks = [
     "https://mainnet.base.org",
     "https://base.publicnode.com",
@@ -50,22 +83,8 @@ async function withTimeout<T>(p: Promise<T>, ms: number, label = "timeout") {
   }
 }
 
-async function retry<T>(fn: () => Promise<T>, tries = 2) {
-  let last: any;
-  for (let i = 0; i < tries; i++) {
-    try {
-      return await fn();
-    } catch (e) {
-      last = e;
-      await sleep(250 + i * 350);
-    }
-  }
-  throw last;
-}
-
 function decodeB64(b64: string) {
   try {
-    // default toString() is fine for Basebots JSON/SVG payloads
     return Buffer.from(b64, "base64").toString();
   } catch {
     return "";
@@ -75,7 +94,6 @@ function decodeB64(b64: string) {
 function extractSvg(tokenUri: string): string | null {
   if (!tokenUri) return null;
 
-  // data:application/json;base64,<...>
   if (tokenUri.startsWith("data:application/json;base64,")) {
     const json = decodeB64(tokenUri.slice("data:application/json;base64,".length));
     if (!json) return null;
@@ -97,7 +115,6 @@ function extractSvg(tokenUri: string): string | null {
         }
       }
 
-      // Some versions embed raw svg here
       if (typeof meta?.image_data === "string" && meta.image_data.includes("<svg")) {
         return meta.image_data;
       }
@@ -111,147 +128,185 @@ function extractSvg(tokenUri: string): string | null {
 
 function svgToDataUrl(svg: string) {
   let s = svg;
-
-  if (!s.includes("xmlns=")) {
-    s = s.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"');
-  }
-
-  if (!/preserveAspectRatio=/.test(s)) {
-    s = s.replace("<svg", '<svg preserveAspectRatio="xMidYMid meet"');
-  }
-
+  if (!s.includes("xmlns=")) s = s.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"');
+  if (!/preserveAspectRatio=/.test(s)) s = s.replace("<svg", '<svg preserveAspectRatio="xMidYMid meet"');
   return `data:image/svg+xml;utf8,${encodeURIComponent(s)}`;
 }
 
-/**
- * ✅ Deterministic “recent mints” (no logs):
- * - Your contract includes totalMinted()
- * - You confirmed tokenId == fid
- *
- * IMPORTANT: totalMinted() returns a COUNT, not “latest tokenId”.
- * If token IDs start at 1: latestId = totalMinted
- * If token IDs start at 0: latestId = totalMinted - 1
- *
- * We support both by trying a batch of candidates and keeping the first N tokenURIs that succeed.
- */
-async function getCandidateTokenIds(pc: PublicClientLike, n: number) {
-  const totalMintedRaw = await withTimeout(
-    retry(
-      () =>
-        pc.readContract({
-          address: BASEBOTS.address,
-          abi: BASEBOTS_RECENT_ABI,
-          functionName: "totalMinted",
-        }),
-      2
-    ),
-    18_000,
-    "totalMinted"
-  );
-
-  const total = BigInt(totalMintedRaw ?? 0);
-  if (total <= 0n) return { total, candidates: [] as bigint[] };
-
-  // Overfetch so we can survive holes / failures / start index ambiguity
-  const want = BigInt(Math.min(40, Math.max(12, n * 10)));
-  const out: bigint[] = [];
-
-  // Candidate set A: assume start-at-1 (latestId = total)
-  for (let i = 0n; i < want; i++) {
-    const id = total - i;
-    if (id > 0n) out.push(id);
-  }
-
-  // Candidate set B: assume start-at-0 (latestId = total-1)
-  for (let i = 1n; i <= want; i++) {
-    const id = total - i; // total-1, total-2, ...
-    if (id >= 0n) out.push(id);
-  }
-
-  // de-dupe while preserving order
+function uniqNewestBigints(list: bigint[]) {
   const seen = new Set<string>();
-  const candidates: bigint[] = [];
-  for (const id of out) {
-    const k = id.toString();
+  const out: bigint[] = [];
+  for (const x of list) {
+    const k = x.toString();
     if (!seen.has(k)) {
       seen.add(k);
-      candidates.push(id);
+      out.push(x);
     }
   }
+  return out;
+}
 
-  return { total, candidates };
+function sortLogsNewestFirst(logs: any[]) {
+  logs.sort((a, b) => {
+    const ab = a.blockNumber ?? 0n;
+    const bb = b.blockNumber ?? 0n;
+    if (ab === bb) return Number((b.logIndex ?? 0) - (a.logIndex ?? 0));
+    return ab < bb ? 1 : -1;
+  });
+}
+
+/**
+ * Scan backwards in windows until we find enough minted fids/tokenIds.
+ * Works even when tokenId == fid and fid is huge/non-sequential.
+ */
+async function collectRecentFids(pc: PublicClientLike, want: number, deployBlock: bigint) {
+  const latest = await withTimeout(pc.getBlockNumber(), 20_000, "getBlockNumber");
+
+  let window = 200_000n;          // start window
+  const maxWindow = 2_000_000n;   // cap
+  const maxLoops = 20;            // how many expansions
+  const overfetch = Math.max(want * 10, 40);
+
+  const collected: bigint[] = [];
+
+  for (let loop = 0; loop < maxLoops && collected.length < overfetch; loop++) {
+    const toBlock = latest;
+    const fromBlock = latest > window ? latest - window : 0n;
+    const from = fromBlock < deployBlock ? deployBlock : fromBlock;
+
+    // 1) Minted(fid)
+    try {
+      const logs = await withTimeout(
+        pc.getLogs({ address: CONTRACT, event: MINTED_EVENT, fromBlock: from, toBlock }),
+        25_000,
+        "getLogs(Minted)"
+      );
+
+      sortLogsNewestFirst(logs);
+
+      for (const l of logs) {
+        const fid = (l.args as any)?.fid;
+        if (typeof fid === "bigint") collected.push(fid);
+        if (collected.length >= overfetch) break;
+      }
+    } catch {
+      // ignore and fallback below
+    }
+
+    // 2) Fallback: Transfer(from=0) => tokenId
+    if (collected.length < overfetch) {
+      try {
+        const logs = await withTimeout(
+          pc.getLogs({
+            address: CONTRACT,
+            event: TRANSFER_EVENT,
+            args: { from: zeroAddress },
+            fromBlock: from,
+            toBlock,
+          }),
+          25_000,
+          "getLogs(Transfer)"
+        );
+
+        sortLogsNewestFirst(logs);
+
+        for (const l of logs) {
+          const tokenId = (l.args as any)?.tokenId;
+          if (typeof tokenId === "bigint") collected.push(tokenId);
+          if (collected.length >= overfetch) break;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // If still nothing, expand search window and try again
+    window = window < maxWindow ? window * 2n : maxWindow;
+    await sleep(120);
+  }
+
+  return uniqNewestBigints(collected);
+}
+
+async function buildCards(pc: PublicClientLike, fids: bigint[], n: number) {
+  const cards: Card[] = [];
+  const BATCH = 16;
+
+  for (let i = 0; i < fids.length && cards.length < n; i += BATCH) {
+    const batch = fids.slice(i, i + BATCH);
+
+    const uris = await withTimeout(
+      pc.multicall({
+        allowFailure: true,
+        contracts: batch.map((fid) => ({
+          address: CONTRACT,
+          abi: TOKEN_URI_ABI,
+          functionName: "tokenURI",
+          args: [fid],
+        })),
+      }),
+      25_000,
+      "multicall(tokenURI)"
+    );
+
+    for (let j = 0; j < batch.length && cards.length < n; j++) {
+      const fid = batch[j];
+      const uri = (uris[j] as any)?.result as string | undefined;
+      if (!uri) continue;
+
+      const svg = extractSvg(uri);
+      if (!svg) continue;
+
+      cards.push({ tokenId: fid.toString(), image: svgToDataUrl(svg) });
+    }
+
+    await sleep(60);
+  }
+
+  return cards;
 }
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
+
   const n = Math.max(1, Math.min(8, Number(searchParams.get("n") || "4")));
+  const deployBlock = BigInt(searchParams.get("deployBlock") || "0"); // pass this if you know it
 
   const rpcs = getRpcs();
-  if (!rpcs.length) {
-    return NextResponse.json(
-      { ok: false, error: "Base RPC temporarily unavailable" },
-      { status: 503, headers: { "cache-control": "no-store" } }
-    );
-  }
-
   let lastErr: any = null;
 
   for (const rpc of rpcs) {
     try {
       const pc = createPublicClient({
         chain: base,
-        transport: http(rpc, { timeout: 25_000, batch: false }),
+        transport: http(rpc, { timeout: 30_000, batch: false }),
       }) as unknown as PublicClientLike;
 
-      const { total, candidates } = await getCandidateTokenIds(pc, n);
+      const fids = await collectRecentFids(pc, n, deployBlock);
 
-      if (candidates.length === 0) {
+      if (fids.length === 0) {
         return NextResponse.json(
-          { ok: true, contract: BASEBOTS.address, totalMinted: total.toString(), returned: 0, cards: [] as Card[] },
+          {
+            ok: true,
+            contract: CONTRACT,
+            deployBlock: deployBlock.toString(),
+            foundFids: 0,
+            returned: 0,
+            cards: [] as Card[],
+            note: "No Minted/Transfer(from=0) events found in scanned range. Increase deployBlock coverage or ensure contract address is correct.",
+          },
           { headers: { "cache-control": "no-store" } }
         );
       }
 
-      // multicall tokenURI for candidate ids
-      const uris = await withTimeout(
-        retry(
-          () =>
-            pc.multicall({
-              allowFailure: true,
-              contracts: candidates.map((id) => ({
-                address: BASEBOTS.address,
-                abi: BASEBOTS_RECENT_ABI,
-                functionName: "tokenURI",
-                args: [id],
-              })),
-            }),
-          2
-        ),
-        25_000,
-        "multicall(tokenURI)"
-      );
-
-      // Build cards from the first N SUCCESSFUL tokenURIs (this fixes start-at-0 vs start-at-1)
-      const cards: Card[] = [];
-      for (let i = 0; i < candidates.length && cards.length < n; i++) {
-        const id = candidates[i];
-        const uri = (uris[i] as any)?.result as string | undefined;
-        if (!uri) continue;
-
-        const svg = extractSvg(uri);
-        if (!svg) continue;
-
-        cards.push({
-          tokenId: id.toString(), // tokenId == fid
-          image: svgToDataUrl(svg),
-        });
-      }
+      const cards = await buildCards(pc, fids, n);
 
       return NextResponse.json(
         {
           ok: true,
-          contract: BASEBOTS.address,
-          totalMinted: total.toString(),
+          contract: CONTRACT,
+          deployBlock: deployBlock.toString(),
+          foundFids: fids.length,
           returned: cards.length,
           cards,
         },
@@ -265,12 +320,7 @@ export async function GET(req: Request) {
   }
 
   return NextResponse.json(
-    {
-      ok: false,
-      error: "Base RPC temporarily unavailable",
-      detail: safeErrMsg(lastErr),
-      hint: "Set BASEBOTS_RPC_URLS to reliable Base RPC endpoints (comma-separated).",
-    },
+    { ok: false, error: "Base RPC temporarily unavailable", detail: safeErrMsg(lastErr) },
     { status: 503, headers: { "cache-control": "no-store" } }
   );
 }
