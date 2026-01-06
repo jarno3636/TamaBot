@@ -1,10 +1,13 @@
+// lib/abi.ts
 // Basebots (verified)
 // Network: Base mainnet (chainId 8453)
-// Address: 0x3c46f9AbA2d733f7DF13b30611479F0E99eE9Bf8
+// NOTE: deployment/verified contract address may differ, but your APP address is:
+import type { Address } from "viem";
 
+// If you keep the comment above, at least keep it accurate for the app:
 export const BASEBOTS = {
   chainId: 8453,
-  address: "0x92E29025fd6bAdD17c3005084fe8C43D928222B4" as const,
+  address: "0x92E29025fd6bAdD17c3005084fe8C43D928222B4" as const satisfies Address,
   abi: [
     {"inputs":[{"internalType":"address","name":"initialOwner","type":"address"},{"internalType":"address","name":"royaltyReceiver","type":"address"},{"internalType":"uint96","name":"royaltyBps","type":"uint96"}],"stateMutability":"nonpayable","type":"constructor"},
     {"inputs":[],"name":"AlreadyMinted","type":"error"},
@@ -99,6 +102,27 @@ export const BASEBOTS = {
     {"inputs":[{"internalType":"address","name":"from","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"transferFrom","outputs":[],"stateMutability":"nonpayable","type":"function"},
     {"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},
     {"inputs":[],"name":"withdraw","outputs":[],"stateMutability":"nonpayable","type":"function"},
-    {"stateMutability":"payable","type":"receive"}
-  ] as const
+    {"stateMutability":"payable","type":"receive"},
+  ] as const,
 } as const;
+
+/**
+ * ✅ Minimal ABI for fast “recent mints” (no log scanning).
+ * Use these in your API route: readContract(totalMinted) + tokenURI(tokenId).
+ */
+export const BASEBOTS_RECENT_ABI = [
+  {
+    name: "totalMinted",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    name: "tokenURI",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ type: "string" }],
+  },
+] as const;
