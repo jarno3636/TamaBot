@@ -16,8 +16,9 @@ import { BASEBOTS } from "@/lib/abi";
 import AudioToggle from "@/components/AudioToggle";
 import ShareRow from "@/components/ShareRow";
 import useFid from "@/hooks/useFid";
-import CollectionPreview from "@/components/CollectionPreview";
+// ❌ removed CollectionPreview
 import BasebotTokenCard from "@/components/BasebotTokenCard";
+import BasebotSteps from "@/components/BasebotSteps";
 
 type SignResp = {
   ok: boolean;
@@ -203,7 +204,7 @@ export default function HomeClient() {
       <div className="container pt-6 px-5 stack">
         <AudioToggle src="/audio/basebots-loop.mp3" />
 
-        {/* ✅ HERO: single centered logo.PNG (no icon, no second image, no stretch) */}
+        {/* ✅ HERO */}
         <section className="glass glass-pad relative overflow-hidden rounded-3xl">
           <div
             aria-hidden
@@ -255,8 +256,11 @@ export default function HomeClient() {
           </div>
         </section>
 
-        {/* Token card just under hero */}
+        {/* Token card under hero */}
         <BasebotTokenCard />
+
+        {/* ✅ Tutorial steps replace the old preview */}
+        <BasebotSteps />
 
         {/* Stats */}
         <section className="glass glass-pad bg-[#0f1320]/50 border border-white/10">
@@ -293,8 +297,11 @@ export default function HomeClient() {
           </div>
         </section>
 
-        {/* Mint */}
-        <section className="glass glass-pad relative overflow-hidden bg-[#0b0f18]/70">
+        {/* Mint (anchor for Step 1 CTA) */}
+        <section
+          id="mint"
+          className="glass glass-pad relative overflow-hidden bg-[#0b0f18]/70 scroll-mt-24"
+        >
           <div
             aria-hidden
             className="pointer-events-none absolute -top-24 -right-24 h-64 w-64 rounded-full blur-3xl"
@@ -395,8 +402,6 @@ export default function HomeClient() {
             </p>
           )}
         </section>
-
-        <CollectionPreview />
 
         <section className="text-center text-white/70">
           <p className="text-sm">
