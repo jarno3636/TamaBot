@@ -207,7 +207,6 @@ function extractPoolCreatedFromReceipt(params: {
     if (!topicsTuple) continue;
 
     try {
-      // ✅ FIX: viem types decodeEventLog as "unknown" unless ABI is strongly typed.
       const decoded = decodeEventLog({
         abi: (CONFIG_STAKING_FACTORY as any).abi,
         data: log.data as Hex,
@@ -239,6 +238,21 @@ function extractPoolCreatedFromReceipt(params: {
   return null;
 }
 
+function fmtLocal(tsSec: bigint) {
+  try {
+    const d = new Date(Number(tsSec) * 1000);
+    return d.toLocaleString(undefined, {
+      month: "short",
+      day: "2-digit",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
+
 export default function CreatePoolCard({
   protocolFeePercent,
   onOpenFundModal,
@@ -258,7 +272,9 @@ export default function CreatePoolCard({
 
   const [nft, setNft] = useState("");
   const [rewardToken, setRewardToken] = useState("");
-  const [rewardRate, setRewardRate] = useState("0");
+
+  // ✅ change: pool funding amount instead of rewardRate
+  const [poolAmount, setPoolAmount] = useState("0");
   const [rewardDecimals, setRewardDecimals] = useState("18");
 
   const [startMode, setStartMode] = useState<StartMode>("now");
@@ -309,15 +325,33 @@ export default function CreatePoolCard({
     return { start: clampU64(start), end: clampU64(end), seconds };
   }, [startMode, startOffset, durationValue, durationUnit]);
 
-  const suggestedFund = useMemo(() => {
-    const rate = Number(rewardRate || "0");
-    if (!rate || rate <= 0) return "";
-    const seconds = Number(computedTimes.seconds);
-    if (!Number.isFinite(seconds) || seconds <= 0) return "";
-    const total = rate * seconds;
-    if (!Number.isFinite(total) || total <= 0) return "";
-    return total.toLocaleString("en-US", { maximumFractionDigits: 6 });
-  }, [rewardRate, computedTimes.seconds]);
+  // ✅ derived: rewardRate = poolAmount / durationSeconds
+  const derivedRewardRatePreview = useMemo(() => {
+    const sec = Number(computedTimes.seconds);
+    if (!Number.isFinite(sec) || sec <= 0) return "";
+    const amt = Number((poolAmount || "0").trim());
+    if (!Number.isFinite(amt) || amt <= 0) return "";
+    const perSec = amt / sec;
+    if (!Number.isFinite(perSec) || perSec <= 0) return "";
+    return perSec.toLocaleString("en-US", { maximumFractionDigits: 10 });
+  }, [poolAmount, computedTimes.seconds]);
+
+  const schedulePretty = useMemo(() => {
+    const start = computedTimes.start;
+    const end = computedTimes.end;
+    const startText =
+      startMode === "now"
+        ? "Now"
+        : startMode === "inHours"
+        ? `In ${startOffset || 0} hour(s)`
+        : `In ${startOffset || 0} day(s)`;
+
+    return {
+      startText,
+      startLocal: fmtLocal(start),
+      endLocal: fmtLocal(end),
+    };
+  }, [computedTimes.start, computedTimes.end, startMode, startOffset]);
 
   const feeSummary = useMemo(() => {
     if (feeMode === "noCreatorFee" || creatorFeeBpsU16 === 0) return "No creator fee";
@@ -352,11 +386,10 @@ export default function CreatePoolCard({
     try {
       onLastCreatedPoolResolved(createdPool);
 
+      // ✅ now suggest funding with the pool amount you typed
       if (isAddress(rewardToken)) {
-        onOpenFundModal(
-          { pool: createdPool, rewardToken: rewardToken as `0x${string}` },
-          suggestedFund || undefined,
-        );
+        const suggested = (poolAmount || "").trim();
+        onOpenFundModal({ pool: createdPool, rewardToken: rewardToken as `0x${string}` }, suggested || undefined);
       }
     } catch {
       // ignore
@@ -377,19 +410,33 @@ export default function CreatePoolCard({
       const decRaw = Number(rewardDecimals || "18");
       const dec = clampInt(decRaw, 0, 36);
 
-      let rateWei: bigint;
-      try {
-        rateWei = parseUnits((rewardRate || "0").trim(), dec);
-      } catch {
-        return setMsg("Reward rate is invalid. Example: 0.01");
-      }
-
-      const maxS = parseU64FromDecimalString(maxStaked);
-      if (maxS === null) return setMsg("Max staked must be an integer (0 = no cap).");
+      const amtStr = (poolAmount || "0").trim();
+      const amtNum = Number(amtStr);
+      if (!Number.isFinite(amtNum) || amtNum < 0) return setMsg("Pool amount is invalid. Example: 1000");
 
       const startTime = computedTimes.start;
       const endTime = computedTimes.end;
       if (endTime <= startTime) return setMsg("Duration must be > 0.");
+
+      // ✅ compute per-second rewardRate from poolAmount and duration
+      const durationSeconds = computedTimes.seconds; // bigint
+      if (durationSeconds <= 0n) return setMsg("Duration must be > 0.");
+
+      // amountWei / seconds = rateWei per second
+      let amountWei: bigint;
+      try {
+        amountWei = parseUnits(amtStr, dec);
+      } catch {
+        return setMsg("Pool amount is invalid for the given decimals.");
+      }
+
+      const rateWei = amountWei / durationSeconds; // integer division
+      if (rateWei <= 0n && amountWei > 0n) {
+        return setMsg("Pool amount is too small for this duration (rate rounds to 0). Increase amount or shorten duration.");
+      }
+
+      const maxS = parseU64FromDecimalString(maxStaked);
+      if (maxS === null) return setMsg("Max staked must be an integer (0 = no cap).");
 
       const p = {
         nft: nft as `0x${string}`,
@@ -444,7 +491,7 @@ export default function CreatePoolCard({
             onClick={() => {
               setNft("");
               setRewardToken("");
-              setRewardRate("0");
+              setPoolAmount("0");
               setRewardDecimals("18");
               setStartMode("now");
               setStartOffset("0");
@@ -479,18 +526,20 @@ export default function CreatePoolCard({
             />
           </label>
 
+          {/* ✅ Reward pool amount (replaces reward rate) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <label>
-              <span className="text-[11px] uppercase tracking-wide text-white/60">Reward rate (tokens / sec)</span>
+              <span className="text-[11px] uppercase tracking-wide text-white/60">Reward token pool amount</span>
               <input
-                value={rewardRate}
-                onChange={(e) => setRewardRate(e.target.value)}
+                value={poolAmount}
+                onChange={(e) => setPoolAmount(e.target.value)}
                 className={inputBase}
-                placeholder="e.g. 0.01"
+                placeholder="e.g. 100000"
               />
-              {suggestedFund && (
+              {derivedRewardRatePreview && (
                 <p className="mt-1 text-[11px] text-white/55">
-                  Suggested funding: <span className="text-[#79ffe1] font-semibold">{suggestedFund}</span>
+                  Auto reward rate (per sec):{" "}
+                  <span className="text-[#79ffe1] font-semibold">{derivedRewardRatePreview}</span>
                 </p>
               )}
             </label>
@@ -514,21 +563,32 @@ export default function CreatePoolCard({
                 <div className="text-[11px] uppercase tracking-wide text-white/60">Schedule</div>
                 <div className="mt-1 text-[11px] text-white/70">
                   Starts{" "}
-                  <span className="font-semibold text-white">
-                    {startMode === "now"
-                      ? "now"
-                      : `in ${startOffset || 0} ${startMode === "inHours" ? "hour(s)" : "day(s)"}`}
-                  </span>{" "}
+                  <span className="font-semibold text-white">{schedulePretty.startText}</span>{" "}
                   • Duration{" "}
                   <span className="font-semibold text-white">
                     {durationValue} {durationUnit}
                   </span>
                 </div>
+
+                <div className="mt-1 text-[11px] text-white/55">
+                  {schedulePretty.startLocal && (
+                    <>
+                      Start: <span className="text-white/75">{schedulePretty.startLocal}</span>
+                    </>
+                  )}
+                  {schedulePretty.endLocal && (
+                    <>
+                      {" "}
+                      • End: <span className="text-white/75">{schedulePretty.endLocal}</span>
+                    </>
+                  )}
+                </div>
               </div>
 
+              {/* ✅ removed the weird raw unix block numbers */}
               <div className="text-[11px] text-white/55">
-                Start: <span className="text-white/70">{computedTimes.start.toString()}</span> • End:{" "}
-                <span className="text-white/70">{computedTimes.end.toString()}</span>
+                Funding suggestion:{" "}
+                <span className="text-white/80 font-semibold">{(poolAmount || "0").trim() || "0"}</span>
               </div>
             </div>
 
