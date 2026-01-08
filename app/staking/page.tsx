@@ -26,6 +26,9 @@ import CreatePoolCard from "@/components/staking/CreatePoolCard";
 import FundPoolModal from "@/components/staking/FundPoolModal";
 import PoolsList from "@/components/staking/PoolsList";
 
+// ✅ ADD THIS (your existing How-To component)
+import HowToStaking from "@/components/staking/HowToStaking";
+
 /* ──────────────────────────────────────────────────────────────
  * Types
  * ──────────────────────────────────────────────────────────── */
@@ -564,6 +567,9 @@ export default function StakingPage() {
             </div>
           </div>
         </section>
+
+        {/* ✅ HOW TO STAKING (ADDED) */}
+        <HowToStaking />
 
         {/* Create Pool */}
         <CreatePoolCard
