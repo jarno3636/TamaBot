@@ -11,7 +11,7 @@ type HowToCard = {
   desc: string;
   bullets: string[];
   cta?: { label: string; href: string; external?: boolean };
-  tone?: "teal" | "sky" | "amber" | "rose" | "purple";
+  tone?: "teal" | "sky" | "amber" | "rose" | "purple" | "emerald";
 };
 
 function tone(t: NonNullable<HowToCard["tone"]>): React.CSSProperties {
@@ -19,43 +19,39 @@ function tone(t: NonNullable<HowToCard["tone"]>): React.CSSProperties {
     case "teal":
       return {
         borderColor: "rgba(121,255,225,0.28)",
-        background:
-          "linear-gradient(180deg, rgba(2,6,23,0.88), rgba(2,6,23,0.72))",
-        boxShadow:
-          "0 30px 90px rgba(0,0,0,0.60), 0 0 0 1px rgba(121,255,225,0.10)",
+        background: "linear-gradient(180deg, rgba(2,6,23,0.88), rgba(2,6,23,0.72))",
+        boxShadow: "0 30px 90px rgba(0,0,0,0.60), 0 0 0 1px rgba(121,255,225,0.10)",
+      };
+    case "emerald":
+      return {
+        borderColor: "rgba(52,211,153,0.28)",
+        background: "linear-gradient(180deg, rgba(2,6,23,0.88), rgba(2,6,23,0.72))",
+        boxShadow: "0 30px 90px rgba(0,0,0,0.60), 0 0 0 1px rgba(52,211,153,0.10)",
       };
     case "sky":
       return {
         borderColor: "rgba(56,189,248,0.28)",
-        background:
-          "linear-gradient(180deg, rgba(2,6,23,0.88), rgba(2,6,23,0.72))",
-        boxShadow:
-          "0 30px 90px rgba(0,0,0,0.60), 0 0 0 1px rgba(56,189,248,0.10)",
+        background: "linear-gradient(180deg, rgba(2,6,23,0.88), rgba(2,6,23,0.72))",
+        boxShadow: "0 30px 90px rgba(0,0,0,0.60), 0 0 0 1px rgba(56,189,248,0.10)",
       };
     case "amber":
       return {
         borderColor: "rgba(251,191,36,0.28)",
-        background:
-          "linear-gradient(180deg, rgba(2,6,23,0.88), rgba(2,6,23,0.72))",
-        boxShadow:
-          "0 30px 90px rgba(0,0,0,0.60), 0 0 0 1px rgba(251,191,36,0.10)",
+        background: "linear-gradient(180deg, rgba(2,6,23,0.88), rgba(2,6,23,0.72))",
+        boxShadow: "0 30px 90px rgba(0,0,0,0.60), 0 0 0 1px rgba(251,191,36,0.10)",
       };
     case "rose":
       return {
         borderColor: "rgba(251,113,133,0.28)",
-        background:
-          "linear-gradient(180deg, rgba(2,6,23,0.88), rgba(2,6,23,0.72))",
-        boxShadow:
-          "0 30px 90px rgba(0,0,0,0.60), 0 0 0 1px rgba(251,113,133,0.10)",
+        background: "linear-gradient(180deg, rgba(2,6,23,0.88), rgba(2,6,23,0.72))",
+        boxShadow: "0 30px 90px rgba(0,0,0,0.60), 0 0 0 1px rgba(251,113,133,0.10)",
       };
     case "purple":
     default:
       return {
         borderColor: "rgba(168,85,247,0.26)",
-        background:
-          "linear-gradient(180deg, rgba(2,6,23,0.88), rgba(2,6,23,0.72))",
-        boxShadow:
-          "0 30px 90px rgba(0,0,0,0.60), 0 0 0 1px rgba(168,85,247,0.10)",
+        background: "linear-gradient(180deg, rgba(2,6,23,0.88), rgba(2,6,23,0.72))",
+        boxShadow: "0 30px 90px rgba(0,0,0,0.60), 0 0 0 1px rgba(168,85,247,0.10)",
       };
   }
 }
@@ -66,6 +62,11 @@ function wash(t: NonNullable<HowToCard["tone"]>): React.CSSProperties {
       return {
         background:
           "radial-gradient(900px 320px at 20% -20%, rgba(121,255,225,0.16), transparent 60%), radial-gradient(700px 260px at 90% 10%, rgba(56,189,248,0.10), transparent 60%)",
+      };
+    case "emerald":
+      return {
+        background:
+          "radial-gradient(900px 320px at 20% -20%, rgba(52,211,153,0.16), transparent 60%), radial-gradient(700px 260px at 90% 10%, rgba(16,185,129,0.10), transparent 60%)",
       };
     case "sky":
       return {
@@ -105,6 +106,15 @@ function badgeStyle(t: NonNullable<HowToCard["tone"]>): React.CSSProperties {
       background: "rgba(121,255,225,0.10)",
       color: "rgba(240,253,250,0.95)",
     };
+
+  if (t === "emerald")
+    return {
+      ...base,
+      borderColor: "rgba(52,211,153,0.55)",
+      background: "rgba(52,211,153,0.10)",
+      color: "rgba(236,253,245,0.95)",
+    };
+
   if (t === "sky")
     return {
       ...base,
@@ -112,6 +122,7 @@ function badgeStyle(t: NonNullable<HowToCard["tone"]>): React.CSSProperties {
       background: "rgba(56,189,248,0.10)",
       color: "rgba(240,249,255,0.95)",
     };
+
   if (t === "amber")
     return {
       ...base,
@@ -119,6 +130,7 @@ function badgeStyle(t: NonNullable<HowToCard["tone"]>): React.CSSProperties {
       background: "rgba(251,191,36,0.10)",
       color: "rgba(255,251,235,0.95)",
     };
+
   if (t === "rose")
     return {
       ...base,
@@ -126,6 +138,7 @@ function badgeStyle(t: NonNullable<HowToCard["tone"]>): React.CSSProperties {
       background: "rgba(251,113,133,0.10)",
       color: "rgba(255,241,242,0.95)",
     };
+
   return {
     ...base,
     borderColor: "rgba(168,85,247,0.55)",
@@ -142,6 +155,15 @@ function ctaStyle(t: NonNullable<HowToCard["tone"]>): React.CSSProperties {
       border: "1px solid rgba(255,255,255,0.12)",
       boxShadow: "0 12px 30px rgba(121,255,225,0.20)",
     };
+
+  if (t === "emerald")
+    return {
+      background: "linear-gradient(90deg, rgba(52,211,153,1), rgba(16,185,129,0.95))",
+      color: "rgba(2,6,23,0.98)",
+      border: "1px solid rgba(255,255,255,0.12)",
+      boxShadow: "0 12px 30px rgba(52,211,153,0.18)",
+    };
+
   if (t === "sky")
     return {
       background: "linear-gradient(90deg, rgba(56,189,248,1), rgba(99,102,241,0.95))",
@@ -149,6 +171,7 @@ function ctaStyle(t: NonNullable<HowToCard["tone"]>): React.CSSProperties {
       border: "1px solid rgba(255,255,255,0.12)",
       boxShadow: "0 12px 30px rgba(56,189,248,0.18)",
     };
+
   if (t === "amber")
     return {
       background: "linear-gradient(90deg, rgba(251,191,36,1), rgba(245,158,11,0.95))",
@@ -156,6 +179,7 @@ function ctaStyle(t: NonNullable<HowToCard["tone"]>): React.CSSProperties {
       border: "1px solid rgba(255,255,255,0.12)",
       boxShadow: "0 12px 30px rgba(251,191,36,0.16)",
     };
+
   if (t === "rose")
     return {
       background: "linear-gradient(90deg, rgba(251,113,133,1), rgba(244,63,94,0.95))",
@@ -163,6 +187,7 @@ function ctaStyle(t: NonNullable<HowToCard["tone"]>): React.CSSProperties {
       border: "1px solid rgba(255,255,255,0.12)",
       boxShadow: "0 12px 30px rgba(251,113,133,0.16)",
     };
+
   return {
     background: "linear-gradient(90deg, rgba(168,85,247,1), rgba(56,189,248,0.95))",
     color: "rgba(2,6,23,0.98)",
@@ -568,8 +593,8 @@ export default function HowToStaking({
             Pro tip
           </div>
           <div className="mt-1 text-[12px] leading-relaxed">
-            Pools only pay rewards while funded. If you’re a creator, top up before rewards run out. If you’re a staker, claim
-            whenever you want—no lockups required.
+            Pools only pay rewards while funded. If you’re a creator, top up before rewards run out. If you’re a staker,
+            claim whenever you want—no lockups required.
           </div>
         </footer>
       </div>
