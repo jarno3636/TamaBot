@@ -2,7 +2,6 @@
 "use client";
 
 import type React from "react";
-import Link from "next/link";
 
 type HowToCard = {
   id: string;
@@ -10,8 +9,9 @@ type HowToCard = {
   title: string;
   desc: string;
   bullets: string[];
-  cta?: { label: string; href: string; external?: boolean };
   tone?: "teal" | "sky" | "amber" | "rose" | "purple" | "emerald";
+  imageSrc?: string; // NEW
+  imageAlt?: string; // NEW
 };
 
 function tone(t: NonNullable<HowToCard["tone"]>): React.CSSProperties {
@@ -147,83 +147,9 @@ function badgeStyle(t: NonNullable<HowToCard["tone"]>): React.CSSProperties {
   };
 }
 
-function ctaStyle(t: NonNullable<HowToCard["tone"]>): React.CSSProperties {
-  if (t === "teal")
-    return {
-      background: "linear-gradient(90deg, rgba(121,255,225,1), rgba(56,189,248,0.95))",
-      color: "rgba(2,6,23,0.98)",
-      border: "1px solid rgba(255,255,255,0.12)",
-      boxShadow: "0 12px 30px rgba(121,255,225,0.20)",
-    };
-
-  if (t === "emerald")
-    return {
-      background: "linear-gradient(90deg, rgba(52,211,153,1), rgba(16,185,129,0.95))",
-      color: "rgba(2,6,23,0.98)",
-      border: "1px solid rgba(255,255,255,0.12)",
-      boxShadow: "0 12px 30px rgba(52,211,153,0.18)",
-    };
-
-  if (t === "sky")
-    return {
-      background: "linear-gradient(90deg, rgba(56,189,248,1), rgba(99,102,241,0.95))",
-      color: "rgba(2,6,23,0.98)",
-      border: "1px solid rgba(255,255,255,0.12)",
-      boxShadow: "0 12px 30px rgba(56,189,248,0.18)",
-    };
-
-  if (t === "amber")
-    return {
-      background: "linear-gradient(90deg, rgba(251,191,36,1), rgba(245,158,11,0.95))",
-      color: "rgba(2,6,23,0.98)",
-      border: "1px solid rgba(255,255,255,0.12)",
-      boxShadow: "0 12px 30px rgba(251,191,36,0.16)",
-    };
-
-  if (t === "rose")
-    return {
-      background: "linear-gradient(90deg, rgba(251,113,133,1), rgba(244,63,94,0.95))",
-      color: "rgba(2,6,23,0.98)",
-      border: "1px solid rgba(255,255,255,0.12)",
-      boxShadow: "0 12px 30px rgba(251,113,133,0.16)",
-    };
-
-  return {
-    background: "linear-gradient(90deg, rgba(168,85,247,1), rgba(56,189,248,0.95))",
-    color: "rgba(2,6,23,0.98)",
-    border: "1px solid rgba(255,255,255,0.12)",
-    boxShadow: "0 12px 30px rgba(168,85,247,0.14)",
-  };
-}
-
-function GhostLink({
-  href,
-  external,
-  children,
-}: {
-  href: string;
-  external?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      target={external ? "_blank" : undefined}
-      rel={external ? "noopener noreferrer" : undefined}
-      className="inline-flex items-center justify-center rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-transform active:scale-95 hover:brightness-110"
-      style={{
-        borderColor: "rgba(255,255,255,0.18)",
-        background: "rgba(255,255,255,0.06)",
-        color: "rgba(255,255,255,0.80)",
-      }}
-    >
-      {children}
-    </Link>
-  );
-}
-
 function StepCard({ card }: { card: HowToCard }) {
   const t = card.tone ?? "teal";
+
   return (
     <div className="relative overflow-hidden rounded-3xl border p-4 md:p-5" style={tone(t)}>
       <div aria-hidden className="pointer-events-none absolute inset-0 opacity-95" style={wash(t)} />
@@ -235,6 +161,7 @@ function StepCard({ card }: { card: HowToCard }) {
           transform: "rotate(-6deg)",
         }}
       />
+
       <div className="relative">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -279,43 +206,45 @@ function StepCard({ card }: { card: HowToCard }) {
           ))}
         </ul>
 
-        {/* Image slot */}
-        <div
-          className="mt-4 overflow-hidden rounded-2xl border"
-          style={{
-            borderColor: "rgba(255,255,255,0.10)",
-            background: "rgba(255,255,255,0.04)",
-          }}
-        >
+        {/* Image (UPDATED) */}
+        {card.imageSrc ? (
           <div
-            className="flex items-center justify-center"
+            className="mt-4 overflow-hidden rounded-2xl border"
             style={{
-              height: 150,
-              background:
-                "radial-gradient(600px 220px at 20% 0%, rgba(121,255,225,0.10), transparent 60%), radial-gradient(520px 220px at 85% 10%, rgba(56,189,248,0.08), transparent 60%)",
-              color: "rgba(255,255,255,0.35)",
-              fontSize: 12,
-              letterSpacing: 0.3,
+              borderColor: "rgba(255,255,255,0.10)",
+              background: "rgba(255,255,255,0.04)",
             }}
           >
-            Image slot (add later)
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={card.imageSrc}
+              alt={card.imageAlt ?? card.title}
+              className="block w-full"
+              style={{ height: 150, objectFit: "cover" }}
+              loading="lazy"
+            />
           </div>
-        </div>
-
-        {card.cta && (
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <Link
-              href={card.cta.href}
-              target={card.cta.external ? "_blank" : undefined}
-              rel={card.cta.external ? "noopener noreferrer" : undefined}
-              className="inline-flex items-center justify-center rounded-full px-4 py-2 text-[12px] font-bold transition-transform active:scale-95 hover:brightness-110"
-              style={ctaStyle(t)}
+        ) : (
+          <div
+            className="mt-4 overflow-hidden rounded-2xl border"
+            style={{
+              borderColor: "rgba(255,255,255,0.10)",
+              background: "rgba(255,255,255,0.04)",
+            }}
+          >
+            <div
+              className="flex items-center justify-center"
+              style={{
+                height: 150,
+                background:
+                  "radial-gradient(600px 220px at 20% 0%, rgba(121,255,225,0.10), transparent 60%), radial-gradient(520px 220px at 85% 10%, rgba(56,189,248,0.08), transparent 60%)",
+                color: "rgba(255,255,255,0.35)",
+                fontSize: 12,
+                letterSpacing: 0.3,
+              }}
             >
-              {card.cta.label}
-            </Link>
-            <GhostLink href={card.cta.href} external={card.cta.external}>
-              Copy link
-            </GhostLink>
+              Image slot (add later)
+            </div>
           </div>
         )}
       </div>
@@ -334,8 +263,9 @@ const USER_FLOW: HowToCard[] = [
       "Connect your wallet on Base mainnet.",
       "If you don’t have the NFT yet, mint or acquire it first.",
     ],
-    cta: { label: "Go to Pools", href: "/staking" },
     tone: "sky",
+    imageSrc: "/tutorial/user-step1.png",
+    imageAlt: "User step 1 - enter a pool",
   },
   {
     id: "u2",
@@ -348,6 +278,8 @@ const USER_FLOW: HowToCard[] = [
       "After approval confirms, the Stake button becomes available.",
     ],
     tone: "teal",
+    imageSrc: "/tutorial/user-step2.png",
+    imageAlt: "User step 2 - approve NFT",
   },
   {
     id: "u3",
@@ -360,6 +292,8 @@ const USER_FLOW: HowToCard[] = [
       "Your NFT is held safely in the pool contract while staked.",
     ],
     tone: "teal",
+    imageSrc: "/tutorial/user-step3.png",
+    imageAlt: "User step 3 - stake NFT",
   },
   {
     id: "u4",
@@ -372,6 +306,8 @@ const USER_FLOW: HowToCard[] = [
       "Claim as often as you want—no lockups required.",
     ],
     tone: "purple",
+    imageSrc: "/tutorial/user-step4.png",
+    imageAlt: "User step 4 - claim rewards",
   },
   {
     id: "u5",
@@ -384,6 +320,8 @@ const USER_FLOW: HowToCard[] = [
       "You remain in full control: stake, claim, or exit anytime.",
     ],
     tone: "rose",
+    imageSrc: "/tutorial/user-step5.png",
+    imageAlt: "User step 5 - unstake and withdraw",
   },
 ];
 
@@ -398,8 +336,9 @@ const CREATOR_FLOW: HowToCard[] = [
       "Choose a schedule (start + duration).",
       "Pick creator-fee mode: on claim, on unstake, both, or none.",
     ],
-    cta: { label: "Create a Pool", href: "/staking" },
     tone: "amber",
+    imageSrc: "/tutorial/creator-step1.png",
+    imageAlt: "Creator step 1 - create a pool",
   },
   {
     id: "c2",
@@ -412,6 +351,8 @@ const CREATOR_FLOW: HowToCard[] = [
       "You can add more rewards later anytime.",
     ],
     tone: "emerald",
+    imageSrc: "/tutorial/creator-step2.png",
+    imageAlt: "Creator step 2 - fund the pool",
   },
   {
     id: "c3",
@@ -424,6 +365,8 @@ const CREATOR_FLOW: HowToCard[] = [
       "Pin it, post it, and remind holders to stake.",
     ],
     tone: "sky",
+    imageSrc: "/tutorial/creator-step3.png",
+    imageAlt: "Creator step 3 - share your pool",
   },
   {
     id: "c4",
@@ -436,6 +379,8 @@ const CREATOR_FLOW: HowToCard[] = [
       "Keep token decimals correct (18 is typical).",
     ],
     tone: "teal",
+    imageSrc: "/tutorial/creator-step4.png",
+    imageAlt: "Creator step 4 - monitor and maintain",
   },
   {
     id: "c5",
@@ -448,6 +393,8 @@ const CREATOR_FLOW: HowToCard[] = [
       "Protocol fees (if any) are also applied automatically.",
     ],
     tone: "purple",
+    imageSrc: "/tutorial/creator-step5.png",
+    imageAlt: "Creator step 5 - automatic fee behavior",
   },
 ];
 
@@ -488,7 +435,7 @@ export default function HowToStaking({
       />
 
       <div className="relative">
-        <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
+        <header className="flex flex-col gap-3">
           <div>
             <div
               className="inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold"
@@ -507,13 +454,6 @@ export default function HowToStaking({
             <p className="mt-2 text-[12px] md:text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.68)" }}>
               {subtitle}
             </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <GhostLink href="/staking">Open Staking</GhostLink>
-            <GhostLink href="/" external={false}>
-              Back Home
-            </GhostLink>
           </div>
         </header>
 
@@ -579,6 +519,24 @@ export default function HowToStaking({
               </div>
             </section>
           )}
+        </div>
+
+        {/* End image (NEW) */}
+        <div
+          className="mt-6 overflow-hidden rounded-3xl border"
+          style={{
+            borderColor: "rgba(255,255,255,0.10)",
+            background: "rgba(0,0,0,0.22)",
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/tutorial/tutorial-end.png"
+            alt="Tutorial end"
+            className="block w-full"
+            style={{ height: 220, objectFit: "cover" }}
+            loading="lazy"
+          />
         </div>
 
         <footer
