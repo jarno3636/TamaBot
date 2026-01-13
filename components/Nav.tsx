@@ -9,25 +9,40 @@ import { useMemo, useState } from "react";
 import ConnectPill from "@/components/ConnectPill";
 import useFid from "@/hooks/useFid";
 
+const STORY_OWNER = "0xB37c91305F50e3CdB0D7a048a18d7536c9524f58";
+
+function sameAddress(a?: string | null, b?: string | null) {
+  if (!a || !b) return false;
+  return a.toLowerCase() === b.toLowerCase();
+}
+
 export default function Nav() {
   const pathname = usePathname();
   const { address } = useAccount();
   const { fid } = useFid();
   const [open, setOpen] = useState(false);
 
-  const links = useMemo(
-    () => [
+  const isStoryOwner = useMemo(() => sameAddress(address, STORY_OWNER), [address]);
+
+  const links = useMemo(() => {
+    const base = [
       { href: "/", label: "Mint" },
       { href: "/my", label: "My Bot" },
-    ],
-    [],
-  );
+    ];
+
+    // Only you see this link
+    if (isStoryOwner) {
+      base.push({ href: "/story", label: "Story" });
+    }
+
+    return base;
+  }, [isStoryOwner]);
 
   return (
     <nav
       aria-label="Primary"
       className="
-        bg-[#020617]                 /* fully opaque, very dark */
+        bg-[#020617]
         border-b border-white/10
         shadow-[0_10px_40px_rgba(0,0,0,0.9)]
       "
@@ -58,14 +73,7 @@ export default function Nav() {
             onClick={() => setOpen((v) => !v)}
             className="nav-burger text-white/90 hover:text-white"
           >
-            <svg
-              width="26"
-              height="26"
-              viewBox="0 0 24 24"
-              role="img"
-              aria-hidden="true"
-            >
-              {/* use currentColor so it follows the button text color */}
+            <svg width="26" height="26" viewBox="0 0 24 24" role="img" aria-hidden="true">
               <rect x="3" y="6" width="18" height="2" rx="1" fill="currentColor" />
               <rect x="3" y="11" width="18" height="2" rx="1" fill="currentColor" />
               <rect x="3" y="16" width="18" height="2" rx="1" fill="currentColor" />
@@ -98,6 +106,11 @@ export default function Nav() {
                         <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
                         <span>Connected</span>
                       </div>
+                      {isStoryOwner && (
+                        <div className="mt-1 text-[10px] text-sky-200/80">
+                          Admin access
+                        </div>
+                      )}
                     </div>
                   )}
 
