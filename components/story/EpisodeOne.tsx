@@ -284,26 +284,40 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
             : choiceId === "SPOOF"
             ? "Saboteur"
             : "Severed",
-        trust: choiceId === "ACCEPT" ? 70 : choiceId === "STALL" ? 55 : choiceId === "SPOOF" ? 26 : 16,
-        threat: choiceId === "ACCEPT" ? 22 : choiceId === "STALL" ? 36 : choiceId === "SPOOF" ? 74 : 58,
+        trust:
+          choiceId === "ACCEPT"
+            ? 70
+            : choiceId === "STALL"
+              ? 55
+              : choiceId === "SPOOF"
+                ? 26
+                : 16,
+        threat:
+          choiceId === "ACCEPT"
+            ? 22
+            : choiceId === "STALL"
+              ? 36
+              : choiceId === "SPOOF"
+                ? 74
+                : 58,
       },
       artifact: {
         name:
           choiceId === "ACCEPT"
             ? "Compliance Record"
             : choiceId === "STALL"
-            ? "Observation Gap"
-            : choiceId === "SPOOF"
-            ? "Contradictory Authority"
-            : "Termination Evidence",
+              ? "Observation Gap"
+              : choiceId === "SPOOF"
+                ? "Contradictory Authority"
+                : "Termination Evidence",
         desc:
           choiceId === "ACCEPT"
             ? "A completed interaction preserved without appeal."
             : choiceId === "STALL"
-            ? "A hesitation that altered system certainty."
-            : choiceId === "SPOOF"
-            ? "Two incompatible truths recorded simultaneously."
-            : "Proof that silence was intentional.",
+              ? "A hesitation that altered system certainty."
+              : choiceId === "SPOOF"
+                ? "Two incompatible truths recorded simultaneously."
+                : "Proof that silence was intentional.",
       },
       createdAt: Date.now(),
     };
@@ -405,7 +419,8 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
           aria-hidden
           className="absolute -top-16 left-0 right-0 h-28 opacity-35"
           style={{
-            background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent)",
+            background:
+              "linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent)",
             transform: "rotate(-7deg)",
           }}
         />
@@ -444,12 +459,28 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
           </div>
 
           <div className="mt-3 grid gap-2 md:grid-cols-2">
-            <div className="rounded-2xl border px-3 py-2" style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.04)" }}>
-              <div className="text-[10px] font-semibold tracking-wide text-white/55">RISK</div>
+            <div
+              className="rounded-2xl border px-3 py-2"
+              style={{
+                borderColor: "rgba(255,255,255,0.10)",
+                background: "rgba(255,255,255,0.04)",
+              }}
+            >
+              <div className="text-[10px] font-semibold tracking-wide text-white/55">
+                RISK
+              </div>
               <div className="mt-1 text-[12px] text-white/72">{risk}</div>
             </div>
-            <div className="rounded-2xl border px-3 py-2" style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.04)" }}>
-              <div className="text-[10px] font-semibold tracking-wide text-white/55">PAYOFF</div>
+            <div
+              className="rounded-2xl border px-3 py-2"
+              style={{
+                borderColor: "rgba(255,255,255,0.10)",
+                background: "rgba(255,255,255,0.04)",
+              }}
+            >
+              <div className="text-[10px] font-semibold tracking-wide text-white/55">
+                PAYOFF
+              </div>
               <div className="mt-1 text-[12px] text-white/72">{payoff}</div>
             </div>
           </div>
@@ -462,7 +493,17 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
     );
   }
 
-  function PollRow({ choiceId, value, total, highlight }: { choiceId: EpisodeOneChoiceId; value: number; total: number; highlight?: boolean }) {
+  function PollRow({
+    choiceId,
+    value,
+    total,
+    highlight,
+  }: {
+    choiceId: EpisodeOneChoiceId;
+    value: number;
+    total: number;
+    highlight?: boolean;
+  }) {
     const percent = pct(value, total);
     const grad = barTone(choiceId);
 
@@ -470,19 +511,26 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
       <div
         className="rounded-2xl border p-3"
         style={{
-          borderColor: highlight ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.10)",
+          borderColor: highlight
+            ? "rgba(255,255,255,0.18)"
+            : "rgba(255,255,255,0.10)",
           background: highlight ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.03)",
         }}
       >
         <div className="flex items-center justify-between">
-          <div className="text-[11px] font-extrabold tracking-wide text-white/80">{choiceId}</div>
+          <div className="text-[11px] font-extrabold tracking-wide text-white/80">
+            {choiceId}
+          </div>
           <div className="text-[11px] text-white/60">
             {value} • {percent}%
           </div>
         </div>
         <div
           className="mt-2 h-[10px] rounded-full border overflow-hidden"
-          style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.18)" }}
+          style={{
+            borderColor: "rgba(255,255,255,0.10)",
+            background: "rgba(0,0,0,0.18)",
+          }}
         >
           <div
             className="h-full rounded-full"
@@ -513,7 +561,10 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
       {/* Header */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-2">
-          <div className="inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-extrabold tracking-wide" style={pillStyle()}>
+          <div
+            className="inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-extrabold tracking-wide"
+            style={pillStyle()}
+          >
             BONUS EPISODE
           </div>
           <div
@@ -598,7 +649,9 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
               <p>Your Basebot’s optics stabilize on a room that doesn’t behave like a room.</p>
               <p>Distances feel negotiated. Corners feel conditional.</p>
               <p>And in the quiet, you notice something that shouldn’t be noticeable:</p>
-              <p className="text-white/80 font-semibold">You are being timed — before anything has asked you to act.</p>
+              <p className="text-white/80 font-semibold">
+                You are being timed — before anything has asked you to act.
+              </p>
             </div>
 
             <button
@@ -615,9 +668,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
               Continue
             </button>
 
-            <div className="mt-3 text-[11px] text-white/45">
-              The silence isn’t empty. It’s held.
-            </div>
+            <div className="mt-3 text-[11px] text-white/45">The silence isn’t empty. It’s held.</div>
           </div>
         </div>
       )}
@@ -636,7 +687,9 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
               <p>A panel fades into view without loading.</p>
               <p>No origin. No sender. No handshake request.</p>
               <p>Just presence.</p>
-              <p>Your cursor lags behind intent by a fraction — a small delay that feels like a thumb on your pulse.</p>
+              <p>
+                Your cursor lags behind intent by a fraction — a small delay that feels like a thumb on your pulse.
+              </p>
               <p className="text-white/80 font-semibold">The system is learning the shape of your hesitation.</p>
             </div>
 
@@ -654,9 +707,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
               Approach the console
             </button>
 
-            <div className="mt-3 text-[11px] text-white/45">
-              You didn’t open this. That matters.
-            </div>
+            <div className="mt-3 text-[11px] text-white/45">You didn’t open this. That matters.</div>
           </div>
         </div>
       )}
@@ -697,9 +748,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 }}
               >
                 <div className="text-[12px] font-extrabold text-white/90">Press it</div>
-                <div className="mt-1 text-[11px] text-white/60">
-                  Commit to contact. Make the console respond.
-                </div>
+                <div className="mt-1 text-[11px] text-white/60">Commit to contact. Make the console respond.</div>
               </button>
 
               <button
@@ -717,9 +766,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 }}
               >
                 <div className="text-[12px] font-extrabold text-white/90">Leave it untouched</div>
-                <div className="mt-1 text-[11px] text-white/60">
-                  Refuse contact. Observe what shifts anyway.
-                </div>
+                <div className="mt-1 text-[11px] text-white/60">Refuse contact. Observe what shifts anyway.</div>
               </button>
 
               <button
@@ -737,15 +784,11 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 }}
               >
                 <div className="text-[12px] font-extrabold text-white/90">Step back</div>
-                <div className="mt-1 text-[11px] text-white/60">
-                  Increase distance. Let the room show its tells.
-                </div>
+                <div className="mt-1 text-[11px] text-white/60">Increase distance. Let the room show its tells.</div>
               </button>
             </div>
 
-            <div className="mt-4 text-[11px] text-white/45">
-              This choice is recorded only by you. For now.
-            </div>
+            <div className="mt-4 text-[11px] text-white/45">This choice is recorded only by you. For now.</div>
           </div>
         </div>
       )}
@@ -787,9 +830,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
 
               <p>Light crawls across the panel seam. A sharp crack. A smell of scorched polymer.</p>
               <p>Then the local node dies completely — as if it was never permitted to matter.</p>
-              <p className="text-white/80 font-semibold">
-                The room resets its posture. The real system finally speaks.
-              </p>
+              <p className="text-white/80 font-semibold">The room resets its posture. The real system finally speaks.</p>
             </div>
 
             <button
@@ -806,9 +847,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
               Decision window opens
             </button>
 
-            <div className="mt-3 text-[11px] text-white/45">
-              The console failed. The observer did not.
-            </div>
+            <div className="mt-3 text-[11px] text-white/45">The console failed. The observer did not.</div>
           </div>
         </div>
       )}
@@ -823,7 +862,8 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
               <div>
                 <h2 className="text-[22px] font-extrabold text-white/95">MAKE A DECISION</h2>
                 <div className="mt-2 text-[13px] text-white/70">
-                  The interface renders cleanly. Confidently. <span className="text-white/80 font-semibold">This one is watching you as it appears.</span>
+                  The interface renders cleanly. Confidently.{" "}
+                  <span className="text-white/80 font-semibold">This one is watching you as it appears.</span>
                 </div>
 
                 <div
@@ -890,10 +930,10 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 onClick={() => resolveChoice("STALL")}
               />
 
+              {/* ✅ FIX: removed duplicate choiceId prop */}
               <ChoiceCard
                 choiceId="SPOOF"
                 hidden={secondsLeft <= 10}
-                choiceId={"SPOOF"}
                 title="Supply false continuity"
                 body="Give it a version of you that cannot exist — convincing enough to be dangerous."
                 risk="If the lie is detected, escalation becomes policy."
@@ -926,7 +966,9 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
 
           <div className="rounded-3xl border p-5" style={cardShell()}>
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-[20px] md:text-[22px] font-extrabold text-white/95">EVALUATION COMPLETE</h2>
+              <h2 className="text-[20px] md:text-[22px] font-extrabold text-white/95">
+                EVALUATION COMPLETE
+              </h2>
               <div
                 className="rounded-full border px-3 py-1 text-[11px] font-extrabold"
                 style={{
@@ -939,7 +981,10 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
               </div>
             </div>
 
-            <div className="mt-3 rounded-2xl border p-3" style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.04)" }}>
+            <div
+              className="mt-3 rounded-2xl border p-3"
+              style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.04)" }}
+            >
               <div className="text-[12px] text-white/75">
                 Artifact: <span className="font-extrabold text-white/92">{save.artifact.name}</span>
               </div>
@@ -951,7 +996,10 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
               <div className="mt-4 grid gap-2 text-[13px] leading-relaxed text-white/72">
                 <p>The system acknowledges receipt. Not gratitude — proof.</p>
                 <p>Something tightens in the air, like a lock deciding you belong to it.</p>
-                <p>Your Basebot’s posture adjusts: micro-corrections, purposeful, practiced — as if it’s been waiting for instructions it can finally trust.</p>
+                <p>
+                  Your Basebot’s posture adjusts: micro-corrections, purposeful, practiced — as if it’s been waiting for
+                  instructions it can finally trust.
+                </p>
                 <p className="text-white/80 font-semibold">You feel doors you didn’t see quietly become yours to open.</p>
                 <p>And then a second signature appears in the channel — not formatted like the first. Older. Watching.</p>
                 <p className="text-white/80 font-semibold">It doesn’t speak. It simply stays.</p>
@@ -975,7 +1023,10 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 <p>The system accepts — for a heartbeat — and the room warms by half a degree, as if fooled.</p>
                 <p>Then the corners change. Like something turning its head to look directly at you.</p>
                 <p className="text-white/80 font-semibold">A second record appears alongside the first, perfectly neat.</p>
-                <p>Two versions of you now exist in its archive. The system doesn’t resolve contradictions — it weaponizes them.</p>
+                <p>
+                  Two versions of you now exist in its archive. The system doesn’t resolve contradictions — it weaponizes
+                  them.
+                </p>
                 <p className="text-white/80 font-semibold">You are now interesting.</p>
               </div>
             )}
@@ -987,20 +1038,20 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 <p>Your Basebot remains awake — eyes open — suddenly alone with you.</p>
                 <p className="text-white/80 font-semibold">And that’s when you realize what the system never promised:</p>
                 <p>That it was the only thing listening.</p>
-                <p>In the silence, a warning renders without permission — not from what you unplugged, but from what survived the cut.</p>
+                <p>
+                  In the silence, a warning renders without permission — not from what you unplugged, but from what
+                  survived the cut.
+                </p>
               </div>
             )}
 
-            <div className="mt-5 rounded-2xl border px-3 py-3 text-[12px]" style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.20)" }}>
-              <div className="text-white/70">
-                Teaser — Episode Two:
-              </div>
-              <div className="mt-1 text-white/80 font-semibold">
-                Episode Two does not begin with a question.
-              </div>
-              <div className="mt-1 text-white/60">
-                It begins with an assumption — about what you are.
-              </div>
+            <div
+              className="mt-5 rounded-2xl border px-3 py-3 text-[12px]"
+              style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.20)" }}
+            >
+              <div className="text-white/70">Teaser — Episode Two:</div>
+              <div className="mt-1 text-white/80 font-semibold">Episode Two does not begin with a question.</div>
+              <div className="mt-1 text-white/60">It begins with an assumption — about what you are.</div>
             </div>
 
             <button
@@ -1027,9 +1078,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
           <div className="rounded-3xl border p-5" style={cardShell()}>
             <h2 className="text-[20px] md:text-[22px] font-extrabold text-white/95">GLOBAL RESPONSE</h2>
 
-            <div className="mt-3 text-[13px] text-white/70">
-              Your decision is now part of the pattern.
-            </div>
+            <div className="mt-3 text-[13px] text-white/70">Your decision is now part of the pattern.</div>
 
             {(() => {
               const poll = loadPoll();
@@ -1037,16 +1086,37 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
 
               return (
                 <div className="mt-5 grid gap-3">
-                  <PollRow choiceId="ACCEPT" value={poll.ACCEPT} total={total} highlight={save?.choiceId === "ACCEPT"} />
-                  <PollRow choiceId="STALL" value={poll.STALL} total={total} highlight={save?.choiceId === "STALL"} />
-                  <PollRow choiceId="SPOOF" value={poll.SPOOF} total={total} highlight={save?.choiceId === "SPOOF"} />
-                  <PollRow choiceId="PULL_PLUG" value={poll.PULL_PLUG} total={total} highlight={save?.choiceId === "PULL_PLUG"} />
+                  <PollRow
+                    choiceId="ACCEPT"
+                    value={poll.ACCEPT}
+                    total={total}
+                    highlight={save?.choiceId === "ACCEPT"}
+                  />
+                  <PollRow
+                    choiceId="STALL"
+                    value={poll.STALL}
+                    total={total}
+                    highlight={save?.choiceId === "STALL"}
+                  />
+                  <PollRow
+                    choiceId="SPOOF"
+                    value={poll.SPOOF}
+                    total={total}
+                    highlight={save?.choiceId === "SPOOF"}
+                  />
+                  <PollRow
+                    choiceId="PULL_PLUG"
+                    value={poll.PULL_PLUG}
+                    total={total}
+                    highlight={save?.choiceId === "PULL_PLUG"}
+                  />
                 </div>
               );
             })()}
 
             <div className="mt-5 text-[12px] text-white/45">
-              Tip: this poll is local-only right now. When you wire in your backend/on-chain save later, this can become global.
+              Tip: this poll is local-only right now. When you wire in your backend/on-chain save later, this can become
+              global.
             </div>
 
             <div className="mt-6 flex flex-wrap items-center gap-2">
@@ -1076,9 +1146,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 Reinitialize Session
               </button>
 
-              <div className="text-[11px] text-white/45">
-                Episode Two does not begin with a question.
-              </div>
+              <div className="text-[11px] text-white/45">Episode Two does not begin with a question.</div>
             </div>
           </div>
         </div>
