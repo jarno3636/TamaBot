@@ -38,6 +38,13 @@ const STORAGE_KEY = "basebots_story_save_v1";
 const SOUND_KEY = "basebots_ep1_sound";
 const POLL_KEY = "basebots_ep1_poll";
 
+/**
+ * Optional "unlock" ping for your main page.
+ * Your main page can listen for this key or the storage event
+ * and unlock the bonus episode when it changes.
+ */
+const UNLOCK_KEY = "basebots_bonus_unlock";
+
 /* ──────────────────────────────────────────────────────────────
  * Persistence
  * ────────────────────────────────────────────────────────────── */
@@ -85,14 +92,6 @@ function pct(n: number, total: number) {
  * UI helpers
  * ────────────────────────────────────────────────────────────── */
 
-function pillStyle() {
-  return {
-    border: "1px solid rgba(255,255,255,0.14)",
-    background: "rgba(255,255,255,0.06)",
-    color: "rgba(255,255,255,0.82)",
-  } as const;
-}
-
 function cardShell() {
   return {
     border: "1px solid rgba(255,255,255,0.10)",
@@ -109,7 +108,7 @@ function choiceTone(choice: EpisodeOneChoiceId) {
         glow: "rgba(52,211,153,0.10)",
         wash:
           "radial-gradient(820px 260px at 15% 0%, rgba(52,211,153,0.18), transparent 60%), radial-gradient(760px 260px at 90% 30%, rgba(56,189,248,0.10), transparent 62%)",
-        label: "OPERATOR PATH",
+        label: "OPERATOR",
       };
     case "STALL":
       return {
@@ -117,7 +116,7 @@ function choiceTone(choice: EpisodeOneChoiceId) {
         glow: "rgba(56,189,248,0.10)",
         wash:
           "radial-gradient(820px 260px at 15% 0%, rgba(56,189,248,0.18), transparent 60%), radial-gradient(760px 260px at 90% 30%, rgba(168,85,247,0.10), transparent 62%)",
-        label: "GHOST PATH",
+        label: "GHOST",
       };
     case "SPOOF":
       return {
@@ -125,7 +124,7 @@ function choiceTone(choice: EpisodeOneChoiceId) {
         glow: "rgba(251,191,36,0.10)",
         wash:
           "radial-gradient(820px 260px at 15% 0%, rgba(251,191,36,0.18), transparent 60%), radial-gradient(760px 260px at 90% 30%, rgba(244,63,94,0.10), transparent 62%)",
-        label: "SABOTEUR PATH",
+        label: "SABOTEUR",
       };
     default:
       return {
@@ -133,7 +132,7 @@ function choiceTone(choice: EpisodeOneChoiceId) {
         glow: "rgba(251,113,133,0.10)",
         wash:
           "radial-gradient(820px 260px at 15% 0%, rgba(251,113,133,0.18), transparent 60%), radial-gradient(760px 260px at 90% 30%, rgba(168,85,247,0.10), transparent 62%)",
-        label: "SEVERED PATH",
+        label: "SEVERED",
       };
   }
 }
@@ -219,7 +218,8 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
     "intro" | "signal" | "local" | "localAfter" | "choice" | "ending" | "poll"
   >(existing ? "poll" : "intro");
 
-  const [secondsLeft, setSecondsLeft] = useState(40);
+  // ✅ 60 seconds for choices
+  const [secondsLeft, setSecondsLeft] = useState(60);
   const [save, setSave] = useState<SaveShape | null>(existing);
 
   // local “doesn't matter” choice, only for flavor
@@ -236,10 +236,15 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
 
   function toggleSound() {
     setSoundEnabled((s) => {
+      const next = !s;
       try {
-        localStorage.setItem(SOUND_KEY, s ? "off" : "on");
+        localStorage.setItem(SOUND_KEY, next ? "on" : "off");
+
+        // ✅ “unlock” signal for the main page
+        // (main page can watch UNLOCK_KEY via storage event or polling)
+        localStorage.setItem(UNLOCK_KEY, String(Date.now()));
       } catch {}
-      return !s;
+      return next;
     });
   }
 
@@ -247,7 +252,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
   useEffect(() => {
     if (phase !== "choice") return;
 
-    setSecondsLeft(40);
+    setSecondsLeft(60);
     const t = setInterval(() => {
       setSecondsLeft((s) => (s <= 1 ? 0 : s - 1));
     }, 1000);
@@ -280,10 +285,10 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
           choiceId === "ACCEPT"
             ? "Operator"
             : choiceId === "STALL"
-            ? "Ghost"
-            : choiceId === "SPOOF"
-            ? "Saboteur"
-            : "Severed",
+              ? "Ghost"
+              : choiceId === "SPOOF"
+                ? "Saboteur"
+                : "Severed",
         trust:
           choiceId === "ACCEPT"
             ? 70
@@ -312,12 +317,12 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 : "Termination Evidence",
         desc:
           choiceId === "ACCEPT"
-            ? "A completed interaction preserved without appeal."
+            ? "A clean completion."
             : choiceId === "STALL"
-              ? "A hesitation that altered system certainty."
+              ? "A missing answer."
               : choiceId === "SPOOF"
-                ? "Two incompatible truths recorded simultaneously."
-                : "Proof that silence was intentional.",
+                ? "Two truths at once."
+                : "A deliberate cut.",
       },
       createdAt: Date.now(),
     };
@@ -362,12 +367,12 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
     choice: {
       src: "/story/ep1/05-decision-window.webp",
       title: "DECISION WINDOW",
-      subtitle: "Clean interface. No flicker. The system is present as the screen appears.",
+      subtitle: "A clean interface. The system is present as the screen appears.",
     },
     ending: {
       src: "/story/ep1/06-outcome.webp",
       title: "EVALUATION",
-      subtitle: "The system doesn’t thank you. It updates.",
+      subtitle: "No thanks. Only an update.",
     },
     poll: {
       src: "/story/ep1/07-global-response.webp",
@@ -376,7 +381,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
     },
   } as const;
 
-  /* ───────────── Premium Button/Card component ───────────── */
+  /* ───────────── Choice UI ───────────── */
   function ChoiceCard({
     choiceId,
     title,
@@ -438,12 +443,8 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 {tone.label}
               </div>
 
-              <div className="mt-2 text-[15px] font-extrabold text-white/95">
-                {title}
-              </div>
-              <div className="mt-1 text-[12px] leading-relaxed text-white/70">
-                {body}
-              </div>
+              <div className="mt-2 text-[15px] font-extrabold text-white/95">{title}</div>
+              <div className="mt-1 text-[12px] leading-relaxed text-white/70">{body}</div>
             </div>
 
             <div
@@ -466,9 +467,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 background: "rgba(255,255,255,0.04)",
               }}
             >
-              <div className="text-[10px] font-semibold tracking-wide text-white/55">
-                RISK
-              </div>
+              <div className="text-[10px] font-semibold tracking-wide text-white/55">RISK</div>
               <div className="mt-1 text-[12px] text-white/72">{risk}</div>
             </div>
             <div
@@ -478,15 +477,9 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 background: "rgba(255,255,255,0.04)",
               }}
             >
-              <div className="text-[10px] font-semibold tracking-wide text-white/55">
-                PAYOFF
-              </div>
+              <div className="text-[10px] font-semibold tracking-wide text-white/55">PAYOFF</div>
               <div className="mt-1 text-[12px] text-white/72">{payoff}</div>
             </div>
-          </div>
-
-          <div className="mt-3 text-[11px] text-white/45">
-            The timer is not for drama. It is for classification.
           </div>
         </div>
       </button>
@@ -511,26 +504,19 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
       <div
         className="rounded-2xl border p-3"
         style={{
-          borderColor: highlight
-            ? "rgba(255,255,255,0.18)"
-            : "rgba(255,255,255,0.10)",
+          borderColor: highlight ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.10)",
           background: highlight ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.03)",
         }}
       >
         <div className="flex items-center justify-between">
-          <div className="text-[11px] font-extrabold tracking-wide text-white/80">
-            {choiceId}
-          </div>
+          <div className="text-[11px] font-extrabold tracking-wide text-white/80">{choiceId}</div>
           <div className="text-[11px] text-white/60">
             {value} • {percent}%
           </div>
         </div>
         <div
           className="mt-2 h-[10px] rounded-full border overflow-hidden"
-          style={{
-            borderColor: "rgba(255,255,255,0.10)",
-            background: "rgba(0,0,0,0.18)",
-          }}
+          style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.18)" }}
         >
           <div
             className="h-full rounded-full"
@@ -558,38 +544,10 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
         boxShadow: "0 40px 160px rgba(0,0,0,0.78)",
       }}
     >
-      {/* Header */}
+      {/* Header (clean: no BONUS EPISODE / no pre-story banner) */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-2">
-          <div
-            className="inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-extrabold tracking-wide"
-            style={pillStyle()}
-          >
-            BONUS EPISODE
-          </div>
-          <div
-            className="inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-extrabold tracking-wide"
-            style={{
-              borderColor: "rgba(56,189,248,0.18)",
-              background: "rgba(56,189,248,0.08)",
-              color: "rgba(240,249,255,0.86)",
-            }}
-          >
-            IN THE SILENCE
-          </div>
-
-          {save?.flags.soundOff && (
-            <div
-              className="inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-extrabold tracking-wide"
-              style={{
-                borderColor: "rgba(251,113,133,0.18)",
-                background: "rgba(251,113,133,0.08)",
-                color: "rgba(255,241,242,0.86)",
-              }}
-            >
-              SOUND OFF RECORDED
-            </div>
-          )}
+        <div className="text-[12px] font-extrabold tracking-wide text-white/70">
+          EPISODE ONE
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -644,14 +602,11 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
               AWAKENING
             </h2>
 
+            {/* ✅ shorter intro copy */}
             <div className="mt-3 grid gap-2 text-[13px] leading-relaxed text-white/72">
-              <p>Cold boot. No fan noise. No startup tone.</p>
-              <p>Your Basebot’s optics stabilize on a room that doesn’t behave like a room.</p>
-              <p>Distances feel negotiated. Corners feel conditional.</p>
-              <p>And in the quiet, you notice something that shouldn’t be noticeable:</p>
-              <p className="text-white/80 font-semibold">
-                You are being timed — before anything has asked you to act.
-              </p>
+              <p>Cold boot. No tone.</p>
+              <p>The room resolves like a memory you didn’t live.</p>
+              <p className="text-white/80 font-semibold">And something starts counting.</p>
             </div>
 
             <button
@@ -667,8 +622,6 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
             >
               Continue
             </button>
-
-            <div className="mt-3 text-[11px] text-white/45">The silence isn’t empty. It’s held.</div>
           </div>
         </div>
       )}
@@ -683,14 +636,10 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
               INCOMING TRANSMISSION
             </h2>
 
+            {/* ✅ shorter signal copy */}
             <div className="mt-3 grid gap-2 text-[13px] leading-relaxed text-white/72">
-              <p>A panel fades into view without loading.</p>
-              <p>No origin. No sender. No handshake request.</p>
-              <p>Just presence.</p>
-              <p>
-                Your cursor lags behind intent by a fraction — a small delay that feels like a thumb on your pulse.
-              </p>
-              <p className="text-white/80 font-semibold">The system is learning the shape of your hesitation.</p>
+              <p>A panel fades in. No sender.</p>
+              <p>Your cursor lags — like the system is measuring you.</p>
             </div>
 
             <button
@@ -704,15 +653,13 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 boxShadow: "0 16px 60px rgba(251,113,133,0.14)",
               }}
             >
-              Approach the console
+              Approach
             </button>
-
-            <div className="mt-3 text-[11px] text-white/45">You didn’t open this. That matters.</div>
           </div>
         </div>
       )}
 
-      {/* LOCAL (first choice section) */}
+      {/* LOCAL */}
       {phase === "local" && (
         <div className="mt-6 grid gap-5">
           <SceneImage {...images.local} />
@@ -722,14 +669,10 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
               LOCAL CONTROL NODE
             </h2>
 
+            {/* ✅ shorter local copy */}
             <div className="mt-3 grid gap-2 text-[13px] leading-relaxed text-white/72">
-              <p>The Basebot detects something older than the interface you saw before.</p>
-              <p>A physical actuator embedded in the console — worn edges, real resistance, real consequence.</p>
-              <p>No network indicator. No telemetry light.</p>
-              <p>Yet the unit hums like it’s waiting to judge your intent, not your action.</p>
-              <p className="text-white/80 font-semibold">
-                If you touch it, you change the room. If you don’t, you change yourself.
-              </p>
+              <p>Old hardware. Real resistance.</p>
+              <p>It hums like it’s waiting to judge intent.</p>
             </div>
 
             <div className="mt-5 grid gap-4 md:grid-cols-3">
@@ -747,8 +690,8 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                   boxShadow: "0 22px 90px rgba(0,0,0,0.60)",
                 }}
               >
-                <div className="text-[12px] font-extrabold text-white/90">Press it</div>
-                <div className="mt-1 text-[11px] text-white/60">Commit to contact. Make the console respond.</div>
+                <div className="text-[12px] font-extrabold text-white/90">Press</div>
+                <div className="mt-1 text-[11px] text-white/60">Commit.</div>
               </button>
 
               <button
@@ -765,8 +708,8 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                   boxShadow: "0 22px 90px rgba(0,0,0,0.60)",
                 }}
               >
-                <div className="text-[12px] font-extrabold text-white/90">Leave it untouched</div>
-                <div className="mt-1 text-[11px] text-white/60">Refuse contact. Observe what shifts anyway.</div>
+                <div className="text-[12px] font-extrabold text-white/90">Ignore</div>
+                <div className="mt-1 text-[11px] text-white/60">Refuse contact.</div>
               </button>
 
               <button
@@ -783,17 +726,15 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                   boxShadow: "0 22px 90px rgba(0,0,0,0.60)",
                 }}
               >
-                <div className="text-[12px] font-extrabold text-white/90">Step back</div>
-                <div className="mt-1 text-[11px] text-white/60">Increase distance. Let the room show its tells.</div>
+                <div className="text-[12px] font-extrabold text-white/90">Back off</div>
+                <div className="mt-1 text-[11px] text-white/60">Create space.</div>
               </button>
             </div>
-
-            <div className="mt-4 text-[11px] text-white/45">This choice is recorded only by you. For now.</div>
           </div>
         </div>
       )}
 
-      {/* LOCAL AFTER (sparks + story bridge) */}
+      {/* LOCAL AFTER */}
       {phase === "localAfter" && (
         <div className="mt-6 grid gap-5">
           <SceneImage {...images.localAfter} />
@@ -803,34 +744,10 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
               TRANSMISSION COLLAPSE
             </h2>
 
+            {/* ✅ shorter bridge copy */}
             <div className="mt-3 grid gap-2 text-[13px] leading-relaxed text-white/72">
-              {localPick === "PRESS" && (
-                <>
-                  <p>Your Basebot presses the actuator. The resistance feels real. The click feels final.</p>
-                  <p>For a breath, the console warms — then power spikes hard enough to taste.</p>
-                  <p className="text-white/80 font-semibold">The interface reacts to intent, not touch.</p>
-                </>
-              )}
-
-              {localPick === "LEAVE" && (
-                <>
-                  <p>You keep your distance. The actuator keeps humming like a dare.</p>
-                  <p>Then the console flares anyway — as if refusal still counts as input.</p>
-                  <p className="text-white/80 font-semibold">The interface reacts to intent, not touch.</p>
-                </>
-              )}
-
-              {localPick === "BACK" && (
-                <>
-                  <p>You step back. The Basebot’s optics widen, measuring corners, exits, reflections.</p>
-                  <p>The console sparks without being touched — like it was waiting to punish caution.</p>
-                  <p className="text-white/80 font-semibold">The interface reacts to intent, not touch.</p>
-                </>
-              )}
-
-              <p>Light crawls across the panel seam. A sharp crack. A smell of scorched polymer.</p>
-              <p>Then the local node dies completely — as if it was never permitted to matter.</p>
-              <p className="text-white/80 font-semibold">The room resets its posture. The real system finally speaks.</p>
+              <p>The console sparks — even if you never touched it.</p>
+              <p className="text-white/80 font-semibold">Intent counts as input.</p>
             </div>
 
             <button
@@ -844,10 +761,8 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 boxShadow: "0 16px 60px rgba(168,85,247,0.12)",
               }}
             >
-              Decision window opens
+              Open decision window
             </button>
-
-            <div className="mt-3 text-[11px] text-white/45">The console failed. The observer did not.</div>
           </div>
         </div>
       )}
@@ -860,21 +775,17 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
           <div className="rounded-3xl border p-5" style={cardShell()}>
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
               <div>
-                <h2 className="text-[22px] font-extrabold text-white/95">MAKE A DECISION</h2>
-                <div className="mt-2 text-[13px] text-white/70">
-                  The interface renders cleanly. Confidently.{" "}
-                  <span className="text-white/80 font-semibold">This one is watching you as it appears.</span>
-                </div>
+                <h2 className="text-[22px] font-extrabold text-white/95">DECIDE</h2>
 
                 <div
-                  className="mt-3 rounded-2xl border px-3 py-2 text-[12px]"
+                  className="mt-2 rounded-2xl border px-3 py-2 text-[12px]"
                   style={{
-                    borderColor: "rgba(251,113,133,0.18)",
-                    background: "rgba(251,113,133,0.08)",
-                    color: "rgba(255,241,242,0.86)",
+                    borderColor: "rgba(255,255,255,0.12)",
+                    background: "rgba(0,0,0,0.18)",
+                    color: "rgba(255,255,255,0.70)",
                   }}
                 >
-                  Options will be withdrawn as certainty increases.
+                  You have one minute.
                 </div>
               </div>
 
@@ -886,7 +797,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 }}
               >
                 <div className="flex items-center justify-between">
-                  <div className="text-[11px] font-semibold tracking-wide text-white/62">DECISION WINDOW</div>
+                  <div className="text-[11px] font-semibold tracking-wide text-white/62">TIMER</div>
                   <div
                     className="rounded-full border px-2.5 py-1 text-[10px] font-extrabold"
                     style={{
@@ -900,13 +811,13 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 </div>
 
                 <div className="mt-3 text-[11px] text-white/58">
-                  {secondsLeft > 25 && "All channels available. You can still sever."}
-                  {secondsLeft <= 25 && secondsLeft > 10 && "Sever option withdrawn. The system prefers continuity."}
-                  {secondsLeft <= 10 && "False continuity withdrawn. Only truth or silence remain."}
+                  {secondsLeft > 35 && "All options available."}
+                  {secondsLeft <= 35 && secondsLeft > 15 && "Sever will withdraw soon."}
+                  {secondsLeft <= 15 && "Spoof withdraws. Truth or silence remain."}
                 </div>
 
                 <div className="mt-3 text-[11px] text-white/46">
-                  If no action is taken, the system will finalize a choice on your behalf.
+                  If you do nothing, it will choose for you.
                 </div>
               </div>
             </div>
@@ -914,52 +825,47 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
             <div className="mt-5 grid gap-4">
               <ChoiceCard
                 choiceId="ACCEPT"
-                title="Complete the profile"
-                body="Provide the response. Let the model close around you until you fit."
-                risk="You become easy to route. Deviations will be noticed."
-                payoff="Fewer locks. Faster passage. You gain the system’s cooperation."
+                title="Accept"
+                body="Answer cleanly."
+                risk="You become routable."
+                payoff="Smoother access."
                 onClick={() => resolveChoice("ACCEPT")}
               />
 
               <ChoiceCard
                 choiceId="STALL"
-                title="Withhold response"
-                body="Do nothing. Force the system to proceed with missing data."
-                risk="It will infer intent from absence. Silence can be classified."
-                payoff="You remain a variable. You keep distance between you and its certainty."
+                title="Stall"
+                body="Withhold the answer."
+                risk="Silence gets labeled."
+                payoff="You stay uncertain."
                 onClick={() => resolveChoice("STALL")}
               />
 
-              {/* ✅ FIX: removed duplicate choiceId prop */}
               <ChoiceCard
                 choiceId="SPOOF"
-                hidden={secondsLeft <= 10}
-                title="Supply false continuity"
-                body="Give it a version of you that cannot exist — convincing enough to be dangerous."
-                risk="If the lie is detected, escalation becomes policy."
-                payoff="You learn how it validates truth. You probe the perimeter of its rules."
+                hidden={secondsLeft <= 15}
+                title="Spoof"
+                body="Feed it a false you."
+                risk="Contradictions escalate."
+                payoff="Learn its checks."
                 onClick={() => resolveChoice("SPOOF")}
               />
 
               <ChoiceCard
                 choiceId="PULL_PLUG"
-                hidden={secondsLeft <= 25}
-                title="Sever the channel"
-                body="Cut the connection mid-evaluation. Deny it closure."
-                risk="Interruption is recorded elsewhere. The system hates unfinished profiles."
-                payoff="You keep the system from finalizing you — at least for now."
+                hidden={secondsLeft <= 35}
+                title="Sever"
+                body="Cut the channel."
+                risk="The cut is remembered."
+                payoff="Deny closure."
                 onClick={() => resolveChoice("PULL_PLUG")}
               />
-            </div>
-
-            <div className="mt-6 text-center text-[11px] text-white/46">
-              “You are not choosing what happens. You are choosing what gets written down.”
             </div>
           </div>
         </div>
       )}
 
-      {/* ENDING (distinct story per choice) */}
+      {/* ENDING */}
       {phase === "ending" && save && (
         <div className="mt-6 grid gap-5">
           <SceneImage {...images.ending} />
@@ -967,7 +873,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
           <div className="rounded-3xl border p-5" style={cardShell()}>
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-[20px] md:text-[22px] font-extrabold text-white/95">
-                EVALUATION COMPLETE
+                COMPLETE
               </h2>
               <div
                 className="rounded-full border px-3 py-1 text-[11px] font-extrabold"
@@ -991,67 +897,11 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
               <div className="mt-1 text-[11px] text-white/60">{save.artifact.desc}</div>
             </div>
 
-            {/* Endings */}
-            {save.choiceId === "ACCEPT" && (
-              <div className="mt-4 grid gap-2 text-[13px] leading-relaxed text-white/72">
-                <p>The system acknowledges receipt. Not gratitude — proof.</p>
-                <p>Something tightens in the air, like a lock deciding you belong to it.</p>
-                <p>
-                  Your Basebot’s posture adjusts: micro-corrections, purposeful, practiced — as if it’s been waiting for
-                  instructions it can finally trust.
-                </p>
-                <p className="text-white/80 font-semibold">You feel doors you didn’t see quietly become yours to open.</p>
-                <p>And then a second signature appears in the channel — not formatted like the first. Older. Watching.</p>
-                <p className="text-white/80 font-semibold">It doesn’t speak. It simply stays.</p>
-              </div>
-            )}
-
-            {save.choiceId === "STALL" && (
-              <div className="mt-4 grid gap-2 text-[13px] leading-relaxed text-white/72">
-                <p>You give it nothing. The system waits longer than it should.</p>
-                <p>Long enough that the waiting becomes communication.</p>
-                <p>Then it proceeds anyway — confidently — like it expected your refusal as part of the dataset.</p>
-                <p className="text-white/80 font-semibold">Your silence doesn’t protect you. It trains it.</p>
-                <p>For a moment, the UI renders a second layer beneath the first — a shape you can’t quite parse.</p>
-                <p className="text-white/80 font-semibold">A word flashes and vanishes: FRAGMENT.</p>
-              </div>
-            )}
-
-            {save.choiceId === "SPOOF" && (
-              <div className="mt-4 grid gap-2 text-[13px] leading-relaxed text-white/72">
-                <p>You feed it continuity with a seam in it. A lie shaped carefully like a truth.</p>
-                <p>The system accepts — for a heartbeat — and the room warms by half a degree, as if fooled.</p>
-                <p>Then the corners change. Like something turning its head to look directly at you.</p>
-                <p className="text-white/80 font-semibold">A second record appears alongside the first, perfectly neat.</p>
-                <p>
-                  Two versions of you now exist in its archive. The system doesn’t resolve contradictions — it weaponizes
-                  them.
-                </p>
-                <p className="text-white/80 font-semibold">You are now interesting.</p>
-              </div>
-            )}
-
-            {save.choiceId === "PULL_PLUG" && (
-              <div className="mt-4 grid gap-2 text-[13px] leading-relaxed text-white/72">
-                <p>You sever the channel mid-evaluation.</p>
-                <p>The interface dies without ceremony. The room becomes quiet in a way that feels illegal.</p>
-                <p>Your Basebot remains awake — eyes open — suddenly alone with you.</p>
-                <p className="text-white/80 font-semibold">And that’s when you realize what the system never promised:</p>
-                <p>That it was the only thing listening.</p>
-                <p>
-                  In the silence, a warning renders without permission — not from what you unplugged, but from what
-                  survived the cut.
-                </p>
-              </div>
-            )}
-
-            <div
-              className="mt-5 rounded-2xl border px-3 py-3 text-[12px]"
-              style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.20)" }}
-            >
-              <div className="text-white/70">Teaser — Episode Two:</div>
-              <div className="mt-1 text-white/80 font-semibold">Episode Two does not begin with a question.</div>
-              <div className="mt-1 text-white/60">It begins with an assumption — about what you are.</div>
+            <div className="mt-4 text-[13px] leading-relaxed text-white/72">
+              {save.choiceId === "ACCEPT" && <p>You complied. Doors get quieter.</p>}
+              {save.choiceId === "STALL" && <p>You withheld. The system fills the gap.</p>}
+              {save.choiceId === "SPOOF" && <p>You lied well. Now you’re interesting.</p>}
+              {save.choiceId === "PULL_PLUG" && <p>You cut the channel. Something else stays listening.</p>}
             </div>
 
             <button
@@ -1064,7 +914,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 color: "rgba(255,255,255,0.86)",
               }}
             >
-              View global response
+              View response
             </button>
           </div>
         </div>
@@ -1086,24 +936,9 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
 
               return (
                 <div className="mt-5 grid gap-3">
-                  <PollRow
-                    choiceId="ACCEPT"
-                    value={poll.ACCEPT}
-                    total={total}
-                    highlight={save?.choiceId === "ACCEPT"}
-                  />
-                  <PollRow
-                    choiceId="STALL"
-                    value={poll.STALL}
-                    total={total}
-                    highlight={save?.choiceId === "STALL"}
-                  />
-                  <PollRow
-                    choiceId="SPOOF"
-                    value={poll.SPOOF}
-                    total={total}
-                    highlight={save?.choiceId === "SPOOF"}
-                  />
+                  <PollRow choiceId="ACCEPT" value={poll.ACCEPT} total={total} highlight={save?.choiceId === "ACCEPT"} />
+                  <PollRow choiceId="STALL" value={poll.STALL} total={total} highlight={save?.choiceId === "STALL"} />
+                  <PollRow choiceId="SPOOF" value={poll.SPOOF} total={total} highlight={save?.choiceId === "SPOOF"} />
                   <PollRow
                     choiceId="PULL_PLUG"
                     value={poll.PULL_PLUG}
@@ -1113,11 +948,6 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 </div>
               );
             })()}
-
-            <div className="mt-5 text-[12px] text-white/45">
-              Tip: this poll is local-only right now. When you wire in your backend/on-chain save later, this can become
-              global.
-            </div>
 
             <div className="mt-6 flex flex-wrap items-center gap-2">
               <button
@@ -1143,10 +973,8 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                   color: "rgba(255,255,255,0.86)",
                 }}
               >
-                Reinitialize Session
+                Reinitialize
               </button>
-
-              <div className="text-[11px] text-white/45">Episode Two does not begin with a question.</div>
             </div>
           </div>
         </div>
