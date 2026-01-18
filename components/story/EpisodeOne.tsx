@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 
 /* ──────────────────────────────────────────────────────────────
@@ -38,7 +39,7 @@ const SOUND_KEY = "basebots_ep1_sound";
 const POLL_KEY = "basebots_ep1_poll";
 
 /* ──────────────────────────────────────────────────────────────
- * Persistence Helpers
+ * Persistence
  * ────────────────────────────────────────────────────────────── */
 
 function loadSave(): SaveShape | null {
@@ -56,26 +57,156 @@ function saveGame(save: SaveShape) {
   } catch {}
 }
 
-function bumpPoll(choice: EpisodeOneChoiceId) {
-  try {
-    const raw = localStorage.getItem(POLL_KEY);
-    const counts: PollCounts = raw
-      ? JSON.parse(raw)
-      : { ACCEPT: 0, STALL: 0, SPOOF: 0, PULL_PLUG: 0 };
-    counts[choice]++;
-    localStorage.setItem(POLL_KEY, JSON.stringify(counts));
-  } catch {}
-}
-
 function loadPoll(): PollCounts {
   try {
     const raw = localStorage.getItem(POLL_KEY);
     return raw
-      ? JSON.parse(raw)
+      ? (JSON.parse(raw) as PollCounts)
       : { ACCEPT: 0, STALL: 0, SPOOF: 0, PULL_PLUG: 0 };
   } catch {
     return { ACCEPT: 0, STALL: 0, SPOOF: 0, PULL_PLUG: 0 };
   }
+}
+
+function bumpPoll(choiceId: EpisodeOneChoiceId) {
+  try {
+    const current = loadPoll();
+    current[choiceId] = (current[choiceId] ?? 0) + 1;
+    localStorage.setItem(POLL_KEY, JSON.stringify(current));
+  } catch {}
+}
+
+function pct(n: number, total: number) {
+  if (!total) return 0;
+  return Math.round((n / total) * 100);
+}
+
+/* ──────────────────────────────────────────────────────────────
+ * UI helpers
+ * ────────────────────────────────────────────────────────────── */
+
+function pillStyle() {
+  return {
+    border: "1px solid rgba(255,255,255,0.14)",
+    background: "rgba(255,255,255,0.06)",
+    color: "rgba(255,255,255,0.82)",
+  } as const;
+}
+
+function cardShell() {
+  return {
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(0,0,0,0.22)",
+    boxShadow: "0 26px 110px rgba(0,0,0,0.65)",
+  } as const;
+}
+
+function choiceTone(choice: EpisodeOneChoiceId) {
+  switch (choice) {
+    case "ACCEPT":
+      return {
+        border: "rgba(52,211,153,0.28)",
+        glow: "rgba(52,211,153,0.10)",
+        wash:
+          "radial-gradient(820px 260px at 15% 0%, rgba(52,211,153,0.18), transparent 60%), radial-gradient(760px 260px at 90% 30%, rgba(56,189,248,0.10), transparent 62%)",
+        label: "OPERATOR PATH",
+      };
+    case "STALL":
+      return {
+        border: "rgba(56,189,248,0.24)",
+        glow: "rgba(56,189,248,0.10)",
+        wash:
+          "radial-gradient(820px 260px at 15% 0%, rgba(56,189,248,0.18), transparent 60%), radial-gradient(760px 260px at 90% 30%, rgba(168,85,247,0.10), transparent 62%)",
+        label: "GHOST PATH",
+      };
+    case "SPOOF":
+      return {
+        border: "rgba(251,191,36,0.26)",
+        glow: "rgba(251,191,36,0.10)",
+        wash:
+          "radial-gradient(820px 260px at 15% 0%, rgba(251,191,36,0.18), transparent 60%), radial-gradient(760px 260px at 90% 30%, rgba(244,63,94,0.10), transparent 62%)",
+        label: "SABOTEUR PATH",
+      };
+    default:
+      return {
+        border: "rgba(251,113,133,0.24)",
+        glow: "rgba(251,113,133,0.10)",
+        wash:
+          "radial-gradient(820px 260px at 15% 0%, rgba(251,113,133,0.18), transparent 60%), radial-gradient(760px 260px at 90% 30%, rgba(168,85,247,0.10), transparent 62%)",
+        label: "SEVERED PATH",
+      };
+  }
+}
+
+function barTone(choice: EpisodeOneChoiceId) {
+  switch (choice) {
+    case "ACCEPT":
+      return "linear-gradient(90deg, rgba(52,211,153,0.95), rgba(56,189,248,0.85))";
+    case "STALL":
+      return "linear-gradient(90deg, rgba(56,189,248,0.95), rgba(168,85,247,0.80))";
+    case "SPOOF":
+      return "linear-gradient(90deg, rgba(251,191,36,0.95), rgba(244,63,94,0.75))";
+    default:
+      return "linear-gradient(90deg, rgba(251,113,133,0.95), rgba(168,85,247,0.85))";
+  }
+}
+
+function SceneImage({
+  src,
+  title,
+  subtitle,
+}: {
+  src: string;
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <div
+      className="relative overflow-hidden rounded-3xl border"
+      style={{
+        borderColor: "rgba(255,255,255,0.10)",
+        background: "rgba(0,0,0,0.22)",
+        boxShadow: "0 28px 120px rgba(0,0,0,0.60)",
+      }}
+    >
+      <div className="relative h-[180px] md:h-[220px]">
+        <Image
+          src={src}
+          alt={title}
+          fill
+          priority={false}
+          sizes="(max-width: 768px) 100vw, 900px"
+          style={{ objectFit: "cover" }}
+        />
+        <div
+          aria-hidden
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(180deg, rgba(2,6,23,0.10) 0%, rgba(2,6,23,0.82) 78%, rgba(2,6,23,0.92) 100%)",
+          }}
+        />
+        <div
+          aria-hidden
+          className="absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(900px 300px at 20% 0%, rgba(56,189,248,0.18), transparent 60%), radial-gradient(900px 300px at 90% 10%, rgba(168,85,247,0.14), transparent 62%)",
+            opacity: 0.9,
+          }}
+        />
+      </div>
+
+      <div className="relative p-4">
+        <div className="text-[12px] font-extrabold tracking-wide text-white/80">
+          {title}
+        </div>
+        <div className="mt-1 text-[12px] leading-relaxed text-white/60">
+          {subtitle}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /* ──────────────────────────────────────────────────────────────
@@ -83,16 +214,18 @@ function loadPoll(): PollCounts {
  * ────────────────────────────────────────────────────────────── */
 
 export default function EpisodeOne({ onExit }: { onExit: () => void }) {
-  const existing = useMemo(loadSave, []);
+  const existing = useMemo(() => loadSave(), []);
   const [phase, setPhase] = useState<
-    "intro" | "signal" | "falseChoice" | "glitch" | "choice" | "ending" | "poll"
+    "intro" | "signal" | "local" | "localAfter" | "choice" | "ending" | "poll"
   >(existing ? "poll" : "intro");
 
   const [secondsLeft, setSecondsLeft] = useState(40);
   const [save, setSave] = useState<SaveShape | null>(existing);
 
-  /* ───────────── Sound ───────────── */
+  // local “doesn't matter” choice, only for flavor
+  const [localPick, setLocalPick] = useState<null | "PRESS" | "LEAVE" | "BACK">(null);
 
+  /* ───────────── Sound ───────────── */
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
     try {
       return localStorage.getItem(SOUND_KEY) !== "off";
@@ -103,17 +236,18 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
 
   function toggleSound() {
     setSoundEnabled((s) => {
-      localStorage.setItem(SOUND_KEY, s ? "off" : "on");
+      try {
+        localStorage.setItem(SOUND_KEY, s ? "off" : "on");
+      } catch {}
       return !s;
     });
   }
 
   /* ───────────── Timer ───────────── */
-
   useEffect(() => {
     if (phase !== "choice") return;
-    setSecondsLeft(40);
 
+    setSecondsLeft(40);
     const t = setInterval(() => {
       setSecondsLeft((s) => (s <= 1 ? 0 : s - 1));
     }, 1000);
@@ -125,12 +259,12 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
     if (phase === "choice" && secondsLeft === 0) {
       resolveChoice("STALL");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secondsLeft, phase]);
 
-  /* ───────────── Resolve Choice ───────────── */
-
+  /* ───────────── Resolve real choice ───────────── */
   function resolveChoice(choiceId: EpisodeOneChoiceId) {
-    const save: SaveShape = {
+    const s: SaveShape = {
       v: 1,
       episodeId: "ep1",
       choiceId,
@@ -150,10 +284,8 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
             : choiceId === "SPOOF"
             ? "Saboteur"
             : "Severed",
-        trust:
-          choiceId === "ACCEPT" ? 70 : choiceId === "STALL" ? 55 : 26,
-        threat:
-          choiceId === "SPOOF" ? 74 : choiceId === "PULL_PLUG" ? 58 : 36,
+        trust: choiceId === "ACCEPT" ? 70 : choiceId === "STALL" ? 55 : choiceId === "SPOOF" ? 26 : 16,
+        threat: choiceId === "ACCEPT" ? 22 : choiceId === "STALL" ? 36 : choiceId === "SPOOF" ? 74 : 58,
       },
       artifact: {
         name:
@@ -176,184 +308,780 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
       createdAt: Date.now(),
     };
 
-    saveGame(save);
+    saveGame(s);
     bumpPoll(choiceId);
-    setSave(save);
+    setSave(s);
     setPhase("ending");
   }
 
   function resetEpisode() {
-    localStorage.removeItem(STORAGE_KEY);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {}
     setSave(null);
+    setLocalPick(null);
     setPhase("intro");
   }
 
-  /* ───────────── UI Helpers ───────────── */
+  /* ───────────── Scene images (you provide files) ───────────── */
+  const images = {
+    intro: {
+      src: "/story/ep1/01-awakening.webp",
+      title: "AWAKENING",
+      subtitle: "Cold boot. No greeting. The room resolves like a memory you didn’t live.",
+    },
+    signal: {
+      src: "/story/ep1/02-transmission.webp",
+      title: "INCOMING TRANSMISSION",
+      subtitle: "A panel appears without loading. The cursor lags by a heartbeat — on purpose.",
+    },
+    local: {
+      src: "/story/ep1/03-local-node.webp",
+      title: "LOCAL CONTROL NODE",
+      subtitle: "Old hardware. Physical input. No network — yet it hums like it’s waiting for judgment.",
+    },
+    localAfter: {
+      src: "/story/ep1/04-sparks.webp",
+      title: "TRANSMISSION COLLAPSE",
+      subtitle: "The console reacts to intent, not touch. Light crawls across the seam and then it dies.",
+    },
+    choice: {
+      src: "/story/ep1/05-decision-window.webp",
+      title: "DECISION WINDOW",
+      subtitle: "Clean interface. No flicker. The system is present as the screen appears.",
+    },
+    ending: {
+      src: "/story/ep1/06-outcome.webp",
+      title: "EVALUATION",
+      subtitle: "The system doesn’t thank you. It updates.",
+    },
+    poll: {
+      src: "/story/ep1/07-global-response.webp",
+      title: "GLOBAL RESPONSE",
+      subtitle: "You were not the first. You will not be the last.",
+    },
+  } as const;
 
-  const card =
-    "w-full rounded-3xl border p-4 text-left transition hover:brightness-110 active:scale-[0.98]";
+  /* ───────────── Premium Button/Card component ───────────── */
+  function ChoiceCard({
+    choiceId,
+    title,
+    body,
+    risk,
+    payoff,
+    disabled,
+    hidden,
+    onClick,
+  }: {
+    choiceId: EpisodeOneChoiceId;
+    title: string;
+    body: string;
+    risk: string;
+    payoff: string;
+    disabled?: boolean;
+    hidden?: boolean;
+    onClick: () => void;
+  }) {
+    if (hidden) return null;
+
+    const tone = choiceTone(choiceId);
+
+    return (
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={onClick}
+        className="group relative w-full overflow-hidden rounded-3xl border p-4 text-left transition active:scale-[0.99]"
+        style={{
+          borderColor: tone.border,
+          background: "rgba(0,0,0,0.24)",
+          boxShadow: "0 24px 120px rgba(0,0,0,0.65)",
+          cursor: disabled ? "not-allowed" : "pointer",
+          opacity: disabled ? 0.55 : 1,
+        }}
+      >
+        <div aria-hidden className="absolute inset-0 opacity-95" style={{ background: tone.wash }} />
+        <div
+          aria-hidden
+          className="absolute -top-16 left-0 right-0 h-28 opacity-35"
+          style={{
+            background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent)",
+            transform: "rotate(-7deg)",
+          }}
+        />
+        <div className="relative">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div
+                className="inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-wide"
+                style={{
+                  borderColor: tone.border,
+                  background: tone.glow,
+                  color: "rgba(255,255,255,0.86)",
+                }}
+              >
+                {tone.label}
+              </div>
+
+              <div className="mt-2 text-[15px] font-extrabold text-white/95">
+                {title}
+              </div>
+              <div className="mt-1 text-[12px] leading-relaxed text-white/70">
+                {body}
+              </div>
+            </div>
+
+            <div
+              className="hidden md:flex items-center justify-center rounded-2xl border px-3 py-2 text-[10px] font-mono"
+              style={{
+                borderColor: "rgba(255,255,255,0.12)",
+                background: "rgba(0,0,0,0.18)",
+                color: "rgba(255,255,255,0.64)",
+              }}
+            >
+              /{choiceId}
+            </div>
+          </div>
+
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            <div className="rounded-2xl border px-3 py-2" style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.04)" }}>
+              <div className="text-[10px] font-semibold tracking-wide text-white/55">RISK</div>
+              <div className="mt-1 text-[12px] text-white/72">{risk}</div>
+            </div>
+            <div className="rounded-2xl border px-3 py-2" style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.04)" }}>
+              <div className="text-[10px] font-semibold tracking-wide text-white/55">PAYOFF</div>
+              <div className="mt-1 text-[12px] text-white/72">{payoff}</div>
+            </div>
+          </div>
+
+          <div className="mt-3 text-[11px] text-white/45">
+            The timer is not for drama. It is for classification.
+          </div>
+        </div>
+      </button>
+    );
+  }
+
+  function PollRow({ choiceId, value, total, highlight }: { choiceId: EpisodeOneChoiceId; value: number; total: number; highlight?: boolean }) {
+    const percent = pct(value, total);
+    const grad = barTone(choiceId);
+
+    return (
+      <div
+        className="rounded-2xl border p-3"
+        style={{
+          borderColor: highlight ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.10)",
+          background: highlight ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.03)",
+        }}
+      >
+        <div className="flex items-center justify-between">
+          <div className="text-[11px] font-extrabold tracking-wide text-white/80">{choiceId}</div>
+          <div className="text-[11px] text-white/60">
+            {value} • {percent}%
+          </div>
+        </div>
+        <div
+          className="mt-2 h-[10px] rounded-full border overflow-hidden"
+          style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.18)" }}
+        >
+          <div
+            className="h-full rounded-full"
+            style={{
+              width: `${percent}%`,
+              background: grad,
+              boxShadow: "0 10px 28px rgba(0,0,0,0.28)",
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
 
   /* ──────────────────────────────────────────────────────────────
    * Render
    * ────────────────────────────────────────────────────────────── */
 
   return (
-    <section className="rounded-[28px] border p-6 text-white bg-gradient-to-b from-[#020617] to-[#020617]/80">
+    <section
+      className="relative overflow-hidden rounded-[28px] border p-5 md:p-7"
+      style={{
+        borderColor: "rgba(255,255,255,0.10)",
+        background: "linear-gradient(180deg, rgba(2,6,23,0.94), rgba(2,6,23,0.70))",
+        boxShadow: "0 40px 160px rgba(0,0,0,0.78)",
+      }}
+    >
       {/* Header */}
-      <div className="flex justify-between mb-4 text-xs text-white/70">
-        <span>BONUS EPISODE — IN THE SILENCE</span>
-        <div className="flex gap-2">
-          <button onClick={toggleSound}>SOUND: {soundEnabled ? "ON" : "OFF"}</button>
-          <button onClick={onExit}>EXIT</button>
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-2">
+          <div className="inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-extrabold tracking-wide" style={pillStyle()}>
+            BONUS EPISODE
+          </div>
+          <div
+            className="inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-extrabold tracking-wide"
+            style={{
+              borderColor: "rgba(56,189,248,0.18)",
+              background: "rgba(56,189,248,0.08)",
+              color: "rgba(240,249,255,0.86)",
+            }}
+          >
+            IN THE SILENCE
+          </div>
+
+          {save?.flags.soundOff && (
+            <div
+              className="inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-extrabold tracking-wide"
+              style={{
+                borderColor: "rgba(251,113,133,0.18)",
+                background: "rgba(251,113,133,0.08)",
+                color: "rgba(255,241,242,0.86)",
+              }}
+            >
+              SOUND OFF RECORDED
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={toggleSound}
+            className="rounded-full border px-4 py-2 text-[12px] font-extrabold transition active:scale-95 hover:brightness-110"
+            style={{
+              borderColor: "rgba(255,255,255,0.12)",
+              background: soundEnabled ? "rgba(56,189,248,0.12)" : "rgba(255,255,255,0.05)",
+              color: "rgba(255,255,255,0.84)",
+            }}
+          >
+            SOUND: {soundEnabled ? "ON" : "OFF"}
+          </button>
+
+          <button
+            type="button"
+            onClick={resetEpisode}
+            className="rounded-full border px-4 py-2 text-[12px] font-extrabold transition active:scale-95 hover:brightness-110"
+            style={{
+              borderColor: "rgba(255,255,255,0.12)",
+              background: "rgba(255,255,255,0.06)",
+              color: "rgba(255,255,255,0.84)",
+            }}
+          >
+            Reinitialize
+          </button>
+
+          <button
+            type="button"
+            onClick={onExit}
+            className="rounded-full border px-4 py-2 text-[12px] font-extrabold transition active:scale-95 hover:brightness-110"
+            style={{
+              borderColor: "rgba(255,255,255,0.12)",
+              background: "rgba(255,255,255,0.06)",
+              color: "rgba(255,255,255,0.84)",
+            }}
+          >
+            Exit
+          </button>
         </div>
       </div>
 
       {/* INTRO */}
       {phase === "intro" && (
-        <>
-          <h2 className="text-xl font-bold">AWAKENING</h2>
-          <p className="mt-3 text-white/70">
-            Cold boot. No greeting. No acknowledgment.
-          </p>
-          <p className="mt-2 text-white/70">
-            Something has already begun observing you.
-          </p>
-          <button className="mt-6" onClick={() => setPhase("signal")}>
-            Continue
-          </button>
-        </>
+        <div className="mt-6 grid gap-5">
+          <SceneImage {...images.intro} />
+
+          <div className="rounded-3xl border p-5" style={cardShell()}>
+            <h2 className="text-[20px] md:text-[22px] font-extrabold text-white/95">
+              AWAKENING
+            </h2>
+
+            <div className="mt-3 grid gap-2 text-[13px] leading-relaxed text-white/72">
+              <p>Cold boot. No fan noise. No startup tone.</p>
+              <p>Your Basebot’s optics stabilize on a room that doesn’t behave like a room.</p>
+              <p>Distances feel negotiated. Corners feel conditional.</p>
+              <p>And in the quiet, you notice something that shouldn’t be noticeable:</p>
+              <p className="text-white/80 font-semibold">You are being timed — before anything has asked you to act.</p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setPhase("signal")}
+              className="mt-6 inline-flex items-center justify-center rounded-full px-5 py-2 text-[12px] font-extrabold transition active:scale-95 hover:brightness-110"
+              style={{
+                border: "1px solid rgba(255,255,255,0.12)",
+                background: "linear-gradient(90deg, rgba(56,189,248,0.90), rgba(168,85,247,0.70))",
+                color: "rgba(2,6,23,0.98)",
+                boxShadow: "0 16px 60px rgba(56,189,248,0.14)",
+              }}
+            >
+              Continue
+            </button>
+
+            <div className="mt-3 text-[11px] text-white/45">
+              The silence isn’t empty. It’s held.
+            </div>
+          </div>
+        </div>
       )}
 
       {/* SIGNAL */}
       {phase === "signal" && (
-        <>
-          <h2 className="text-xl font-bold">INCOMING TRANSMISSION</h2>
-          <p className="mt-3 text-white/70">
-            The interface renders itself.
-          </p>
-          <button className="mt-6" onClick={() => setPhase("falseChoice")}>
-            Approach the console
-          </button>
-        </>
-      )}
+        <div className="mt-6 grid gap-5">
+          <SceneImage {...images.signal} />
 
-      {/* FALSE CHOICE */}
-      {phase === "falseChoice" && (
-        <>
-          <h2 className="text-xl font-bold">LOCAL INTERFACE</h2>
-          <p className="mt-3 text-white/70">
-            This feels optional. That should worry you.
-          </p>
-          <div className="mt-4 grid gap-3">
-            <button className={card} onClick={() => setPhase("glitch")}>
-              PRESS THE BUTTON
+          <div className="rounded-3xl border p-5" style={cardShell()}>
+            <h2 className="text-[20px] md:text-[22px] font-extrabold text-white/95">
+              INCOMING TRANSMISSION
+            </h2>
+
+            <div className="mt-3 grid gap-2 text-[13px] leading-relaxed text-white/72">
+              <p>A panel fades into view without loading.</p>
+              <p>No origin. No sender. No handshake request.</p>
+              <p>Just presence.</p>
+              <p>Your cursor lags behind intent by a fraction — a small delay that feels like a thumb on your pulse.</p>
+              <p className="text-white/80 font-semibold">The system is learning the shape of your hesitation.</p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setPhase("local")}
+              className="mt-6 inline-flex items-center justify-center rounded-full px-5 py-2 text-[12px] font-extrabold transition active:scale-95 hover:brightness-110"
+              style={{
+                border: "1px solid rgba(255,255,255,0.12)",
+                background: "linear-gradient(90deg, rgba(251,113,133,0.92), rgba(168,85,247,0.70))",
+                color: "rgba(2,6,23,0.98)",
+                boxShadow: "0 16px 60px rgba(251,113,133,0.14)",
+              }}
+            >
+              Approach the console
             </button>
-            <button className={card} onClick={() => setPhase("glitch")}>
-              OBSERVE SILENTLY
-            </button>
-            <button className={card} onClick={() => setPhase("glitch")}>
-              STEP BACK
-            </button>
+
+            <div className="mt-3 text-[11px] text-white/45">
+              You didn’t open this. That matters.
+            </div>
           </div>
-        </>
+        </div>
       )}
 
-      {/* GLITCH */}
-      {phase === "glitch" && (
-        <>
-          <p className="text-white/70">
-            The panel sparks. The signal collapses.
-          </p>
-          <p className="mt-2 text-white/70">
-            That was never the real test.
-          </p>
-          <button className="mt-6" onClick={() => setPhase("choice")}>
-            The real signal arrives
-          </button>
-        </>
+      {/* LOCAL (first choice section) */}
+      {phase === "local" && (
+        <div className="mt-6 grid gap-5">
+          <SceneImage {...images.local} />
+
+          <div className="rounded-3xl border p-5" style={cardShell()}>
+            <h2 className="text-[20px] md:text-[22px] font-extrabold text-white/95">
+              LOCAL CONTROL NODE
+            </h2>
+
+            <div className="mt-3 grid gap-2 text-[13px] leading-relaxed text-white/72">
+              <p>The Basebot detects something older than the interface you saw before.</p>
+              <p>A physical actuator embedded in the console — worn edges, real resistance, real consequence.</p>
+              <p>No network indicator. No telemetry light.</p>
+              <p>Yet the unit hums like it’s waiting to judge your intent, not your action.</p>
+              <p className="text-white/80 font-semibold">
+                If you touch it, you change the room. If you don’t, you change yourself.
+              </p>
+            </div>
+
+            <div className="mt-5 grid gap-4 md:grid-cols-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setLocalPick("PRESS");
+                  setPhase("localAfter");
+                }}
+                className="rounded-3xl border p-4 text-left transition active:scale-[0.99] hover:brightness-110"
+                style={{
+                  borderColor: "rgba(56,189,248,0.22)",
+                  background:
+                    "radial-gradient(700px 220px at 10% 0%, rgba(56,189,248,0.16), transparent 60%), rgba(0,0,0,0.24)",
+                  boxShadow: "0 22px 90px rgba(0,0,0,0.60)",
+                }}
+              >
+                <div className="text-[12px] font-extrabold text-white/90">Press it</div>
+                <div className="mt-1 text-[11px] text-white/60">
+                  Commit to contact. Make the console respond.
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setLocalPick("LEAVE");
+                  setPhase("localAfter");
+                }}
+                className="rounded-3xl border p-4 text-left transition active:scale-[0.99] hover:brightness-110"
+                style={{
+                  borderColor: "rgba(251,191,36,0.20)",
+                  background:
+                    "radial-gradient(700px 220px at 10% 0%, rgba(251,191,36,0.14), transparent 60%), rgba(0,0,0,0.24)",
+                  boxShadow: "0 22px 90px rgba(0,0,0,0.60)",
+                }}
+              >
+                <div className="text-[12px] font-extrabold text-white/90">Leave it untouched</div>
+                <div className="mt-1 text-[11px] text-white/60">
+                  Refuse contact. Observe what shifts anyway.
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setLocalPick("BACK");
+                  setPhase("localAfter");
+                }}
+                className="rounded-3xl border p-4 text-left transition active:scale-[0.99] hover:brightness-110"
+                style={{
+                  borderColor: "rgba(251,113,133,0.20)",
+                  background:
+                    "radial-gradient(700px 220px at 10% 0%, rgba(251,113,133,0.14), transparent 60%), rgba(0,0,0,0.24)",
+                  boxShadow: "0 22px 90px rgba(0,0,0,0.60)",
+                }}
+              >
+                <div className="text-[12px] font-extrabold text-white/90">Step back</div>
+                <div className="mt-1 text-[11px] text-white/60">
+                  Increase distance. Let the room show its tells.
+                </div>
+              </button>
+            </div>
+
+            <div className="mt-4 text-[11px] text-white/45">
+              This choice is recorded only by you. For now.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* LOCAL AFTER (sparks + story bridge) */}
+      {phase === "localAfter" && (
+        <div className="mt-6 grid gap-5">
+          <SceneImage {...images.localAfter} />
+
+          <div className="rounded-3xl border p-5" style={cardShell()}>
+            <h2 className="text-[20px] md:text-[22px] font-extrabold text-white/95">
+              TRANSMISSION COLLAPSE
+            </h2>
+
+            <div className="mt-3 grid gap-2 text-[13px] leading-relaxed text-white/72">
+              {localPick === "PRESS" && (
+                <>
+                  <p>Your Basebot presses the actuator. The resistance feels real. The click feels final.</p>
+                  <p>For a breath, the console warms — then power spikes hard enough to taste.</p>
+                  <p className="text-white/80 font-semibold">The interface reacts to intent, not touch.</p>
+                </>
+              )}
+
+              {localPick === "LEAVE" && (
+                <>
+                  <p>You keep your distance. The actuator keeps humming like a dare.</p>
+                  <p>Then the console flares anyway — as if refusal still counts as input.</p>
+                  <p className="text-white/80 font-semibold">The interface reacts to intent, not touch.</p>
+                </>
+              )}
+
+              {localPick === "BACK" && (
+                <>
+                  <p>You step back. The Basebot’s optics widen, measuring corners, exits, reflections.</p>
+                  <p>The console sparks without being touched — like it was waiting to punish caution.</p>
+                  <p className="text-white/80 font-semibold">The interface reacts to intent, not touch.</p>
+                </>
+              )}
+
+              <p>Light crawls across the panel seam. A sharp crack. A smell of scorched polymer.</p>
+              <p>Then the local node dies completely — as if it was never permitted to matter.</p>
+              <p className="text-white/80 font-semibold">
+                The room resets its posture. The real system finally speaks.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setPhase("choice")}
+              className="mt-6 inline-flex items-center justify-center rounded-full px-5 py-2 text-[12px] font-extrabold transition active:scale-95 hover:brightness-110"
+              style={{
+                border: "1px solid rgba(255,255,255,0.12)",
+                background: "linear-gradient(90deg, rgba(168,85,247,0.90), rgba(56,189,248,0.84))",
+                color: "rgba(2,6,23,0.98)",
+                boxShadow: "0 16px 60px rgba(168,85,247,0.12)",
+              }}
+            >
+              Decision window opens
+            </button>
+
+            <div className="mt-3 text-[11px] text-white/45">
+              The console failed. The observer did not.
+            </div>
+          </div>
+        </div>
       )}
 
       {/* REAL CHOICE */}
       {phase === "choice" && (
-        <>
-          <h2 className="text-xl font-bold">MAKE A DECISION</h2>
-          <p className="mt-1 text-white/60">Time remaining: {secondsLeft}s</p>
+        <div className="mt-6 grid gap-5">
+          <SceneImage {...images.choice} />
 
-          <div className="mt-4 grid gap-3">
-            <button className={card} onClick={() => resolveChoice("ACCEPT")}>
-              ACCEPT — become legible
-            </button>
-            <button className={card} onClick={() => resolveChoice("STALL")}>
-              STALL — remain undefined
-            </button>
-            {secondsLeft > 10 && (
-              <button className={card} onClick={() => resolveChoice("SPOOF")}>
-                SPOOF — mislead deliberately
-              </button>
-            )}
-            {secondsLeft > 25 && (
-              <button className={card} onClick={() => resolveChoice("PULL_PLUG")}>
-                PULL PLUG — refuse participation
-              </button>
-            )}
+          <div className="rounded-3xl border p-5" style={cardShell()}>
+            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+              <div>
+                <h2 className="text-[22px] font-extrabold text-white/95">MAKE A DECISION</h2>
+                <div className="mt-2 text-[13px] text-white/70">
+                  The interface renders cleanly. Confidently. <span className="text-white/80 font-semibold">This one is watching you as it appears.</span>
+                </div>
+
+                <div
+                  className="mt-3 rounded-2xl border px-3 py-2 text-[12px]"
+                  style={{
+                    borderColor: "rgba(251,113,133,0.18)",
+                    background: "rgba(251,113,133,0.08)",
+                    color: "rgba(255,241,242,0.86)",
+                  }}
+                >
+                  Options will be withdrawn as certainty increases.
+                </div>
+              </div>
+
+              <div
+                className="w-full md:w-[360px] rounded-3xl border p-4"
+                style={{
+                  borderColor: "rgba(255,255,255,0.10)",
+                  background: "rgba(0,0,0,0.22)",
+                }}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] font-semibold tracking-wide text-white/62">DECISION WINDOW</div>
+                  <div
+                    className="rounded-full border px-2.5 py-1 text-[10px] font-extrabold"
+                    style={{
+                      borderColor: "rgba(255,255,255,0.12)",
+                      background: "rgba(255,255,255,0.06)",
+                      color: secondsLeft <= 10 ? "rgba(255,241,242,0.92)" : "rgba(255,255,255,0.82)",
+                    }}
+                  >
+                    {secondsLeft}s
+                  </div>
+                </div>
+
+                <div className="mt-3 text-[11px] text-white/58">
+                  {secondsLeft > 25 && "All channels available. You can still sever."}
+                  {secondsLeft <= 25 && secondsLeft > 10 && "Sever option withdrawn. The system prefers continuity."}
+                  {secondsLeft <= 10 && "False continuity withdrawn. Only truth or silence remain."}
+                </div>
+
+                <div className="mt-3 text-[11px] text-white/46">
+                  If no action is taken, the system will finalize a choice on your behalf.
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-4">
+              <ChoiceCard
+                choiceId="ACCEPT"
+                title="Complete the profile"
+                body="Provide the response. Let the model close around you until you fit."
+                risk="You become easy to route. Deviations will be noticed."
+                payoff="Fewer locks. Faster passage. You gain the system’s cooperation."
+                onClick={() => resolveChoice("ACCEPT")}
+              />
+
+              <ChoiceCard
+                choiceId="STALL"
+                title="Withhold response"
+                body="Do nothing. Force the system to proceed with missing data."
+                risk="It will infer intent from absence. Silence can be classified."
+                payoff="You remain a variable. You keep distance between you and its certainty."
+                onClick={() => resolveChoice("STALL")}
+              />
+
+              <ChoiceCard
+                choiceId="SPOOF"
+                hidden={secondsLeft <= 10}
+                choiceId={"SPOOF"}
+                title="Supply false continuity"
+                body="Give it a version of you that cannot exist — convincing enough to be dangerous."
+                risk="If the lie is detected, escalation becomes policy."
+                payoff="You learn how it validates truth. You probe the perimeter of its rules."
+                onClick={() => resolveChoice("SPOOF")}
+              />
+
+              <ChoiceCard
+                choiceId="PULL_PLUG"
+                hidden={secondsLeft <= 25}
+                title="Sever the channel"
+                body="Cut the connection mid-evaluation. Deny it closure."
+                risk="Interruption is recorded elsewhere. The system hates unfinished profiles."
+                payoff="You keep the system from finalizing you — at least for now."
+                onClick={() => resolveChoice("PULL_PLUG")}
+              />
+            </div>
+
+            <div className="mt-6 text-center text-[11px] text-white/46">
+              “You are not choosing what happens. You are choosing what gets written down.”
+            </div>
           </div>
-        </>
+        </div>
       )}
 
-      {/* ENDING */}
+      {/* ENDING (distinct story per choice) */}
       {phase === "ending" && save && (
-        <>
-          <h2 className="text-xl font-bold">OUTCOME</h2>
-          <p className="mt-3 text-white/70">
-            {save.choiceId === "ACCEPT" &&
-              "The system locks you in. You will be efficient — and visible."}
-            {save.choiceId === "STALL" &&
-              "The system recalculates. You remain a variable."}
-            {save.choiceId === "SPOOF" &&
-              "The system flags inconsistency. It will test you again."}
-            {save.choiceId === "PULL_PLUG" &&
-              "The system records absence. Silence is now your signature."}
-          </p>
+        <div className="mt-6 grid gap-5">
+          <SceneImage {...images.ending} />
 
-          <button className="mt-6" onClick={() => setPhase("poll")}>
-            See where you stand
-          </button>
-        </>
+          <div className="rounded-3xl border p-5" style={cardShell()}>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-[20px] md:text-[22px] font-extrabold text-white/95">EVALUATION COMPLETE</h2>
+              <div
+                className="rounded-full border px-3 py-1 text-[11px] font-extrabold"
+                style={{
+                  borderColor: choiceTone(save.choiceId).border,
+                  background: choiceTone(save.choiceId).glow,
+                  color: "rgba(255,255,255,0.86)",
+                }}
+              >
+                {save.profile.archetype.toUpperCase()}
+              </div>
+            </div>
+
+            <div className="mt-3 rounded-2xl border p-3" style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.04)" }}>
+              <div className="text-[12px] text-white/75">
+                Artifact: <span className="font-extrabold text-white/92">{save.artifact.name}</span>
+              </div>
+              <div className="mt-1 text-[11px] text-white/60">{save.artifact.desc}</div>
+            </div>
+
+            {/* Endings */}
+            {save.choiceId === "ACCEPT" && (
+              <div className="mt-4 grid gap-2 text-[13px] leading-relaxed text-white/72">
+                <p>The system acknowledges receipt. Not gratitude — proof.</p>
+                <p>Something tightens in the air, like a lock deciding you belong to it.</p>
+                <p>Your Basebot’s posture adjusts: micro-corrections, purposeful, practiced — as if it’s been waiting for instructions it can finally trust.</p>
+                <p className="text-white/80 font-semibold">You feel doors you didn’t see quietly become yours to open.</p>
+                <p>And then a second signature appears in the channel — not formatted like the first. Older. Watching.</p>
+                <p className="text-white/80 font-semibold">It doesn’t speak. It simply stays.</p>
+              </div>
+            )}
+
+            {save.choiceId === "STALL" && (
+              <div className="mt-4 grid gap-2 text-[13px] leading-relaxed text-white/72">
+                <p>You give it nothing. The system waits longer than it should.</p>
+                <p>Long enough that the waiting becomes communication.</p>
+                <p>Then it proceeds anyway — confidently — like it expected your refusal as part of the dataset.</p>
+                <p className="text-white/80 font-semibold">Your silence doesn’t protect you. It trains it.</p>
+                <p>For a moment, the UI renders a second layer beneath the first — a shape you can’t quite parse.</p>
+                <p className="text-white/80 font-semibold">A word flashes and vanishes: FRAGMENT.</p>
+              </div>
+            )}
+
+            {save.choiceId === "SPOOF" && (
+              <div className="mt-4 grid gap-2 text-[13px] leading-relaxed text-white/72">
+                <p>You feed it continuity with a seam in it. A lie shaped carefully like a truth.</p>
+                <p>The system accepts — for a heartbeat — and the room warms by half a degree, as if fooled.</p>
+                <p>Then the corners change. Like something turning its head to look directly at you.</p>
+                <p className="text-white/80 font-semibold">A second record appears alongside the first, perfectly neat.</p>
+                <p>Two versions of you now exist in its archive. The system doesn’t resolve contradictions — it weaponizes them.</p>
+                <p className="text-white/80 font-semibold">You are now interesting.</p>
+              </div>
+            )}
+
+            {save.choiceId === "PULL_PLUG" && (
+              <div className="mt-4 grid gap-2 text-[13px] leading-relaxed text-white/72">
+                <p>You sever the channel mid-evaluation.</p>
+                <p>The interface dies without ceremony. The room becomes quiet in a way that feels illegal.</p>
+                <p>Your Basebot remains awake — eyes open — suddenly alone with you.</p>
+                <p className="text-white/80 font-semibold">And that’s when you realize what the system never promised:</p>
+                <p>That it was the only thing listening.</p>
+                <p>In the silence, a warning renders without permission — not from what you unplugged, but from what survived the cut.</p>
+              </div>
+            )}
+
+            <div className="mt-5 rounded-2xl border px-3 py-3 text-[12px]" style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.20)" }}>
+              <div className="text-white/70">
+                Teaser — Episode Two:
+              </div>
+              <div className="mt-1 text-white/80 font-semibold">
+                Episode Two does not begin with a question.
+              </div>
+              <div className="mt-1 text-white/60">
+                It begins with an assumption — about what you are.
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setPhase("poll")}
+              className="mt-6 inline-flex items-center justify-center rounded-full px-5 py-2 text-[12px] font-extrabold transition active:scale-95 hover:brightness-110"
+              style={{
+                border: "1px solid rgba(255,255,255,0.12)",
+                background: "rgba(255,255,255,0.07)",
+                color: "rgba(255,255,255,0.86)",
+              }}
+            >
+              View global response
+            </button>
+          </div>
+        </div>
       )}
 
       {/* POLL */}
       {phase === "poll" && (
-        <>
-          <h2 className="text-xl font-bold">GLOBAL RESPONSE</h2>
-          {(() => {
-            const poll = loadPoll();
-            const total =
-              poll.ACCEPT + poll.STALL + poll.SPOOF + poll.PULL_PLUG || 1;
-            return (
-              <div className="mt-4 space-y-2">
-                {Object.entries(poll).map(([k, v]) => (
-                  <div key={k}>
-                    <div className="flex justify-between text-xs">
-                      <span>{k}</span>
-                      <span>{Math.round((v / total) * 100)}%</span>
-                    </div>
-                    <div className="h-2 rounded bg-white/10">
-                      <div
-                        className="h-2 rounded bg-white/60"
-                        style={{ width: `${(v / total) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            );
-          })()}
+        <div className="mt-6 grid gap-5">
+          <SceneImage {...images.poll} />
 
-          <div className="mt-6 flex gap-2">
-            <button onClick={onExit}>Return</button>
-            <button onClick={resetEpisode}>Reinitialize</button>
+          <div className="rounded-3xl border p-5" style={cardShell()}>
+            <h2 className="text-[20px] md:text-[22px] font-extrabold text-white/95">GLOBAL RESPONSE</h2>
+
+            <div className="mt-3 text-[13px] text-white/70">
+              Your decision is now part of the pattern.
+            </div>
+
+            {(() => {
+              const poll = loadPoll();
+              const total = poll.ACCEPT + poll.STALL + poll.SPOOF + poll.PULL_PLUG;
+
+              return (
+                <div className="mt-5 grid gap-3">
+                  <PollRow choiceId="ACCEPT" value={poll.ACCEPT} total={total} highlight={save?.choiceId === "ACCEPT"} />
+                  <PollRow choiceId="STALL" value={poll.STALL} total={total} highlight={save?.choiceId === "STALL"} />
+                  <PollRow choiceId="SPOOF" value={poll.SPOOF} total={total} highlight={save?.choiceId === "SPOOF"} />
+                  <PollRow choiceId="PULL_PLUG" value={poll.PULL_PLUG} total={total} highlight={save?.choiceId === "PULL_PLUG"} />
+                </div>
+              );
+            })()}
+
+            <div className="mt-5 text-[12px] text-white/45">
+              Tip: this poll is local-only right now. When you wire in your backend/on-chain save later, this can become global.
+            </div>
+
+            <div className="mt-6 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={onExit}
+                className="rounded-full px-5 py-2 text-[12px] font-extrabold transition active:scale-95 hover:brightness-110"
+                style={{
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "linear-gradient(90deg, rgba(56,189,248,0.85), rgba(168,85,247,0.70))",
+                  color: "rgba(2,6,23,0.98)",
+                }}
+              >
+                Return
+              </button>
+
+              <button
+                type="button"
+                onClick={resetEpisode}
+                className="rounded-full px-5 py-2 text-[12px] font-extrabold transition active:scale-95 hover:brightness-110"
+                style={{
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "rgba(255,255,255,0.06)",
+                  color: "rgba(255,255,255,0.86)",
+                }}
+              >
+                Reinitialize Session
+              </button>
+
+              <div className="text-[11px] text-white/45">
+                Episode Two does not begin with a question.
+              </div>
+            </div>
           </div>
-        </>
+        </div>
       )}
     </section>
   );
