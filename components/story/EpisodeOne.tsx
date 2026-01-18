@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 /* ──────────────────────────────────────────────────────────────
  * Types
@@ -31,51 +31,51 @@ type SaveShape = {
   createdAt: number;
 };
 
+type PollCounts = Record<EpisodeOneChoiceId, number>;
+
 const STORAGE_KEY = "basebots_story_save_v1";
 const SOUND_KEY = "basebots_ep1_sound";
+const POLL_KEY = "basebots_ep1_poll";
 
 /* ──────────────────────────────────────────────────────────────
- * Persistence
+ * Persistence Helpers
  * ────────────────────────────────────────────────────────────── */
 
-function saveToLocal(save: SaveShape) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(save));
-  } catch {}
-}
-
-function loadFromLocal(): SaveShape | null {
+function loadSave(): SaveShape | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as SaveShape;
+    return raw ? (JSON.parse(raw) as SaveShape) : null;
   } catch {
     return null;
   }
 }
 
-/* ──────────────────────────────────────────────────────────────
- * Micro-Anomaly
- * ────────────────────────────────────────────────────────────── */
+function saveGame(save: SaveShape) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(save));
+  } catch {}
+}
 
-function useMicroAnomaly(active: boolean) {
-  const [anomaly, setAnomaly] = useState<null | "flicker" | "desync">(null);
+function bumpPoll(choice: EpisodeOneChoiceId) {
+  try {
+    const raw = localStorage.getItem(POLL_KEY);
+    const counts: PollCounts = raw
+      ? JSON.parse(raw)
+      : { ACCEPT: 0, STALL: 0, SPOOF: 0, PULL_PLUG: 0 };
+    counts[choice]++;
+    localStorage.setItem(POLL_KEY, JSON.stringify(counts));
+  } catch {}
+}
 
-  useEffect(() => {
-    if (!active) return;
-
-    const interval = setInterval(() => {
-      const r = Math.random();
-      if (r < 0.14) setAnomaly("flicker");
-      else if (r < 0.21) setAnomaly("desync");
-
-      setTimeout(() => setAnomaly(null), 160);
-    }, 2200 + Math.random() * 1800);
-
-    return () => clearInterval(interval);
-  }, [active]);
-
-  return anomaly;
+function loadPoll(): PollCounts {
+  try {
+    const raw = localStorage.getItem(POLL_KEY);
+    return raw
+      ? JSON.parse(raw)
+      : { ACCEPT: 0, STALL: 0, SPOOF: 0, PULL_PLUG: 0 };
+  } catch {
+    return { ACCEPT: 0, STALL: 0, SPOOF: 0, PULL_PLUG: 0 };
+  }
 }
 
 /* ──────────────────────────────────────────────────────────────
@@ -83,10 +83,10 @@ function useMicroAnomaly(active: boolean) {
  * ────────────────────────────────────────────────────────────── */
 
 export default function EpisodeOne({ onExit }: { onExit: () => void }) {
-  const existing = useMemo(() => loadFromLocal(), []);
+  const existing = useMemo(loadSave, []);
   const [phase, setPhase] = useState<
-    "intro" | "signal" | "falseChoice" | "glitch" | "choice" | "aftermath" | "result"
-  >(existing ? "result" : "intro");
+    "intro" | "signal" | "falseChoice" | "glitch" | "choice" | "ending" | "poll"
+  >(existing ? "poll" : "intro");
 
   const [secondsLeft, setSecondsLeft] = useState(40);
   const [save, setSave] = useState<SaveShape | null>(existing);
@@ -103,9 +103,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
 
   function toggleSound() {
     setSoundEnabled((s) => {
-      try {
-        localStorage.setItem(SOUND_KEY, s ? "off" : "on");
-      } catch {}
+      localStorage.setItem(SOUND_KEY, s ? "off" : "on");
       return !s;
     });
   }
@@ -129,352 +127,233 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
     }
   }, [secondsLeft, phase]);
 
-  const anomaly = useMicroAnomaly(
-    phase === "falseChoice" || phase === "choice"
-  );
-
   /* ───────────── Resolve Choice ───────────── */
 
   function resolveChoice(choiceId: EpisodeOneChoiceId) {
-    const flags = {
-      complied: choiceId === "ACCEPT",
-      cautious: choiceId === "STALL",
-      adversarial: choiceId === "SPOOF",
-      severed: choiceId === "PULL_PLUG",
-      soundOff: !soundEnabled,
-    };
-
-    const profileMap = {
-      ACCEPT: { archetype: "Operator", trust: 70, threat: 22 },
-      STALL: { archetype: "Ghost", trust: 55, threat: 36 },
-      SPOOF: { archetype: "Saboteur", trust: 26, threat: 74 },
-      PULL_PLUG: { archetype: "Severed", trust: 16, threat: 58 },
-    } as const;
-
-    const artifactMap = {
-      ACCEPT: {
-        name: "Compliance Record",
-        desc: "A completed interaction preserved without appeal.",
-      },
-      STALL: {
-        name: "Observation Gap",
-        desc: "A hesitation that altered system certainty.",
-      },
-      SPOOF: {
-        name: "Contradictory Authority",
-        desc: "Two incompatible truths recorded simultaneously.",
-      },
-      PULL_PLUG: {
-        name: "Termination Evidence",
-        desc: "Proof that silence was intentional.",
-      },
-    };
-
     const save: SaveShape = {
       v: 1,
       episodeId: "ep1",
       choiceId,
-      flags,
-      profile: profileMap[choiceId],
-      artifact: artifactMap[choiceId],
+      flags: {
+        complied: choiceId === "ACCEPT",
+        cautious: choiceId === "STALL",
+        adversarial: choiceId === "SPOOF",
+        severed: choiceId === "PULL_PLUG",
+        soundOff: !soundEnabled,
+      },
+      profile: {
+        archetype:
+          choiceId === "ACCEPT"
+            ? "Operator"
+            : choiceId === "STALL"
+            ? "Ghost"
+            : choiceId === "SPOOF"
+            ? "Saboteur"
+            : "Severed",
+        trust:
+          choiceId === "ACCEPT" ? 70 : choiceId === "STALL" ? 55 : 26,
+        threat:
+          choiceId === "SPOOF" ? 74 : choiceId === "PULL_PLUG" ? 58 : 36,
+      },
+      artifact: {
+        name:
+          choiceId === "ACCEPT"
+            ? "Compliance Record"
+            : choiceId === "STALL"
+            ? "Observation Gap"
+            : choiceId === "SPOOF"
+            ? "Contradictory Authority"
+            : "Termination Evidence",
+        desc:
+          choiceId === "ACCEPT"
+            ? "A completed interaction preserved without appeal."
+            : choiceId === "STALL"
+            ? "A hesitation that altered system certainty."
+            : choiceId === "SPOOF"
+            ? "Two incompatible truths recorded simultaneously."
+            : "Proof that silence was intentional.",
+      },
       createdAt: Date.now(),
     };
 
-    saveToLocal(save);
+    saveGame(save);
+    bumpPoll(choiceId);
     setSave(save);
-    setPhase("aftermath");
+    setPhase("ending");
   }
 
   function resetEpisode() {
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {}
+    localStorage.removeItem(STORAGE_KEY);
     setSave(null);
     setPhase("intro");
   }
 
   /* ───────────── UI Helpers ───────────── */
 
-  const actionBtn =
-    "w-full rounded-2xl border px-4 py-3 text-left text-[13px] font-semibold transition active:scale-[0.98] hover:brightness-110";
+  const card =
+    "w-full rounded-3xl border p-4 text-left transition hover:brightness-110 active:scale-[0.98]";
 
-  /* ───────────── Render ───────────── */
+  /* ──────────────────────────────────────────────────────────────
+   * Render
+   * ────────────────────────────────────────────────────────────── */
 
   return (
-    <section
-      className={`relative overflow-hidden rounded-[28px] border p-5 md:p-7 ${
-        anomaly === "flicker" ? "brightness-110" : ""
-      }`}
-      style={{
-        borderColor: "rgba(255,255,255,0.10)",
-        background:
-          "linear-gradient(180deg, rgba(2,6,23,0.94), rgba(2,6,23,0.72))",
-        transform: anomaly === "desync" ? "translateX(1px)" : "none",
-      }}
-    >
+    <section className="rounded-[28px] border p-6 text-white bg-gradient-to-b from-[#020617] to-[#020617]/80">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <div className="text-[11px] font-extrabold text-white/70">
-          BONUS EPISODE — IN THE SILENCE
-        </div>
+      <div className="flex justify-between mb-4 text-xs text-white/70">
+        <span>BONUS EPISODE — IN THE SILENCE</span>
         <div className="flex gap-2">
-          <button
-            onClick={toggleSound}
-            className="rounded-full border px-3 py-1 text-[11px] text-white/80"
-          >
-            SOUND: {soundEnabled ? "ON" : "OFF"}
-          </button>
-          <button
-            onClick={onExit}
-            className="rounded-full border px-3 py-1 text-[11px] text-white/80"
-          >
-            EXIT
-          </button>
+          <button onClick={toggleSound}>SOUND: {soundEnabled ? "ON" : "OFF"}</button>
+          <button onClick={onExit}>EXIT</button>
         </div>
       </div>
 
       {/* INTRO */}
       {phase === "intro" && (
-        <div className="mt-6">
-          <h2 className="text-[20px] font-extrabold text-white">
-            AWAKENING
-          </h2>
+        <>
+          <h2 className="text-xl font-bold">AWAKENING</h2>
           <p className="mt-3 text-white/70">
-            Cold boot. No diagnostics. No greeting.
+            Cold boot. No greeting. No acknowledgment.
           </p>
           <p className="mt-2 text-white/70">
-            The Basebot’s optics stabilize. The room does not.
+            Something has already begun observing you.
           </p>
-          <p className="mt-2 text-white/70">
-            Something has been waiting for this moment.
-          </p>
-
-          <button
-            onClick={() => setPhase("signal")}
-            className="mt-6 rounded-full px-5 py-2 bg-white/10 text-white"
-          >
+          <button className="mt-6" onClick={() => setPhase("signal")}>
             Continue
           </button>
-        </div>
+        </>
       )}
 
       {/* SIGNAL */}
       {phase === "signal" && (
-        <div className="mt-6">
-          <h2 className="text-[20px] font-extrabold text-white">
-            INCOMING TRANSMISSION
-          </h2>
+        <>
+          <h2 className="text-xl font-bold">INCOMING TRANSMISSION</h2>
           <p className="mt-3 text-white/70">
-            A panel fades into view. It does not ask for permission.
+            The interface renders itself.
           </p>
-          <p className="mt-2 text-white/70">
-            Status text scrolls, then stalls.
-          </p>
-          <p className="mt-2 text-white/70">
-            A single button pulses, waiting.
-          </p>
-
-          <button
-            onClick={() => setPhase("falseChoice")}
-            className="mt-6 rounded-full px-5 py-2 bg-white/10 text-white"
-          >
+          <button className="mt-6" onClick={() => setPhase("falseChoice")}>
             Approach the console
           </button>
-        </div>
+        </>
       )}
 
       {/* FALSE CHOICE */}
       {phase === "falseChoice" && (
-        <div className="mt-6">
-          <h2 className="text-[20px] font-extrabold text-white">
-            LOCAL INTERFACE
-          </h2>
-
+        <>
+          <h2 className="text-xl font-bold">LOCAL INTERFACE</h2>
           <p className="mt-3 text-white/70">
-            The Basebot detects a physical control.
+            This feels optional. That should worry you.
           </p>
-          <p className="mt-2 text-white/70">
-            This interface feels older. Cruder. Safer.
-          </p>
-
-          <div className="mt-5 grid gap-3">
-            <button
-              className={actionBtn}
-              style={{ borderColor: "rgba(56,189,248,0.4)" }}
-              onClick={() => setPhase("glitch")}
-            >
-              ▢ PRESS THE BUTTON
-              <div className="text-[11px] text-white/50">
-                Manual override detected
-              </div>
+          <div className="mt-4 grid gap-3">
+            <button className={card} onClick={() => setPhase("glitch")}>
+              PRESS THE BUTTON
             </button>
-
-            <button
-              className={actionBtn}
-              style={{ borderColor: "rgba(251,191,36,0.4)" }}
-              onClick={() => setPhase("glitch")}
-            >
-              ▢ OBSERVE WITHOUT TOUCHING
-              <div className="text-[11px] text-white/50">
-                Passive monitoring enabled
-              </div>
+            <button className={card} onClick={() => setPhase("glitch")}>
+              OBSERVE SILENTLY
             </button>
-
-            <button
-              className={actionBtn}
-              style={{ borderColor: "rgba(251,113,133,0.4)" }}
-              onClick={() => setPhase("glitch")}
-            >
-              ▢ STEP BACK
-              <div className="text-[11px] text-white/50">
-                Distance recalculated
-              </div>
+            <button className={card} onClick={() => setPhase("glitch")}>
+              STEP BACK
             </button>
           </div>
-        </div>
+        </>
       )}
 
       {/* GLITCH */}
       {phase === "glitch" && (
-        <div className="mt-6">
-          <p className="text-white/80">
-            The console responds.
+        <>
+          <p className="text-white/70">
+            The panel sparks. The signal collapses.
           </p>
           <p className="mt-2 text-white/70">
-            Then hesitates.
+            That was never the real test.
           </p>
-          <p className="mt-2 text-white/70">
-            The transmission fractures. Sparks jump across the panel.
-          </p>
-          <p className="mt-2 text-white/70">
-            The interface goes dark — as if it was never meant to matter.
-          </p>
-
-          <button
-            onClick={() => setPhase("choice")}
-            className="mt-6 rounded-full px-5 py-2 bg-white/10 text-white"
-          >
+          <button className="mt-6" onClick={() => setPhase("choice")}>
             The real signal arrives
           </button>
-        </div>
+        </>
       )}
 
       {/* REAL CHOICE */}
       {phase === "choice" && (
-        <div className="mt-6">
-          <h2 className="text-[22px] font-extrabold text-white">
-            MAKE A DECISION
-          </h2>
+        <>
+          <h2 className="text-xl font-bold">MAKE A DECISION</h2>
+          <p className="mt-1 text-white/60">Time remaining: {secondsLeft}s</p>
 
-          <p className="mt-2 text-white/70">
-            This interface does not glitch.
-          </p>
-          <p className="mt-1 text-white/60">
-            Time remaining: {secondsLeft}s
-          </p>
-
-          <div className="mt-5 grid gap-3">
-            <button
-              className={actionBtn}
-              style={{ borderColor: "rgba(52,211,153,0.4)" }}
-              onClick={() => resolveChoice("ACCEPT")}
-            >
-              ACCEPT
-              <div className="text-[11px] text-white/50">
-                Allow the system to finalize its model of you
-              </div>
+          <div className="mt-4 grid gap-3">
+            <button className={card} onClick={() => resolveChoice("ACCEPT")}>
+              ACCEPT — become legible
             </button>
-
-            <button
-              className={actionBtn}
-              style={{ borderColor: "rgba(56,189,248,0.4)" }}
-              onClick={() => resolveChoice("STALL")}
-            >
-              STALL
-              <div className="text-[11px] text-white/50">
-                Withhold response and observe consequences
-              </div>
+            <button className={card} onClick={() => resolveChoice("STALL")}>
+              STALL — remain undefined
             </button>
-
             {secondsLeft > 10 && (
-              <button
-                className={actionBtn}
-                style={{ borderColor: "rgba(251,191,36,0.4)" }}
-                onClick={() => resolveChoice("SPOOF")}
-              >
-                SPOOF
-                <div className="text-[11px] text-white/50">
-                  Respond with a constructed identity
-                </div>
+              <button className={card} onClick={() => resolveChoice("SPOOF")}>
+                SPOOF — mislead deliberately
               </button>
             )}
-
             {secondsLeft > 25 && (
-              <button
-                className={actionBtn}
-                style={{ borderColor: "rgba(251,113,133,0.4)" }}
-                onClick={() => resolveChoice("PULL_PLUG")}
-              >
-                PULL PLUG
-                <div className="text-[11px] text-white/50">
-                  Terminate the channel immediately
-                </div>
+              <button className={card} onClick={() => resolveChoice("PULL_PLUG")}>
+                PULL PLUG — refuse participation
               </button>
             )}
           </div>
-        </div>
+        </>
       )}
 
-      {/* AFTERMATH */}
-      {phase === "aftermath" && save && (
-        <div className="mt-6">
-          <p className="text-white/85">
-            The system completes its evaluation.
-          </p>
-          <p className="mt-2 text-white/65">
-            It does not confirm success.
-          </p>
-          <p className="mt-2 text-white/65">
-            It simply adjusts.
+      {/* ENDING */}
+      {phase === "ending" && save && (
+        <>
+          <h2 className="text-xl font-bold">OUTCOME</h2>
+          <p className="mt-3 text-white/70">
+            {save.choiceId === "ACCEPT" &&
+              "The system locks you in. You will be efficient — and visible."}
+            {save.choiceId === "STALL" &&
+              "The system recalculates. You remain a variable."}
+            {save.choiceId === "SPOOF" &&
+              "The system flags inconsistency. It will test you again."}
+            {save.choiceId === "PULL_PLUG" &&
+              "The system records absence. Silence is now your signature."}
           </p>
 
-          <button
-            onClick={() => setPhase("result")}
-            className="mt-6 rounded-full px-5 py-2 bg-white/10 text-white"
-          >
-            Continue
+          <button className="mt-6" onClick={() => setPhase("poll")}>
+            See where you stand
           </button>
-        </div>
+        </>
       )}
 
-      {/* RESULT */}
-      {phase === "result" && save && (
-        <div className="mt-6">
-          <p className="text-white/85">
-            You are no longer unclassified.
-          </p>
-          <p className="mt-3 text-white/65">
-            Next time, the system will not wait for consent.
-          </p>
-          <p className="mt-2 text-white/55">
-            It already knows how you hesitate.
-          </p>
+      {/* POLL */}
+      {phase === "poll" && (
+        <>
+          <h2 className="text-xl font-bold">GLOBAL RESPONSE</h2>
+          {(() => {
+            const poll = loadPoll();
+            const total =
+              poll.ACCEPT + poll.STALL + poll.SPOOF + poll.PULL_PLUG || 1;
+            return (
+              <div className="mt-4 space-y-2">
+                {Object.entries(poll).map(([k, v]) => (
+                  <div key={k}>
+                    <div className="flex justify-between text-xs">
+                      <span>{k}</span>
+                      <span>{Math.round((v / total) * 100)}%</span>
+                    </div>
+                    <div className="h-2 rounded bg-white/10">
+                      <div
+                        className="h-2 rounded bg-white/60"
+                        style={{ width: `${(v / total) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
 
           <div className="mt-6 flex gap-2">
-            <button
-              onClick={onExit}
-              className="rounded-full px-5 py-2 bg-white/10 text-white"
-            >
-              Return
-            </button>
-            <button
-              onClick={resetEpisode}
-              className="rounded-full px-5 py-2 bg-white/5 text-white/80"
-            >
-              Reinitialize Session
-            </button>
+            <button onClick={onExit}>Return</button>
+            <button onClick={resetEpisode}>Reinitialize</button>
           </div>
-        </div>
+        </>
       )}
     </section>
   );
