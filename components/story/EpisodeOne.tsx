@@ -66,11 +66,11 @@ function useMicroAnomaly(active: boolean) {
 
     const interval = setInterval(() => {
       const r = Math.random();
-      if (r < 0.15) setAnomaly("flicker");
-      else if (r < 0.22) setAnomaly("desync");
+      if (r < 0.14) setAnomaly("flicker");
+      else if (r < 0.21) setAnomaly("desync");
 
-      setTimeout(() => setAnomaly(null), 180);
-    }, 2200 + Math.random() * 2000);
+      setTimeout(() => setAnomaly(null), 160);
+    }, 2200 + Math.random() * 1800);
 
     return () => clearInterval(interval);
   }, [active]);
@@ -85,13 +85,13 @@ function useMicroAnomaly(active: boolean) {
 export default function EpisodeOne({ onExit }: { onExit: () => void }) {
   const existing = useMemo(() => loadFromLocal(), []);
   const [phase, setPhase] = useState<
-    "intro" | "signal" | "choice" | "aftermath" | "result"
+    "intro" | "signal" | "falseChoice" | "glitch" | "choice" | "aftermath" | "result"
   >(existing ? "result" : "intro");
 
   const [secondsLeft, setSecondsLeft] = useState(40);
   const [save, setSave] = useState<SaveShape | null>(existing);
 
-  /* ───────────── Sound (Episode-Scoped) ───────────── */
+  /* ───────────── Sound ───────────── */
 
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
     try {
@@ -110,7 +110,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
     });
   }
 
-  /* ───────────── Timer Logic ───────────── */
+  /* ───────────── Timer ───────────── */
 
   useEffect(() => {
     if (phase !== "choice") return;
@@ -129,42 +129,9 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
     }
   }, [secondsLeft, phase]);
 
-  /* ───────────── Micro-Anomaly ───────────── */
-
-  const anomaly = useMicroAnomaly(phase === "choice");
-
-  /* ───────────── Story Content ───────────── */
-
-  const scene = {
-    intro: {
-      heading: "BONUS EPISODE // IN THE SILENCE",
-      body: [
-        "Cold boot.",
-        "No sound. No confirmation.",
-        "Your Basebot opens its eyes in a space defined only by permission.",
-        "The system does not greet you.",
-        "It registers that you are present — and listening.",
-      ],
-      prompt: "Continue",
-    },
-    signal: {
-      heading: "UNSOLICITED DIRECTIVE",
-      body: [
-        "A signal arrives without transit.",
-        "It behaves as if you were already expected.",
-        "Controls render that you did not request.",
-        "There is a delay between your thought and the cursor.",
-        "The delay is intentional.",
-      ],
-      prompt: "Open the panel",
-    },
-    choice: {
-      heading: "MAKE A DECISION",
-      sub: "40 seconds. Options will be withdrawn as certainty increases.",
-      warning:
-        "If no action is taken, the system will finalize a choice on your behalf.",
-    },
-  };
+  const anomaly = useMicroAnomaly(
+    phase === "falseChoice" || phase === "choice"
+  );
 
   /* ───────────── Resolve Choice ───────────── */
 
@@ -191,15 +158,15 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
       },
       STALL: {
         name: "Observation Gap",
-        desc: "A measurable delay that altered system confidence.",
+        desc: "A hesitation that altered system certainty.",
       },
       SPOOF: {
-        name: "Inconsistent Authority",
-        desc: "Two truths competing for the same moment.",
+        name: "Contradictory Authority",
+        desc: "Two incompatible truths recorded simultaneously.",
       },
       PULL_PLUG: {
         name: "Termination Evidence",
-        desc: "Proof that silence was deliberate.",
+        desc: "Proof that silence was intentional.",
       },
     };
 
@@ -218,8 +185,6 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
     setPhase("aftermath");
   }
 
-  /* ───────────── Reset ───────────── */
-
   function resetEpisode() {
     try {
       localStorage.removeItem(STORAGE_KEY);
@@ -228,165 +193,285 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
     setPhase("intro");
   }
 
+  /* ───────────── UI Helpers ───────────── */
+
+  const actionBtn =
+    "w-full rounded-2xl border px-4 py-3 text-left text-[13px] font-semibold transition active:scale-[0.98] hover:brightness-110";
+
   /* ───────────── Render ───────────── */
 
   return (
     <section
-      className={`relative overflow-hidden rounded-[28px] border p-5 md:p-7 transition ${
+      className={`relative overflow-hidden rounded-[28px] border p-5 md:p-7 ${
         anomaly === "flicker" ? "brightness-110" : ""
       }`}
       style={{
         borderColor: "rgba(255,255,255,0.10)",
-        background: "linear-gradient(180deg, rgba(2,6,23,0.94), rgba(2,6,23,0.70))",
+        background:
+          "linear-gradient(180deg, rgba(2,6,23,0.94), rgba(2,6,23,0.72))",
         transform: anomaly === "desync" ? "translateX(1px)" : "none",
       }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="text-[11px] font-extrabold tracking-wide text-white/70">
-          IN THE SILENCE
+      <div className="flex justify-between items-center">
+        <div className="text-[11px] font-extrabold text-white/70">
+          BONUS EPISODE — IN THE SILENCE
         </div>
-
-        <div className="flex items-center gap-2">
+        <div className="flex gap-2">
           <button
             onClick={toggleSound}
-            className="rounded-full border px-3 py-1 text-[11px] font-extrabold text-white/80"
+            className="rounded-full border px-3 py-1 text-[11px] text-white/80"
           >
             SOUND: {soundEnabled ? "ON" : "OFF"}
           </button>
-
           <button
             onClick={onExit}
-            className="rounded-full border px-3 py-1 text-[11px] font-extrabold text-white/80"
+            className="rounded-full border px-3 py-1 text-[11px] text-white/80"
           >
             EXIT
           </button>
         </div>
       </div>
 
-      {/* Intro / Signal */}
-      {(phase === "intro" || phase === "signal") && (
+      {/* INTRO */}
+      {phase === "intro" && (
         <div className="mt-6">
           <h2 className="text-[20px] font-extrabold text-white">
-            {phase === "intro" ? scene.intro.heading : scene.signal.heading}
+            AWAKENING
           </h2>
-
-          <div className="mt-3 grid gap-2">
-            {(phase === "intro" ? scene.intro.body : scene.signal.body).map(
-              (l, i) => (
-                <p key={i} className="text-[14px] text-white/70">
-                  {l}
-                </p>
-              )
-            )}
-          </div>
-
-          <button
-            onClick={() =>
-              setPhase(phase === "intro" ? "signal" : "choice")
-            }
-            className="mt-6 rounded-full px-5 py-2 text-[12px] bg-white/10 text-white"
-          >
-            {phase === "intro" ? scene.intro.prompt : scene.signal.prompt}
-          </button>
-        </div>
-      )}
-
-      {/* Choice */}
-      {phase === "choice" && (
-        <div className="mt-6">
-          <h2 className="text-[22px] font-extrabold text-white">
-            {scene.choice.heading}
-          </h2>
-
-          <p className="mt-1 text-[13px] text-white/70">
-            {scene.choice.sub}
+          <p className="mt-3 text-white/70">
+            Cold boot. No diagnostics. No greeting.
           </p>
-
-          <p className="mt-3 text-[12px] text-red-300">
-            {scene.choice.warning}
+          <p className="mt-2 text-white/70">
+            The Basebot’s optics stabilize. The room does not.
           </p>
-
-          <p className="mt-4 text-[12px] text-white/80">
-            Time Remaining: {secondsLeft}s
-          </p>
-
-          <div className="mt-5 grid gap-3">
-            <button onClick={() => resolveChoice("ACCEPT")}>
-              ACCEPT — allow the system to proceed with you accounted for
-            </button>
-
-            <button onClick={() => resolveChoice("STALL")}>
-              STALL — remain silent and observe what changes
-            </button>
-
-            {secondsLeft > 10 && (
-              <button onClick={() => resolveChoice("SPOOF")}>
-                SPOOF — respond with something that is not you
-              </button>
-            )}
-
-            {secondsLeft > 25 && (
-              <button onClick={() => resolveChoice("PULL_PLUG")}>
-                PULL PLUG — terminate the channel immediately
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Aftermath */}
-      {phase === "aftermath" && save && (
-        <div className="mt-6">
-          <p className="text-[15px] text-white/85">
-            The system finishes processing what you allowed it to see.
-          </p>
-
-          <p className="mt-2 text-[13px] text-white/65">
-            Your response altered its internal confidence.
-          </p>
-
-          <p className="mt-4 text-[12px] text-white/60">
-            Some future interactions will now assume intent.
+          <p className="mt-2 text-white/70">
+            Something has been waiting for this moment.
           </p>
 
           <button
-            className="mt-6 rounded-full px-5 py-2 text-[12px] bg-white/10 text-white"
-            onClick={() => setPhase("result")}
+            onClick={() => setPhase("signal")}
+            className="mt-6 rounded-full px-5 py-2 bg-white/10 text-white"
           >
             Continue
           </button>
         </div>
       )}
 
-      {/* Result + Teaser */}
+      {/* SIGNAL */}
+      {phase === "signal" && (
+        <div className="mt-6">
+          <h2 className="text-[20px] font-extrabold text-white">
+            INCOMING TRANSMISSION
+          </h2>
+          <p className="mt-3 text-white/70">
+            A panel fades into view. It does not ask for permission.
+          </p>
+          <p className="mt-2 text-white/70">
+            Status text scrolls, then stalls.
+          </p>
+          <p className="mt-2 text-white/70">
+            A single button pulses, waiting.
+          </p>
+
+          <button
+            onClick={() => setPhase("falseChoice")}
+            className="mt-6 rounded-full px-5 py-2 bg-white/10 text-white"
+          >
+            Approach the console
+          </button>
+        </div>
+      )}
+
+      {/* FALSE CHOICE */}
+      {phase === "falseChoice" && (
+        <div className="mt-6">
+          <h2 className="text-[20px] font-extrabold text-white">
+            LOCAL INTERFACE
+          </h2>
+
+          <p className="mt-3 text-white/70">
+            The Basebot detects a physical control.
+          </p>
+          <p className="mt-2 text-white/70">
+            This interface feels older. Cruder. Safer.
+          </p>
+
+          <div className="mt-5 grid gap-3">
+            <button
+              className={actionBtn}
+              style={{ borderColor: "rgba(56,189,248,0.4)" }}
+              onClick={() => setPhase("glitch")}
+            >
+              ▢ PRESS THE BUTTON
+              <div className="text-[11px] text-white/50">
+                Manual override detected
+              </div>
+            </button>
+
+            <button
+              className={actionBtn}
+              style={{ borderColor: "rgba(251,191,36,0.4)" }}
+              onClick={() => setPhase("glitch")}
+            >
+              ▢ OBSERVE WITHOUT TOUCHING
+              <div className="text-[11px] text-white/50">
+                Passive monitoring enabled
+              </div>
+            </button>
+
+            <button
+              className={actionBtn}
+              style={{ borderColor: "rgba(251,113,133,0.4)" }}
+              onClick={() => setPhase("glitch")}
+            >
+              ▢ STEP BACK
+              <div className="text-[11px] text-white/50">
+                Distance recalculated
+              </div>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* GLITCH */}
+      {phase === "glitch" && (
+        <div className="mt-6">
+          <p className="text-white/80">
+            The console responds.
+          </p>
+          <p className="mt-2 text-white/70">
+            Then hesitates.
+          </p>
+          <p className="mt-2 text-white/70">
+            The transmission fractures. Sparks jump across the panel.
+          </p>
+          <p className="mt-2 text-white/70">
+            The interface goes dark — as if it was never meant to matter.
+          </p>
+
+          <button
+            onClick={() => setPhase("choice")}
+            className="mt-6 rounded-full px-5 py-2 bg-white/10 text-white"
+          >
+            The real signal arrives
+          </button>
+        </div>
+      )}
+
+      {/* REAL CHOICE */}
+      {phase === "choice" && (
+        <div className="mt-6">
+          <h2 className="text-[22px] font-extrabold text-white">
+            MAKE A DECISION
+          </h2>
+
+          <p className="mt-2 text-white/70">
+            This interface does not glitch.
+          </p>
+          <p className="mt-1 text-white/60">
+            Time remaining: {secondsLeft}s
+          </p>
+
+          <div className="mt-5 grid gap-3">
+            <button
+              className={actionBtn}
+              style={{ borderColor: "rgba(52,211,153,0.4)" }}
+              onClick={() => resolveChoice("ACCEPT")}
+            >
+              ACCEPT
+              <div className="text-[11px] text-white/50">
+                Allow the system to finalize its model of you
+              </div>
+            </button>
+
+            <button
+              className={actionBtn}
+              style={{ borderColor: "rgba(56,189,248,0.4)" }}
+              onClick={() => resolveChoice("STALL")}
+            >
+              STALL
+              <div className="text-[11px] text-white/50">
+                Withhold response and observe consequences
+              </div>
+            </button>
+
+            {secondsLeft > 10 && (
+              <button
+                className={actionBtn}
+                style={{ borderColor: "rgba(251,191,36,0.4)" }}
+                onClick={() => resolveChoice("SPOOF")}
+              >
+                SPOOF
+                <div className="text-[11px] text-white/50">
+                  Respond with a constructed identity
+                </div>
+              </button>
+            )}
+
+            {secondsLeft > 25 && (
+              <button
+                className={actionBtn}
+                style={{ borderColor: "rgba(251,113,133,0.4)" }}
+                onClick={() => resolveChoice("PULL_PLUG")}
+              >
+                PULL PLUG
+                <div className="text-[11px] text-white/50">
+                  Terminate the channel immediately
+                </div>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* AFTERMATH */}
+      {phase === "aftermath" && save && (
+        <div className="mt-6">
+          <p className="text-white/85">
+            The system completes its evaluation.
+          </p>
+          <p className="mt-2 text-white/65">
+            It does not confirm success.
+          </p>
+          <p className="mt-2 text-white/65">
+            It simply adjusts.
+          </p>
+
+          <button
+            onClick={() => setPhase("result")}
+            className="mt-6 rounded-full px-5 py-2 bg-white/10 text-white"
+          >
+            Continue
+          </button>
+        </div>
+      )}
+
+      {/* RESULT */}
       {phase === "result" && save && (
         <div className="mt-6">
-          <p className="text-[15px] text-white/85">
+          <p className="text-white/85">
             You are no longer unclassified.
           </p>
-
-          <p className="mt-3 text-[13px] text-white/65">
-            In the next episode, the system will no longer wait for you to respond.
+          <p className="mt-3 text-white/65">
+            Next time, the system will not wait for consent.
           </p>
-
-          <p className="mt-2 text-[12px] text-white/55">
-            It will act first — and explain later.
+          <p className="mt-2 text-white/55">
+            It already knows how you hesitate.
           </p>
 
           <div className="mt-6 flex gap-2">
             <button
               onClick={onExit}
-              className="rounded-full px-5 py-2 text-[12px] bg-white/10 text-white"
+              className="rounded-full px-5 py-2 bg-white/10 text-white"
             >
               Return
             </button>
-
             <button
               onClick={resetEpisode}
-              className="rounded-full px-5 py-2 text-[12px] bg-white/5 text-white/80"
+              className="rounded-full px-5 py-2 bg-white/5 text-white/80"
             >
-              Start Over
+              Reinitialize Session
             </button>
           </div>
         </div>
