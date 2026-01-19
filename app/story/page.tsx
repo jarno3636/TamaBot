@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { useAccount, usePublicClient } from "wagmi";
 
 import EpisodeOne from "@/components/story/EpisodeOne";
 import EpisodeTwo from "@/components/story/EpisodeTwo";
@@ -8,6 +9,8 @@ import EpisodeThree from "@/components/story/EpisodeThree";
 import EpisodeFour from "@/components/story/EpisodeFour";
 import EpisodeFive from "@/components/story/EpisodeFive";
 import PrologueSilenceInDarkness from "@/components/story/PrologueSilenceInDarkness";
+
+import { BASEBOTS } from "@/lib/abi";
 
 /* ─────────────────────────────────────────────
  * Types
@@ -37,11 +40,16 @@ type EpisodeCard = {
   desc: string;
   unlocked: boolean;
   posterSrc: string;
+  requiresNFT?: boolean;
 };
 
 /* ───────────────────────────────────────────── */
 
 const UNLOCK_KEY = "basebots_bonus_unlock";
+const NFT_KEY = "basebots_has_nft";
+
+// 👉 CHANGE THIS to your real mint page
+const MINT_URL = "https://mint.basebots.xyz";
 
 function has(key: string) {
   try {
@@ -55,18 +63,62 @@ export default function StoryPage() {
   const [mode, setMode] = useState<Mode>("hub");
   const [tick, setTick] = useState(0);
 
-  /* re-evaluate gates periodically */
+  const { address, isConnected, chain } = useAccount();
+  const publicClient = usePublicClient();
+
+  /* ─────────────────────────────────────────────
+   * Periodic re-evaluation (localStorage gates)
+   * ───────────────────────────────────────────── */
+
   useEffect(() => {
     const t = setInterval(() => setTick((n) => n + 1), 500);
     return () => clearInterval(t);
   }, []);
 
   /* ─────────────────────────────────────────────
+   * REAL NFT OWNERSHIP CHECK (Base mainnet)
+   * ───────────────────────────────────────────── */
+
+  useEffect(() => {
+    if (!isConnected || !address || !publicClient) return;
+    if (chain?.id !== 8453) return;
+
+    let cancelled = false;
+
+    async function checkNFT() {
+      try {
+        const balance = await publicClient.readContract({
+          address: BASEBOTS.address,
+          abi: BASEBOTS.abi,
+          functionName: "balanceOf",
+          args: [address],
+        });
+
+        if (cancelled) return;
+
+        if (balance > 0n) {
+          localStorage.setItem(NFT_KEY, "true");
+        } else {
+          localStorage.removeItem(NFT_KEY);
+        }
+      } catch (err) {
+        console.error("Basebots NFT check failed:", err);
+      }
+    }
+
+    checkNFT();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [address, isConnected, chain?.id, publicClient]);
+
+  /* ─────────────────────────────────────────────
    * Gate checks
    * ───────────────────────────────────────────── */
 
   const prologueUnlocked = has(UNLOCK_KEY);
-  const hasNFT = has("basebots_has_nft"); // stub for now
+  const hasNFT = has(NFT_KEY);
 
   const ep1Done = has("basebots_ep1_done");
   const ep2Done = has("basebots_ep2_done");
@@ -101,6 +153,7 @@ export default function StoryPage() {
         tagline: "Consequences begin to stack.",
         desc: "External systems respond.",
         unlocked: ep1Done && hasNFT,
+        requiresNFT: true,
         posterSrc: "/story/ep2.png",
       },
       {
@@ -125,10 +178,11 @@ export default function StoryPage() {
         tagline: "The city accepts or rejects you.",
         desc: "Surface access granted.",
         unlocked: ep4Done && hasNFT,
+        requiresNFT: true,
         posterSrc: "/story/ep5.png",
       },
     ],
-    [tick]
+    [tick, hasNFT, ep1Done, ep2Done, ep3Done, ep4Done, prologueUnlocked]
   );
 
   /* ─────────────────────────────────────────────
@@ -174,129 +228,64 @@ export default function StoryPage() {
             boxShadow: "0 40px 140px rgba(0,0,0,0.78)",
           }}
         >
-          {/* ambient grid */}
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0 opacity-[0.14]"
-            style={{
-              backgroundImage:
-                "linear-gradient(rgba(255,255,255,0.10) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.10) 1px, transparent 1px)",
-              backgroundSize: "56px 56px",
-              maskImage: "radial-gradient(800px 360px at 50% 20%, black 40%, transparent 72%)",
-              WebkitMaskImage:
-                "radial-gradient(800px 360px at 50% 20%, black 40%, transparent 72%)",
-            }}
-          />
+          <h1 className="text-2xl md:text-4xl font-extrabold tracking-tight">
+            BASEBOTS // STORY MODE
+          </h1>
 
-          <div className="relative">
-            <div
-              className="inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold"
-              style={{
-                borderColor: "rgba(255,255,255,0.14)",
-                background: "rgba(255,255,255,0.06)",
-                color: "rgba(255,255,255,0.78)",
-              }}
-            >
-              Narrative Cartridge
-            </div>
+          <p className="mt-3 max-w-2xl text-sm md:text-base text-white/70">
+            The system does not guide you. It records you.
+          </p>
 
-            <h1 className="mt-4 text-2xl md:text-4xl font-extrabold tracking-tight">
-              BASEBOTS // STORY MODE
-            </h1>
+          <div className="mt-8 grid gap-4 md:grid-cols-2">
+            {episodes.map((ep) => (
+              <div
+                key={ep.id}
+                className="relative overflow-hidden rounded-3xl border p-5"
+                style={{
+                  borderColor: ep.unlocked
+                    ? "rgba(56,189,248,0.35)"
+                    : "rgba(255,255,255,0.10)",
+                  background: "rgba(0,0,0,0.22)",
+                  opacity: ep.unlocked ? 1 : 0.6,
+                }}
+              >
+                <img
+                  src={ep.posterSrc}
+                  alt={ep.title}
+                  className="rounded-2xl mb-4 w-full h-[180px] object-cover"
+                />
 
-            <p className="mt-3 max-w-2xl text-sm md:text-base leading-relaxed text-white/70">
-              The system does not guide you. It records you.
-            </p>
+                <div className="text-lg font-extrabold">{ep.title}</div>
+                <div className="text-sm text-white/70">{ep.tagline}</div>
+                <p className="mt-2 text-xs text-white/60">{ep.desc}</p>
 
-            {/* Episodes */}
-            <div className="mt-8 grid gap-4 md:grid-cols-2">
-              {episodes.map((ep) => (
-                <div
-                  key={ep.id}
-                  className="relative overflow-hidden rounded-3xl border"
-                  style={{
-                    borderColor: ep.unlocked
-                      ? "rgba(56,189,248,0.35)"
-                      : "rgba(255,255,255,0.10)",
-                    background: "rgba(0,0,0,0.22)",
-                    boxShadow: "0 30px 110px rgba(0,0,0,0.60)",
-                    opacity: ep.unlocked ? 1 : 0.65,
-                  }}
-                >
-                  <div className="relative p-5 md:p-6">
-                    {/* Poster */}
-                    <div
-                      className="relative overflow-hidden rounded-2xl border"
-                      style={{ borderColor: "rgba(255,255,255,0.10)" }}
+                <div className="mt-4">
+                  {ep.unlocked ? (
+                    <button
+                      onClick={() => setMode(ep.id)}
+                      className="rounded-full px-5 py-2 text-xs font-extrabold bg-gradient-to-r from-sky-400 to-violet-500 text-black"
                     >
-                      <img
-                        src={ep.posterSrc}
-                        alt={ep.title}
-                        style={{
-                          width: "100%",
-                          height: 180,
-                          objectFit: "cover",
-                          display: "block",
-                        }}
-                      />
-                      <div
-                        className="absolute inset-0"
-                        style={{
-                          background:
-                            "linear-gradient(180deg, rgba(2,6,23,0.05), rgba(2,6,23,0.85))",
-                        }}
-                      />
-                    </div>
-
-                    <div className="mt-4">
-                      <div className="text-[18px] md:text-[20px] font-extrabold">
-                        {ep.title}
-                      </div>
-                      <div className="mt-1 text-[12px] text-white/70">
-                        {ep.tagline}
-                      </div>
-                      <p className="mt-3 text-[12px] leading-relaxed text-white/66">
-                        {ep.desc}
-                      </p>
-                    </div>
-
-                    <div className="mt-4">
-                      {ep.unlocked ? (
-                        <button
-                          type="button"
-                          onClick={() => setMode(ep.id)}
-                          className="inline-flex items-center justify-center rounded-full px-5 py-2 text-[12px] font-extrabold transition active:scale-95 hover:brightness-110"
-                          style={{
-                            border: "1px solid rgba(255,255,255,0.12)",
-                            background:
-                              "linear-gradient(90deg, rgba(56,189,248,0.90), rgba(168,85,247,0.70))",
-                            color: "rgba(2,6,23,0.98)",
-                            boxShadow: "0 16px 60px rgba(56,189,248,0.14)",
-                          }}
-                        >
-                          ▶ Insert NFT Cartridge
-                        </button>
-                      ) : (
-                        <div
-                          className="inline-flex items-center rounded-full border px-4 py-1.5 text-[11px] font-semibold"
-                          style={{
-                            borderColor: "rgba(255,255,255,0.12)",
-                            background: "rgba(255,255,255,0.06)",
-                            color: "rgba(255,255,255,0.62)",
-                          }}
-                        >
-                          Locked
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                      ▶ Enter
+                    </button>
+                  ) : ep.requiresNFT ? (
+                    <a
+                      href={MINT_URL}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center rounded-full px-4 py-2 text-xs font-extrabold border border-white/20 bg-white/5 hover:bg-white/10"
+                    >
+                      Mint Basebot to Continue
+                    </a>
+                  ) : (
+                    <div className="text-xs text-white/50">Locked</div>
+                  )}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
+          </div>
 
-            <div className="mt-8 text-center text-[11px] text-white/46">
-              Some records only respond when the room changes.
-            </div>
+          <div className="mt-8 text-center text-xs text-white/40">
+            Some records only respond when the room changes.
           </div>
         </div>
       </div>
