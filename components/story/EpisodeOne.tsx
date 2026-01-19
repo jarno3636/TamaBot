@@ -38,6 +38,9 @@ const STORAGE_KEY = "basebots_story_save_v1";
 const SOUND_KEY = "basebots_ep1_sound";
 const POLL_KEY = "basebots_ep1_poll";
 
+/** NEW — episode completion flag */
+const EP1_DONE_KEY = "basebots_ep1_done";
+
 /**
  * Main page can listen for this changing to "unlock" bonus episode
  * when the user toggles sound in this episode.
@@ -66,7 +69,9 @@ function saveGame(save: SaveShape) {
 function loadPoll(): PollCounts {
   try {
     const raw = localStorage.getItem(POLL_KEY);
-    return raw ? (JSON.parse(raw) as PollCounts) : { ACCEPT: 0, STALL: 0, SPOOF: 0, PULL_PLUG: 0 };
+    return raw
+      ? (JSON.parse(raw) as PollCounts)
+      : { ACCEPT: 0, STALL: 0, SPOOF: 0, PULL_PLUG: 0 };
   } catch {
     return { ACCEPT: 0, STALL: 0, SPOOF: 0, PULL_PLUG: 0 };
   }
@@ -93,117 +98,19 @@ function formatTime(totalSeconds: number) {
 }
 
 /* ──────────────────────────────────────────────────────────────
- * UI helpers
- * ────────────────────────────────────────────────────────────── */
-
-function cardShell() {
-  return {
-    border: "1px solid rgba(255,255,255,0.10)",
-    background: "rgba(0,0,0,0.22)",
-    boxShadow: "0 26px 110px rgba(0,0,0,0.65)",
-  } as const;
-}
-
-function choiceTone(choice: EpisodeOneChoiceId) {
-  switch (choice) {
-    case "ACCEPT":
-      return {
-        border: "rgba(52,211,153,0.28)",
-        glow: "rgba(52,211,153,0.10)",
-        wash:
-          "radial-gradient(820px 260px at 15% 0%, rgba(52,211,153,0.18), transparent 60%), radial-gradient(760px 260px at 90% 30%, rgba(56,189,248,0.10), transparent 62%)",
-        label: "OPERATOR",
-      };
-    case "STALL":
-      return {
-        border: "rgba(56,189,248,0.24)",
-        glow: "rgba(56,189,248,0.10)",
-        wash:
-          "radial-gradient(820px 260px at 15% 0%, rgba(56,189,248,0.18), transparent 60%), radial-gradient(760px 260px at 90% 30%, rgba(168,85,247,0.10), transparent 62%)",
-        label: "GHOST",
-      };
-    case "SPOOF":
-      return {
-        border: "rgba(251,191,36,0.26)",
-        glow: "rgba(251,191,36,0.10)",
-        wash:
-          "radial-gradient(820px 260px at 15% 0%, rgba(251,191,36,0.18), transparent 60%), radial-gradient(760px 260px at 90% 30%, rgba(244,63,94,0.10), transparent 62%)",
-        label: "SABOTEUR",
-      };
-    default:
-      return {
-        border: "rgba(251,113,133,0.24)",
-        glow: "rgba(251,113,133,0.10)",
-        wash:
-          "radial-gradient(820px 260px at 15% 0%, rgba(251,113,133,0.18), transparent 60%), radial-gradient(760px 260px at 90% 30%, rgba(168,85,247,0.10), transparent 62%)",
-        label: "SEVERED",
-      };
-  }
-}
-
-function barTone(choice: EpisodeOneChoiceId) {
-  switch (choice) {
-    case "ACCEPT":
-      return "linear-gradient(90deg, rgba(52,211,153,0.95), rgba(56,189,248,0.85))";
-    case "STALL":
-      return "linear-gradient(90deg, rgba(56,189,248,0.95), rgba(168,85,247,0.80))";
-    case "SPOOF":
-      return "linear-gradient(90deg, rgba(251,191,36,0.95), rgba(244,63,94,0.75))";
-    default:
-      return "linear-gradient(90deg, rgba(251,113,133,0.95), rgba(168,85,247,0.85))";
-  }
-}
-
-function SceneImage({ src, alt }: { src: string; alt: string }) {
-  return (
-    <div
-      className="relative overflow-hidden rounded-3xl border"
-      style={{
-        borderColor: "rgba(255,255,255,0.10)",
-        background: "rgba(0,0,0,0.22)",
-        boxShadow: "0 28px 120px rgba(0,0,0,0.60)",
-      }}
-    >
-      <div className="relative h-[180px] md:h-[220px]">
-        <Image src={src} alt={alt} fill priority={false} sizes="(max-width: 768px) 100vw, 900px" style={{ objectFit: "cover" }} />
-        <div
-          aria-hidden
-          className="absolute inset-0"
-          style={{
-            background: "linear-gradient(180deg, rgba(2,6,23,0.10) 0%, rgba(2,6,23,0.82) 78%, rgba(2,6,23,0.92) 100%)",
-          }}
-        />
-        <div
-          aria-hidden
-          className="absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(900px 300px at 20% 0%, rgba(56,189,248,0.18), transparent 60%), radial-gradient(900px 300px at 90% 10%, rgba(168,85,247,0.14), transparent 62%)",
-            opacity: 0.9,
-          }}
-        />
-      </div>
-    </div>
-  );
-}
-
-/* ──────────────────────────────────────────────────────────────
  * Episode Component
  * ────────────────────────────────────────────────────────────── */
 
 export default function EpisodeOne({ onExit }: { onExit: () => void }) {
   const existing = useMemo(() => loadSave(), []);
-  const [phase, setPhase] = useState<"intro" | "signal" | "local" | "localAfter" | "choice" | "ending" | "poll">(
-    existing ? "poll" : "intro",
-  );
+  const [phase, setPhase] = useState<
+    "intro" | "signal" | "local" | "localAfter" | "choice" | "ending" | "poll"
+  >(existing ? "poll" : "intro");
 
-  // ✅ 1:30 (90s) for choice window
   const CHOICE_WINDOW_SECONDS = 90;
 
   const [secondsLeft, setSecondsLeft] = useState(CHOICE_WINDOW_SECONDS);
   const [save, setSave] = useState<SaveShape | null>(existing);
-
-  // local “doesn't matter” choice, only for flavor
   const [localPick, setLocalPick] = useState<null | "PRESS" | "LEAVE" | "BACK">(null);
 
   /* ───────────── Sound ───────────── */
@@ -217,9 +124,8 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Create the looping audio once
   useEffect(() => {
-    const a = new Audio("/audio/s1.mp3"); // public/audio/s1.mp3
+    const a = new Audio("/audio/s1.mp3");
     a.loop = true;
     a.preload = "auto";
     a.volume = 0.65;
@@ -234,7 +140,6 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
     };
   }, []);
 
-  // Keep audio state in sync with soundEnabled
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
@@ -247,7 +152,6 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
       return;
     }
 
-    // Attempt to play (may be blocked until user gesture; that's fine)
     a.play().catch(() => {});
   }, [soundEnabled]);
 
@@ -256,7 +160,6 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
       const next = !s;
       try {
         localStorage.setItem(SOUND_KEY, next ? "on" : "off");
-        // ✅ ping main page unlock (listen for this changing)
         localStorage.setItem(UNLOCK_KEY, String(Date.now()));
       } catch {}
       return next;
@@ -273,13 +176,12 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
     }, 1000);
 
     return () => clearInterval(t);
-  }, [phase, CHOICE_WINDOW_SECONDS]);
+  }, [phase]);
 
   useEffect(() => {
     if (phase === "choice" && secondsLeft === 0) {
       resolveChoice("STALL");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secondsLeft, phase]);
 
   /* ───────────── Resolve real choice ───────────── */
@@ -297,7 +199,13 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
       },
       profile: {
         archetype:
-          choiceId === "ACCEPT" ? "Operator" : choiceId === "STALL" ? "Ghost" : choiceId === "SPOOF" ? "Saboteur" : "Severed",
+          choiceId === "ACCEPT"
+            ? "Operator"
+            : choiceId === "STALL"
+              ? "Ghost"
+              : choiceId === "SPOOF"
+                ? "Saboteur"
+                : "Severed",
         trust: choiceId === "ACCEPT" ? 70 : choiceId === "STALL" ? 55 : choiceId === "SPOOF" ? 26 : 16,
         threat: choiceId === "ACCEPT" ? 22 : choiceId === "STALL" ? 36 : choiceId === "SPOOF" ? 74 : 58,
       },
@@ -322,6 +230,10 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
       createdAt: Date.now(),
     };
 
+    try {
+      localStorage.setItem(EP1_DONE_KEY, "1");
+    } catch {}
+
     saveGame(s);
     bumpPoll(choiceId);
     setSave(s);
@@ -331,6 +243,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
   function resetEpisode() {
     try {
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(EP1_DONE_KEY);
     } catch {}
     setSave(null);
     setLocalPick(null);
