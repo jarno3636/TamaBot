@@ -38,7 +38,7 @@ const STORAGE_KEY = "basebots_story_save_v1";
 const SOUND_KEY = "basebots_ep1_sound";
 const POLL_KEY = "basebots_ep1_poll";
 
-/** NEW — episode completion flag */
+/** ✅ episode completion flag */
 const EP1_DONE_KEY = "basebots_ep1_done";
 
 /**
@@ -69,9 +69,7 @@ function saveGame(save: SaveShape) {
 function loadPoll(): PollCounts {
   try {
     const raw = localStorage.getItem(POLL_KEY);
-    return raw
-      ? (JSON.parse(raw) as PollCounts)
-      : { ACCEPT: 0, STALL: 0, SPOOF: 0, PULL_PLUG: 0 };
+    return raw ? (JSON.parse(raw) as PollCounts) : { ACCEPT: 0, STALL: 0, SPOOF: 0, PULL_PLUG: 0 };
   } catch {
     return { ACCEPT: 0, STALL: 0, SPOOF: 0, PULL_PLUG: 0 };
   }
@@ -98,6 +96,109 @@ function formatTime(totalSeconds: number) {
 }
 
 /* ──────────────────────────────────────────────────────────────
+ * UI helpers
+ * ────────────────────────────────────────────────────────────── */
+
+function cardShell() {
+  return {
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(0,0,0,0.22)",
+    boxShadow: "0 26px 110px rgba(0,0,0,0.65)",
+  } as const;
+}
+
+function choiceTone(choice: EpisodeOneChoiceId) {
+  switch (choice) {
+    case "ACCEPT":
+      return {
+        border: "rgba(52,211,153,0.28)",
+        glow: "rgba(52,211,153,0.10)",
+        wash:
+          "radial-gradient(820px 260px at 15% 0%, rgba(52,211,153,0.18), transparent 60%), radial-gradient(760px 260px at 90% 30%, rgba(56,189,248,0.10), transparent 62%)",
+        label: "OPERATOR",
+      };
+    case "STALL":
+      return {
+        border: "rgba(56,189,248,0.24)",
+        glow: "rgba(56,189,248,0.10)",
+        wash:
+          "radial-gradient(820px 260px at 15% 0%, rgba(56,189,248,0.18), transparent 60%), radial-gradient(760px 260px at 90% 30%, rgba(168,85,247,0.10), transparent 62%)",
+        label: "GHOST",
+      };
+    case "SPOOF":
+      return {
+        border: "rgba(251,191,36,0.26)",
+        glow: "rgba(251,191,36,0.10)",
+        wash:
+          "radial-gradient(820px 260px at 15% 0%, rgba(251,191,36,0.18), transparent 60%), radial-gradient(760px 260px at 90% 30%, rgba(244,63,94,0.10), transparent 62%)",
+        label: "SABOTEUR",
+      };
+    default:
+      return {
+        border: "rgba(251,113,133,0.24)",
+        glow: "rgba(251,113,133,0.10)",
+        wash:
+          "radial-gradient(820px 260px at 15% 0%, rgba(251,113,133,0.18), transparent 60%), radial-gradient(760px 260px at 90% 30%, rgba(168,85,247,0.10), transparent 62%)",
+        label: "SEVERED",
+      };
+  }
+}
+
+function barTone(choice: EpisodeOneChoiceId) {
+  switch (choice) {
+    case "ACCEPT":
+      return "linear-gradient(90deg, rgba(52,211,153,0.95), rgba(56,189,248,0.85))";
+    case "STALL":
+      return "linear-gradient(90deg, rgba(56,189,248,0.95), rgba(168,85,247,0.80))";
+    case "SPOOF":
+      return "linear-gradient(90deg, rgba(251,191,36,0.95), rgba(244,63,94,0.75))";
+    default:
+      return "linear-gradient(90deg, rgba(251,113,133,0.95), rgba(168,85,247,0.85))";
+  }
+}
+
+function SceneImage({ src, alt }: { src: string; alt: string }) {
+  return (
+    <div
+      className="relative overflow-hidden rounded-3xl border"
+      style={{
+        borderColor: "rgba(255,255,255,0.10)",
+        background: "rgba(0,0,0,0.22)",
+        boxShadow: "0 28px 120px rgba(0,0,0,0.60)",
+      }}
+    >
+      <div className="relative h-[180px] md:h-[220px]">
+        <Image
+          src={src}
+          alt={alt}
+          fill
+          priority={false}
+          sizes="(max-width: 768px) 100vw, 900px"
+          style={{ objectFit: "cover" }}
+        />
+        <div
+          aria-hidden
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(180deg, rgba(2,6,23,0.10) 0%, rgba(2,6,23,0.82) 78%, rgba(2,6,23,0.92) 100%)",
+          }}
+        />
+        <div
+          aria-hidden
+          className="absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(900px 300px at 20% 0%, rgba(56,189,248,0.18), transparent 60%), radial-gradient(900px 300px at 90% 10%, rgba(168,85,247,0.14), transparent 62%)",
+            opacity: 0.9,
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────
  * Episode Component
  * ────────────────────────────────────────────────────────────── */
 
@@ -107,10 +208,13 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
     "intro" | "signal" | "local" | "localAfter" | "choice" | "ending" | "poll"
   >(existing ? "poll" : "intro");
 
+  // ✅ 1:30 (90s) for choice window
   const CHOICE_WINDOW_SECONDS = 90;
 
   const [secondsLeft, setSecondsLeft] = useState(CHOICE_WINDOW_SECONDS);
   const [save, setSave] = useState<SaveShape | null>(existing);
+
+  // local “doesn't matter” choice, only for flavor
   const [localPick, setLocalPick] = useState<null | "PRESS" | "LEAVE" | "BACK">(null);
 
   /* ───────────── Sound ───────────── */
@@ -124,8 +228,9 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // Create the looping audio once
   useEffect(() => {
-    const a = new Audio("/audio/s1.mp3");
+    const a = new Audio("/audio/s1.mp3"); // public/audio/s1.mp3
     a.loop = true;
     a.preload = "auto";
     a.volume = 0.65;
@@ -140,6 +245,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
     };
   }, []);
 
+  // Keep audio state in sync with soundEnabled
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
@@ -152,6 +258,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
       return;
     }
 
+    // Attempt to play (may be blocked until user gesture; that's fine)
     a.play().catch(() => {});
   }, [soundEnabled]);
 
@@ -160,6 +267,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
       const next = !s;
       try {
         localStorage.setItem(SOUND_KEY, next ? "on" : "off");
+        // ✅ ping main page unlock (listen for this changing)
         localStorage.setItem(UNLOCK_KEY, String(Date.now()));
       } catch {}
       return next;
@@ -182,6 +290,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
     if (phase === "choice" && secondsLeft === 0) {
       resolveChoice("STALL");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secondsLeft, phase]);
 
   /* ───────────── Resolve real choice ───────────── */
@@ -230,8 +339,9 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
       createdAt: Date.now(),
     };
 
+    // ✅ mark EP1 complete for hub logic
     try {
-      localStorage.setItem(EP1_DONE_KEY, "1");
+      localStorage.setItem(EP1_DONE_KEY, "true");
     } catch {}
 
     saveGame(s);
@@ -393,7 +503,10 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
             {value} • {percent}%
           </div>
         </div>
-        <div className="mt-2 h-[10px] rounded-full border overflow-hidden" style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.18)" }}>
+        <div
+          className="mt-2 h-[10px] rounded-full border overflow-hidden"
+          style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.18)" }}
+        >
           <div
             className="h-full rounded-full"
             style={{
@@ -477,7 +590,10 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
 
             <div className="mt-3 grid gap-2 text-[13px] leading-relaxed text-white/72">
               <p>Cold boot. No startup tone. No friendly status lights.</p>
-              <p>Your Basebot wakes on a steel slab in a room built like a shipping container: sealed seams, vented corners, one door with no handle.</p>
+              <p>
+                Your Basebot wakes on a steel slab in a room built like a shipping container: sealed seams, vented corners, one door with
+                no handle.
+              </p>
               <p>A single ceiling strip flickers at a steady interval—like a metronome you didn’t agree to hear.</p>
               <p>The Basebot runs an internal check and returns one usable fact:</p>
               <p className="text-white/80 font-semibold">You’re inside a relay station… and it’s waiting for a credential it doesn’t have.</p>
@@ -561,7 +677,8 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 className="rounded-3xl border p-4 text-left transition active:scale-[0.99] hover:brightness-110"
                 style={{
                   borderColor: "rgba(56,189,248,0.22)",
-                  background: "radial-gradient(700px 220px at 10% 0%, rgba(56,189,248,0.16), transparent 60%), rgba(0,0,0,0.24)",
+                  background:
+                    "radial-gradient(700px 220px at 10% 0%, rgba(56,189,248,0.16), transparent 60%), rgba(0,0,0,0.24)",
                   boxShadow: "0 22px 90px rgba(0,0,0,0.60)",
                 }}
               >
@@ -578,7 +695,8 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 className="rounded-3xl border p-4 text-left transition active:scale-[0.99] hover:brightness-110"
                 style={{
                   borderColor: "rgba(251,191,36,0.20)",
-                  background: "radial-gradient(700px 220px at 10% 0%, rgba(251,191,36,0.14), transparent 60%), rgba(0,0,0,0.24)",
+                  background:
+                    "radial-gradient(700px 220px at 10% 0%, rgba(251,191,36,0.14), transparent 60%), rgba(0,0,0,0.24)",
                   boxShadow: "0 22px 90px rgba(0,0,0,0.60)",
                 }}
               >
@@ -595,7 +713,8 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 className="rounded-3xl border p-4 text-left transition active:scale-[0.99] hover:brightness-110"
                 style={{
                   borderColor: "rgba(251,113,133,0.20)",
-                  background: "radial-gradient(700px 220px at 10% 0%, rgba(251,113,133,0.14), transparent 60%), rgba(0,0,0,0.24)",
+                  background:
+                    "radial-gradient(700px 220px at 10% 0%, rgba(251,113,133,0.14), transparent 60%), rgba(0,0,0,0.24)",
                   boxShadow: "0 22px 90px rgba(0,0,0,0.60)",
                 }}
               >
@@ -674,14 +793,22 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 <h2 className="text-[22px] font-extrabold text-white/95">AUDIT PROMPT</h2>
                 <div className="mt-2 text-[13px] text-white/70">
                   The door will not open without a profile on record.{" "}
-                  <span className="text-white/80 font-semibold">If you don’t submit one, the system submits a label for you.</span>
+                  <span className="text-white/80 font-semibold">
+                    If you don’t submit one, the system submits a label for you.
+                  </span>
                 </div>
                 <div className="mt-2 text-[12px] text-white/60 font-mono">
                   REQUIRED: operator credential • OPTIONAL: justification • OUTPUT: routing + classification
                 </div>
               </div>
 
-              <div className="w-full md:w-[360px] rounded-3xl border p-4" style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.22)" }}>
+              <div
+                className="w-full md:w-[360px] rounded-3xl border p-4"
+                style={{
+                  borderColor: "rgba(255,255,255,0.10)",
+                  background: "rgba(0,0,0,0.22)",
+                }}
+              >
                 <div className="flex items-center justify-between">
                   <div className="text-[11px] font-semibold tracking-wide text-white/62">DECISION WINDOW</div>
                   <div
@@ -773,7 +900,10 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
               </div>
             </div>
 
-            <div className="mt-3 rounded-2xl border p-3" style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.04)" }}>
+            <div
+              className="mt-3 rounded-2xl border p-3"
+              style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.04)" }}
+            >
               <div className="text-[12px] text-white/75">
                 Artifact: <span className="font-extrabold text-white/92">{save.artifact.name}</span>
               </div>
@@ -785,7 +915,9 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 <p>You submit a credential. The text cursor stops blinking like it’s satisfied.</p>
                 <p>Immediately the room changes temperature—subtle, controlled—like a facility coming online around you.</p>
                 <p>The door releases with a soft pneumatic sigh. Not welcoming. Authorized.</p>
-                <p className="text-white/80 font-semibold">Then a second line appears beneath the audit result—formatted differently, older, not part of the gate:</p>
+                <p className="text-white/80 font-semibold">
+                  Then a second line appears beneath the audit result—formatted differently, older, not part of the gate:
+                </p>
                 <p className="font-mono text-white/80">SUBNET-12: “We’ve been waiting for you to choose a name.”</p>
               </div>
             )}
@@ -805,7 +937,9 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 <p>You submit a decoy credential—clean enough to look real, wrong enough to be dangerous.</p>
                 <p>The system accepts it fast. Too fast.</p>
                 <p>The door unlocks, and the corridor beyond is already lit, like it anticipated your success.</p>
-                <p className="text-white/80 font-semibold">Then your screen splits: two audit receipts, both “valid,” both incompatible—now both permanent.</p>
+                <p className="text-white/80 font-semibold">
+                  Then your screen splits: two audit receipts, both “valid,” both incompatible—now both permanent.
+                </p>
                 <p className="font-mono text-white/80">SUBNET-12: “Two names. One body. That’s rare.”</p>
               </div>
             )}
@@ -815,7 +949,9 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 <p>You sever the link. The audit text vanishes mid-line, like someone yanked a sheet from a printer.</p>
                 <p>The room becomes brutally quiet—no hum, no timer, no confirmation beeps.</p>
                 <p>The Basebot stays awake, optics open, scanning the door as if it expects it to open on its own.</p>
-                <p className="text-white/80 font-semibold">And then, from nowhere inside the silence, a message appears without the channel reattaching:</p>
+                <p className="text-white/80 font-semibold">
+                  And then, from nowhere inside the silence, a message appears without the channel reattaching:
+                </p>
                 <p className="font-mono text-white/80">SUBNET-12: “You cut the gate. You didn’t cut us.”</p>
               </div>
             )}
@@ -825,7 +961,8 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
               className="mt-5 rounded-3xl border p-4"
               style={{
                 borderColor: "rgba(255,255,255,0.12)",
-                background: "radial-gradient(900px 260px at 20% 0%, rgba(56,189,248,0.10), transparent 60%), rgba(255,255,255,0.03)",
+                background:
+                  "radial-gradient(900px 260px at 20% 0%, rgba(56,189,248,0.10), transparent 60%), rgba(255,255,255,0.03)",
               }}
             >
               <div className="text-[11px] font-extrabold tracking-wide text-white/70">NEXT FILE DETECTED</div>
@@ -889,7 +1026,12 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                   <PollRow choiceId="ACCEPT" value={poll.ACCEPT} total={total} highlight={save?.choiceId === "ACCEPT"} />
                   <PollRow choiceId="STALL" value={poll.STALL} total={total} highlight={save?.choiceId === "STALL"} />
                   <PollRow choiceId="SPOOF" value={poll.SPOOF} total={total} highlight={save?.choiceId === "SPOOF"} />
-                  <PollRow choiceId="PULL_PLUG" value={poll.PULL_PLUG} total={total} highlight={save?.choiceId === "PULL_PLUG"} />
+                  <PollRow
+                    choiceId="PULL_PLUG"
+                    value={poll.PULL_PLUG}
+                    total={total}
+                    highlight={save?.choiceId === "PULL_PLUG"}
+                  />
                 </div>
               );
             })()}
