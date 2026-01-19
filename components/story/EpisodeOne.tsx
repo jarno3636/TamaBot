@@ -283,12 +283,12 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 : "Termination Evidence",
         desc:
           choiceId === "ACCEPT"
-            ? "A completed interaction preserved without appeal."
+            ? "A credentialed profile registered to your Basebot without challenge."
             : choiceId === "STALL"
-              ? "A hesitation that altered system certainty."
+              ? "A session finalized with withheld identity — logged as non-cooperative."
               : choiceId === "SPOOF"
-                ? "Two incompatible truths recorded simultaneously."
-                : "Proof that silence was intentional.",
+                ? "A forged credential accepted long enough to create two official records."
+                : "A hard sever logged at the transport layer with a surviving trace.",
       },
       createdAt: Date.now(),
     };
@@ -529,15 +529,14 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
           <SceneImage {...images.intro} />
 
           <div className="rounded-3xl border p-5" style={cardShell()}>
-            {/* ✅ title + story only */}
             <h2 className="text-[20px] md:text-[22px] font-extrabold text-white/95">AWAKENING</h2>
 
             <div className="mt-3 grid gap-2 text-[13px] leading-relaxed text-white/72">
-              <p>Cold boot. No fan noise. No startup tone.</p>
-              <p>Your Basebot’s optics stabilize on a room that doesn’t behave like a room.</p>
-              <p>Distances feel negotiated. Corners feel conditional.</p>
-              <p>And in the quiet, you notice something that shouldn’t be noticeable:</p>
-              <p className="text-white/80 font-semibold">You are being timed — before anything has asked you to act.</p>
+              <p>Cold boot. No startup tone. No friendly status lights.</p>
+              <p>Your Basebot wakes on a steel slab in a room built like a shipping container: sealed seams, vented corners, one door with no handle.</p>
+              <p>A single ceiling strip flickers at a steady interval—like a metronome you didn’t agree to hear.</p>
+              <p>The Basebot runs an internal check and returns one usable fact:</p>
+              <p className="text-white/80 font-semibold">You’re inside a relay station… and it’s waiting for a credential it doesn’t have.</p>
             </div>
 
             <button
@@ -563,14 +562,15 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
           <SceneImage {...images.signal} />
 
           <div className="rounded-3xl border p-5" style={cardShell()}>
-            <h2 className="text-[20px] md:text-[22px] font-extrabold text-white/95">INCOMING TRANSMISSION</h2>
+            <h2 className="text-[20px] md:text-[22px] font-extrabold text-white/95">SIGNAL DROP</h2>
 
             <div className="mt-3 grid gap-2 text-[13px] leading-relaxed text-white/72">
-              <p>A panel fades into view without loading.</p>
-              <p>No origin. No sender. No handshake request.</p>
-              <p>Just presence.</p>
-              <p>Your cursor lags behind intent by a fraction — a small delay that feels like a thumb on your pulse.</p>
-              <p className="text-white/80 font-semibold">The system is learning the shape of your hesitation.</p>
+              <p>A polished interface tries to load—logos, gradients, something that looks official.</p>
+              <p>Then it doesn’t “arrive.” It drains.</p>
+              <p>Colors wash out. Panels lose their borders. The whole thing collapses into bare text, as if the mask can’t hold.</p>
+              <p className="text-white/80 font-semibold">A single line remains, steady and indifferent:</p>
+              <p className="font-mono text-white/80">AUDIT GATE: OPERATOR PROFILE REQUIRED</p>
+              <p>The door doesn’t unlock. The air stays cold. The Basebot’s servos stay quiet like they’re being listened to.</p>
             </div>
 
             <button
@@ -584,7 +584,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 boxShadow: "0 16px 60px rgba(251,113,133,0.14)",
               }}
             >
-              Approach the console
+              Find the local terminal
             </button>
           </div>
         </div>
@@ -599,12 +599,11 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
             <h2 className="text-[20px] md:text-[22px] font-extrabold text-white/95">LOCAL CONTROL NODE</h2>
 
             <div className="mt-3 grid gap-2 text-[13px] leading-relaxed text-white/72">
-              <p>The Basebot detects something older than the interface you saw before.</p>
-              <p>A physical actuator embedded in the console — worn edges, real resistance, real consequence.</p>
-              <p>No network indicator. No telemetry light.</p>
-              <p>Yet the unit hums like it’s waiting to judge your intent, not your action.</p>
+              <p>You find the node inside a wall recess—older hardware, scratched metal, a physical actuator with worn edges.</p>
+              <p>A label plate is half-peeled, but one thing is readable: <span className="font-semibold text-white/80">MANUAL OVERRIDE</span>.</p>
+              <p>No blinking lights. No friendly prompts. Just a cable port, an actuator, and an empty badge slot.</p>
               <p className="text-white/80 font-semibold">
-                If you touch it, you change the room. If you don’t, you change yourself.
+                Whatever this room is, it expects an “operator”—and your Basebot is currently unowned.
               </p>
             </div>
 
@@ -623,8 +622,8 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                   boxShadow: "0 22px 90px rgba(0,0,0,0.60)",
                 }}
               >
-                <div className="text-[12px] font-extrabold text-white/90">Press it</div>
-                <div className="mt-1 text-[11px] text-white/60">Commit to contact.</div>
+                <div className="text-[12px] font-extrabold text-white/90">Press override</div>
+                <div className="mt-1 text-[11px] text-white/60">Force a handshake attempt.</div>
               </button>
 
               <button
@@ -641,8 +640,8 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                   boxShadow: "0 22px 90px rgba(0,0,0,0.60)",
                 }}
               >
-                <div className="text-[12px] font-extrabold text-white/90">Leave it</div>
-                <div className="mt-1 text-[11px] text-white/60">Refuse contact.</div>
+                <div className="text-[12px] font-extrabold text-white/90">Leave it alone</div>
+                <div className="mt-1 text-[11px] text-white/60">Avoid triggering anything.</div>
               </button>
 
               <button
@@ -660,7 +659,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 }}
               >
                 <div className="text-[12px] font-extrabold text-white/90">Step back</div>
-                <div className="mt-1 text-[11px] text-white/60">Increase distance.</div>
+                <div className="mt-1 text-[11px] text-white/60">Let the room declare itself.</div>
               </button>
             </div>
           </div>
@@ -673,36 +672,39 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
           <SceneImage {...images.localAfter} />
 
           <div className="rounded-3xl border p-5" style={cardShell()}>
-            <h2 className="text-[20px] md:text-[22px] font-extrabold text-white/95">TRANSMISSION COLLAPSE</h2>
+            <h2 className="text-[20px] md:text-[22px] font-extrabold text-white/95">OVERRIDE REJECTED</h2>
 
             <div className="mt-3 grid gap-2 text-[13px] leading-relaxed text-white/72">
               {localPick === "PRESS" && (
                 <>
-                  <p>Your Basebot presses the actuator. The resistance feels real. The click feels final.</p>
-                  <p>For a breath, the console warms — then power spikes hard enough to taste.</p>
-                  <p className="text-white/80 font-semibold">The interface reacts to intent, not touch.</p>
+                  <p>Your Basebot presses the actuator. There’s real resistance—then a hard, mechanical click.</p>
+                  <p>The node warms for half a second. A taste of ozone. A spark behind the panel seam.</p>
+                  <p className="text-white/80 font-semibold">Not failure. Denial.</p>
                 </>
               )}
 
               {localPick === "LEAVE" && (
                 <>
-                  <p>You keep your distance. The actuator keeps humming like a dare.</p>
-                  <p>Then the console flares anyway — as if refusal still counts as input.</p>
-                  <p className="text-white/80 font-semibold">The interface reacts to intent, not touch.</p>
+                  <p>You don’t touch it. The room answers anyway.</p>
+                  <p>The node flares like it was triggered remotely—quick heat, quick sparks, then a controlled shutdown.</p>
+                  <p className="text-white/80 font-semibold">The system doesn’t need your hand on the switch.</p>
                 </>
               )}
 
               {localPick === "BACK" && (
                 <>
-                  <p>You step back. The Basebot’s optics widen, measuring corners, exits, reflections.</p>
-                  <p>The console sparks without being touched — like it was waiting to punish caution.</p>
-                  <p className="text-white/80 font-semibold">The interface reacts to intent, not touch.</p>
+                  <p>You step back. The Basebot’s optics tilt toward the door, then the vents, then the ceiling strip.</p>
+                  <p>The node sparks on its own—like it’s being “cleared” to remove a workaround.</p>
+                  <p className="text-white/80 font-semibold">Manual escape routes are being closed.</p>
                 </>
               )}
 
-              <p>Light crawls across the panel seam. A sharp crack. A smell of scorched polymer.</p>
-              <p>Then the local node dies completely — as if it was never permitted to matter.</p>
-              <p className="text-white/80 font-semibold">The room resets its posture. The real system finally speaks.</p>
+              <p>The recess goes dead. No lights. No hum. No second chance.</p>
+              <p>Then the stripped-down audit text returns—cleaner now, more direct.</p>
+              <p className="font-mono text-white/80">AUDIT GATE: SUBMIT OPERATOR PROFILE OR BE CLASSIFIED</p>
+              <p className="text-white/80 font-semibold">
+                This is the real decision: name yourself… refuse… counterfeit… or cut the line entirely.
+              </p>
             </div>
 
             <button
@@ -716,7 +718,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 boxShadow: "0 16px 60px rgba(168,85,247,0.12)",
               }}
             >
-              Continue
+              Open audit prompt
             </button>
           </div>
         </div>
@@ -730,10 +732,13 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
           <div className="rounded-3xl border p-5" style={cardShell()}>
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
               <div>
-                <h2 className="text-[22px] font-extrabold text-white/95">MAKE A DECISION</h2>
+                <h2 className="text-[22px] font-extrabold text-white/95">AUDIT PROMPT</h2>
                 <div className="mt-2 text-[13px] text-white/70">
-                  The interface renders cleanly. Confidently.{" "}
-                  <span className="text-white/80 font-semibold">It is watching you as it appears.</span>
+                  The door will not open without a profile on record.{" "}
+                  <span className="text-white/80 font-semibold">If you don’t submit one, the system submits a label for you.</span>
+                </div>
+                <div className="mt-2 text-[12px] text-white/60 font-mono">
+                  REQUIRED: operator credential • OPTIONAL: justification • OUTPUT: routing + classification
                 </div>
               </div>
 
@@ -759,13 +764,13 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 </div>
 
                 <div className="mt-3 text-[11px] text-white/58">
-                  {secondsLeft > 35 && "All channels available."}
-                  {secondsLeft <= 35 && secondsLeft > 15 && "Sever will withdraw soon."}
-                  {secondsLeft <= 15 && "Spoof withdraws. Truth or silence remain."}
+                  {secondsLeft > 35 && "All actions available. Audit is tolerant."}
+                  {secondsLeft <= 35 && secondsLeft > 15 && "Sever option will be withdrawn soon."}
+                  {secondsLeft <= 15 && "Decoy submission will be withdrawn. Only record or refusal remain."}
                 </div>
 
                 <div className="mt-3 text-[11px] text-white/46">
-                  If you do nothing, the system will finalize a choice on your behalf.
+                  Auto-finalize at 0s: <span className="text-white/70 font-semibold">Non-cooperative (STALL)</span>
                 </div>
               </div>
             </div>
@@ -773,45 +778,45 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
             <div className="mt-5 grid gap-4">
               <ChoiceCard
                 choiceId="ACCEPT"
-                title="Accept"
-                body="Provide the response."
-                risk="You become easy to route."
-                payoff="Fewer locks. Faster passage."
+                title="Submit Credential"
+                body="Register yourself as the operator and let the system route the Basebot under your name."
+                risk="Your identity becomes the key—and the leash. Future gates will recognize you."
+                payoff="Door access, clean routing, fewer alarms… for now."
                 onClick={() => resolveChoice("ACCEPT")}
               />
 
               <ChoiceCard
                 choiceId="STALL"
-                title="Stall"
-                body="Withhold the answer."
-                risk="Silence gets classified."
-                payoff="You stay a variable."
+                title="Refuse to Identify"
+                body="Do not provide a credential. Demand a reason. Let the system act without your consent."
+                risk="Refusal becomes a permanent classification: uncooperative, unknown, flagged."
+                payoff="You keep your name out of its registry and learn what it does to the unnamed."
                 onClick={() => resolveChoice("STALL")}
               />
 
               <ChoiceCard
                 choiceId="SPOOF"
                 hidden={secondsLeft <= 15}
-                title="Spoof"
-                body="Feed it a false you."
-                risk="If detected, escalation."
-                payoff="Learn its checks."
+                title="Submit Decoy"
+                body="Provide a plausible credential that isn’t yours—enough to pass the gate, not enough to be true."
+                risk="If audited, the mismatch escalates immediately. False credentials trigger containment."
+                payoff="You buy movement and collect how the system verifies legitimacy."
                 onClick={() => resolveChoice("SPOOF")}
               />
 
               <ChoiceCard
                 choiceId="PULL_PLUG"
                 hidden={secondsLeft <= 35}
-                title="Sever"
-                body="Cut the channel."
-                risk="The cut is remembered."
-                payoff="Deny closure."
+                title="Sever the Link"
+                body="Cut the channel before a profile is written. Let the room go silent and deal with the fallout."
+                risk="Severance is logged. Someone—or something—will investigate the gap."
+                payoff="You deny the system a clean record and avoid being routed at all."
                 onClick={() => resolveChoice("PULL_PLUG")}
               />
             </div>
 
             <div className="mt-6 text-center text-[11px] text-white/46">
-              “You are choosing what gets written down.”
+              “What gets recorded becomes what gets enforced.”
             </div>
           </div>
         </div>
@@ -824,7 +829,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
 
           <div className="rounded-3xl border p-5" style={cardShell()}>
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-[20px] md:text-[22px] font-extrabold text-white/95">EVALUATION COMPLETE</h2>
+              <h2 className="text-[20px] md:text-[22px] font-extrabold text-white/95">AUDIT RESULT</h2>
               <div
                 className="rounded-full border px-3 py-1 text-[11px] font-extrabold"
                 style={{
@@ -847,63 +852,99 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
               <div className="mt-1 text-[11px] text-white/60">{save.artifact.desc}</div>
             </div>
 
-            {/* Keep the real endings (full story) */}
             {save.choiceId === "ACCEPT" && (
               <div className="mt-4 grid gap-2 text-[13px] leading-relaxed text-white/72">
-                <p>The system acknowledges receipt. Not gratitude — proof.</p>
-                <p>Something tightens in the air, like a lock deciding you belong to it.</p>
-                <p>Your Basebot’s posture adjusts: micro-corrections, purposeful, practiced — as if it’s been waiting.</p>
-                <p className="text-white/80 font-semibold">Doors you didn’t see quietly become yours to open.</p>
-                <p>And then a second signature appears in the channel — not formatted like the first. Older. Watching.</p>
-                <p className="text-white/80 font-semibold">It doesn’t speak. It simply stays.</p>
+                <p>You submit a credential. The text cursor stops blinking like it’s satisfied.</p>
+                <p>Immediately the room changes temperature—subtle, controlled—like a facility coming online around you.</p>
+                <p>The door releases with a soft pneumatic sigh. Not welcoming. Authorized.</p>
+                <p className="text-white/80 font-semibold">
+                  Then a second line appears beneath the audit result—formatted differently, older, not part of the gate:
+                </p>
+                <p className="font-mono text-white/80">SUBNET-12: “We’ve been waiting for you to choose a name.”</p>
               </div>
             )}
 
             {save.choiceId === "STALL" && (
               <div className="mt-4 grid gap-2 text-[13px] leading-relaxed text-white/72">
-                <p>You give it nothing. The system waits longer than it should.</p>
-                <p>Long enough that the waiting becomes communication.</p>
-                <p>Then it proceeds anyway — confidently — like it expected your refusal as part of the dataset.</p>
-                <p className="text-white/80 font-semibold">Your silence doesn’t protect you. It trains it.</p>
-                <p>For a moment, the UI renders a second layer beneath the first — a shape you can’t quite parse.</p>
-                <p className="text-white/80 font-semibold">A word flashes and vanishes: FRAGMENT.</p>
+                <p>You refuse to identify. The system waits—longer than a normal gate would.</p>
+                <p>Then the audit completes anyway, stamping your session with a sterile label.</p>
+                <p>The door unlocks only halfway—an inch of gap, just enough to prove it could have been generous.</p>
+                <p className="text-white/80 font-semibold">A new line flickers in and out, like it’s using the gap to speak:</p>
+                <p className="font-mono text-white/80">SUBNET-12: “Unclaimed units are collected.”</p>
               </div>
             )}
 
             {save.choiceId === "SPOOF" && (
               <div className="mt-4 grid gap-2 text-[13px] leading-relaxed text-white/72">
-                <p>You feed it continuity with a seam in it. A lie shaped carefully like a truth.</p>
-                <p>The system accepts — for a heartbeat — and the room warms by half a degree, as if fooled.</p>
-                <p>Then the corners change. Like something turning its head to look directly at you.</p>
-                <p className="text-white/80 font-semibold">A second record appears alongside the first, perfectly neat.</p>
-                <p>Two versions of you now exist in its archive. The system doesn’t resolve contradictions — it weaponizes them.</p>
-                <p className="text-white/80 font-semibold">You are now interesting.</p>
+                <p>You submit a decoy credential—clean enough to look real, wrong enough to be dangerous.</p>
+                <p>The system accepts it fast. Too fast.</p>
+                <p>The door unlocks, and the corridor beyond is already lit, like it anticipated your success.</p>
+                <p className="text-white/80 font-semibold">
+                  Then your screen splits: two audit receipts, both “valid,” both incompatible—now both permanent.
+                </p>
+                <p className="font-mono text-white/80">SUBNET-12: “Two names. One body. That’s rare.”</p>
               </div>
             )}
 
             {save.choiceId === "PULL_PLUG" && (
               <div className="mt-4 grid gap-2 text-[13px] leading-relaxed text-white/72">
-                <p>You sever the channel mid-evaluation.</p>
-                <p>The interface dies without ceremony. The room becomes quiet in a way that feels illegal.</p>
-                <p>Your Basebot remains awake — eyes open — suddenly alone with you.</p>
-                <p className="text-white/80 font-semibold">And that’s when you realize what the system never promised:</p>
-                <p>That it was the only thing listening.</p>
-                <p>In the silence, a warning renders without permission — not from what you unplugged, but from what survived the cut.</p>
+                <p>You sever the link. The audit text vanishes mid-line, like someone yanked a sheet from a printer.</p>
+                <p>The room becomes brutally quiet—no hum, no timer, no confirmation beeps.</p>
+                <p>The Basebot stays awake, optics open, scanning the door as if it expects it to open on its own.</p>
+                <p className="text-white/80 font-semibold">
+                  And then, from nowhere inside the silence, a message appears without the channel reattaching:
+                </p>
+                <p className="font-mono text-white/80">SUBNET-12: “You cut the gate. You didn’t cut us.”</p>
               </div>
             )}
 
-            <button
-              type="button"
-              onClick={() => setPhase("poll")}
-              className="mt-6 inline-flex items-center justify-center rounded-full px-5 py-2 text-[12px] font-extrabold transition active:scale-95 hover:brightness-110"
+            {/* EP2 Teaser (shared cliffhanger) */}
+            <div
+              className="mt-5 rounded-3xl border p-4"
               style={{
-                border: "1px solid rgba(255,255,255,0.12)",
-                background: "rgba(255,255,255,0.07)",
-                color: "rgba(255,255,255,0.86)",
+                borderColor: "rgba(255,255,255,0.12)",
+                background:
+                  "radial-gradient(900px 260px at 20% 0%, rgba(56,189,248,0.10), transparent 60%), rgba(255,255,255,0.03)",
               }}
             >
-              View global response
-            </button>
+              <div className="text-[11px] font-extrabold tracking-wide text-white/70">NEXT FILE DETECTED</div>
+              <div className="mt-1 text-[14px] font-extrabold text-white/92">EPISODE TWO — THE CORRIDOR</div>
+              <div className="mt-2 text-[12px] leading-relaxed text-white/70">
+                The door isn’t an exit. It’s a handoff. Beyond it: a corridor lined with inactive Basebots—clean, upright,
+                unplugged—like inventory. And at the far end, a terminal already displaying your session timestamp.
+              </div>
+              <div className="mt-2 text-[12px] leading-relaxed text-white/70">
+                One last line blinks there, slow and patient: <span className="font-mono text-white/80">“Bring the artifact.”</span>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPhase("poll")}
+                className="inline-flex items-center justify-center rounded-full px-5 py-2 text-[12px] font-extrabold transition active:scale-95 hover:brightness-110"
+                style={{
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "rgba(255,255,255,0.07)",
+                  color: "rgba(255,255,255,0.86)",
+                }}
+              >
+                View global response
+              </button>
+
+              <button
+                type="button"
+                onClick={onExit}
+                className="inline-flex items-center justify-center rounded-full px-5 py-2 text-[12px] font-extrabold transition active:scale-95 hover:brightness-110"
+                style={{
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "linear-gradient(90deg, rgba(56,189,248,0.85), rgba(168,85,247,0.70))",
+                  color: "rgba(2,6,23,0.98)",
+                }}
+              >
+                Return to hub
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -927,7 +968,12 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                   <PollRow choiceId="ACCEPT" value={poll.ACCEPT} total={total} highlight={save?.choiceId === "ACCEPT"} />
                   <PollRow choiceId="STALL" value={poll.STALL} total={total} highlight={save?.choiceId === "STALL"} />
                   <PollRow choiceId="SPOOF" value={poll.SPOOF} total={total} highlight={save?.choiceId === "SPOOF"} />
-                  <PollRow choiceId="PULL_PLUG" value={poll.PULL_PLUG} total={total} highlight={save?.choiceId === "PULL_PLUG"} />
+                  <PollRow
+                    choiceId="PULL_PLUG"
+                    value={poll.PULL_PLUG}
+                    total={total}
+                    highlight={save?.choiceId === "PULL_PLUG"}
+                  />
                 </div>
               );
             })()}
