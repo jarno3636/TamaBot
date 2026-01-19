@@ -47,8 +47,6 @@ type EpisodeCard = {
 
 const UNLOCK_KEY = "basebots_bonus_unlock";
 const NFT_KEY = "basebots_has_nft";
-
-// 🔗 Update if your mint URL changes
 const MINT_URL = "https://mint.basebots.xyz";
 
 function has(key: string) {
@@ -67,7 +65,7 @@ export default function StoryPage() {
   const publicClient = usePublicClient();
 
   /* ─────────────────────────────────────────────
-   * Periodic re-evaluation (localStorage gates)
+   * Periodic re-evaluation
    * ───────────────────────────────────────────── */
 
   useEffect(() => {
@@ -76,16 +74,16 @@ export default function StoryPage() {
   }, []);
 
   /* ─────────────────────────────────────────────
-   * REAL NFT OWNERSHIP CHECK (Base mainnet)
-   * FIXED: Option A (local client capture)
+   * REAL NFT CHECK — FIXED FOR TS
    * ───────────────────────────────────────────── */
 
   useEffect(() => {
     if (!isConnected || !address) return;
     if (chain?.id !== 8453) return;
+    if (!publicClient) return;
 
-    const client = publicClient;
-    if (!client) return;
+    // ✅ HARD TYPE NARROWING (this is the key)
+    const client = publicClient as NonNullable<typeof publicClient>;
 
     let cancelled = false;
 
@@ -195,19 +193,14 @@ export default function StoryPage() {
 
   if (mode === "prologue")
     return <PrologueSilenceInDarkness onExit={() => setMode("hub")} />;
-
   if (mode === "ep1")
     return <EpisodeOne onExit={() => setMode("hub")} />;
-
   if (mode === "ep2")
     return <EpisodeTwo onExit={() => setMode("hub")} />;
-
   if (mode === "ep3")
     return <EpisodeThree onExit={() => setMode("hub")} />;
-
   if (mode === "ep4")
     return <EpisodeFour onExit={() => setMode("hub")} />;
-
   if (mode === "ep5")
     return <EpisodeFive onExit={() => setMode("hub")} />;
 
@@ -216,82 +209,54 @@ export default function StoryPage() {
    * ───────────────────────────────────────────── */
 
   return (
-    <main
-      className="min-h-screen text-white"
-      style={{
-        background:
-          "radial-gradient(1200px 700px at 50% -10%, rgba(56,189,248,0.10), transparent 55%), radial-gradient(1000px 600px at 15% 105%, rgba(168,85,247,0.12), transparent 60%), #020617",
-      }}
-    >
+    <main className="min-h-screen text-white bg-[#020617]">
       <div className="container mx-auto px-4 py-12">
-        <div
-          className="relative overflow-hidden rounded-[28px] border p-6 md:p-8"
-          style={{
-            borderColor: "rgba(255,255,255,0.10)",
-            background:
-              "linear-gradient(180deg, rgba(2,6,23,0.88), rgba(2,6,23,0.64))",
-            boxShadow: "0 40px 140px rgba(0,0,0,0.78)",
-          }}
-        >
-          <h1 className="text-2xl md:text-4xl font-extrabold tracking-tight">
-            BASEBOTS // STORY MODE
-          </h1>
+        <h1 className="text-3xl font-extrabold">BASEBOTS // STORY MODE</h1>
 
-          <p className="mt-3 max-w-2xl text-sm md:text-base text-white/70">
-            The system does not guide you. It records you.
-          </p>
+        <div className="mt-8 grid gap-4 md:grid-cols-2">
+          {episodes.map((ep) => (
+            <div
+              key={ep.id}
+              className="rounded-3xl border p-5"
+              style={{
+                borderColor: ep.unlocked
+                  ? "rgba(56,189,248,0.35)"
+                  : "rgba(255,255,255,0.10)",
+                opacity: ep.unlocked ? 1 : 0.6,
+              }}
+            >
+              <img
+                src={ep.posterSrc}
+                alt={ep.title}
+                className="rounded-2xl mb-4 w-full h-[180px] object-cover"
+              />
 
-          <div className="mt-8 grid gap-4 md:grid-cols-2">
-            {episodes.map((ep) => (
-              <div
-                key={ep.id}
-                className="relative overflow-hidden rounded-3xl border p-5"
-                style={{
-                  borderColor: ep.unlocked
-                    ? "rgba(56,189,248,0.35)"
-                    : "rgba(255,255,255,0.10)",
-                  background: "rgba(0,0,0,0.22)",
-                  opacity: ep.unlocked ? 1 : 0.6,
-                }}
-              >
-                <img
-                  src={ep.posterSrc}
-                  alt={ep.title}
-                  className="rounded-2xl mb-4 w-full h-[180px] object-cover"
-                />
+              <div className="font-extrabold">{ep.title}</div>
+              <div className="text-sm text-white/70">{ep.tagline}</div>
 
-                <div className="text-lg font-extrabold">{ep.title}</div>
-                <div className="text-sm text-white/70">{ep.tagline}</div>
-                <p className="mt-2 text-xs text-white/60">{ep.desc}</p>
-
-                <div className="mt-4">
-                  {ep.unlocked ? (
-                    <button
-                      onClick={() => setMode(ep.id)}
-                      className="rounded-full px-5 py-2 text-xs font-extrabold bg-gradient-to-r from-sky-400 to-violet-500 text-black"
-                    >
-                      ▶ Enter
-                    </button>
-                  ) : ep.requiresNFT ? (
-                    <a
-                      href={MINT_URL}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center rounded-full px-4 py-2 text-xs font-extrabold border border-white/20 bg-white/5 hover:bg-white/10"
-                    >
-                      Mint Basebot to Continue
-                    </a>
-                  ) : (
-                    <div className="text-xs text-white/50">Locked</div>
-                  )}
-                </div>
+              <div className="mt-4">
+                {ep.unlocked ? (
+                  <button
+                    onClick={() => setMode(ep.id)}
+                    className="rounded-full px-4 py-2 text-xs font-extrabold bg-sky-400 text-black"
+                  >
+                    ▶ Enter
+                  </button>
+                ) : ep.requiresNFT ? (
+                  <a
+                    href={MINT_URL}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-full px-4 py-2 text-xs font-extrabold border border-white/20"
+                  >
+                    Mint Basebot to Continue
+                  </a>
+                ) : (
+                  <div className="text-xs text-white/50">Locked</div>
+                )}
               </div>
-            ))}
-          </div>
-
-          <div className="mt-8 text-center text-xs text-white/40">
-            Some records only respond when the room changes.
-          </div>
+            </div>
+          ))}
         </div>
       </div>
     </main>
