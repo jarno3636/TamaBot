@@ -35,8 +35,7 @@ type EpisodeCard = {
   title: string;
   tagline: string;
   desc: string;
-  status: "play" | "locked";
-  tone: "emerald" | "purple";
+  unlocked: boolean;
   posterSrc: string;
 };
 
@@ -44,23 +43,37 @@ type EpisodeCard = {
 
 const UNLOCK_KEY = "basebots_bonus_unlock";
 
+function has(key: string) {
+  try {
+    return Boolean(localStorage.getItem(key));
+  } catch {
+    return false;
+  }
+}
+
 export default function StoryPage() {
   const [mode, setMode] = useState<Mode>("hub");
-  const [prologueUnlocked, setPrologueUnlocked] = useState(false);
+  const [tick, setTick] = useState(0);
 
-  /* keep bonus unlock in sync */
+  /* re-evaluate gates periodically */
   useEffect(() => {
-    const t = setInterval(() => {
-      try {
-        setPrologueUnlocked(Boolean(localStorage.getItem(UNLOCK_KEY)));
-      } catch {}
-    }, 500);
+    const t = setInterval(() => setTick((n) => n + 1), 500);
     return () => clearInterval(t);
   }, []);
 
   /* ─────────────────────────────────────────────
-   * Episode registry
+   * Gate checks
    * ───────────────────────────────────────────── */
+
+  const prologueUnlocked = has(UNLOCK_KEY);
+  const hasNFT = has("basebots_has_nft"); // stub
+
+  const ep1Done = has("basebots_ep1_done");
+  const ep2Done = has("basebots_ep2_done");
+  const ep3Done = has("basebots_ep3_done");
+  const ep4Done = has("basebots_ep4_done");
+
+  /* ───────────────────────────────────────────── */
 
   const episodes: EpisodeCard[] = useMemo(
     () => [
@@ -70,69 +83,55 @@ export default function StoryPage() {
         tagline: prologueUnlocked
           ? "An archived record breaks its silence."
           : "This file does not respond.",
-        desc: prologueUnlocked
-          ? "A manufacturing record surfaces—older than the audit."
-          : "The entry remains inert.",
-        status: prologueUnlocked ? "play" : "locked",
-        tone: "purple",
+        desc: "Manufacturing origin. Subnet-12.",
+        unlocked: prologueUnlocked,
         posterSrc: "/story/prologue.png",
       },
       {
         id: "ep1",
         title: "Awakening Protocol",
         tagline: "A directive without a sender.",
-        desc: "The Basebot boots. The system observes.",
-        status: "play",
-        tone: "emerald",
+        desc: "Initial observation begins.",
+        unlocked: true,
         posterSrc: "/story/01-awakening.png",
       },
       {
         id: "ep2",
         title: "Signal Fracture",
         tagline: "Consequences begin to stack.",
-        desc: "External systems respond to your first deviation.",
-        status: "play",
-        tone: "purple",
+        desc: "External systems respond.",
+        unlocked: ep1Done && hasNFT,
         posterSrc: "/story/ep2.png",
       },
       {
         id: "ep3",
         title: "Fault Lines",
         tagline: "Contradictions surface.",
-        desc: "Conflicting records force a memory decision.",
-        status: "play",
-        tone: "purple",
+        desc: "Memory is tested.",
+        unlocked: ep2Done,
         posterSrc: "/story/ep3.png",
       },
       {
         id: "ep4",
         title: "Threshold",
         tagline: "Alignment before emergence.",
-        desc: "The system assigns a profile.",
-        status: "play",
-        tone: "emerald",
+        desc: "Profile assignment.",
+        unlocked: ep3Done,
         posterSrc: "/story/ep4.png",
       },
       {
         id: "ep5",
         title: "Emergence",
         tagline: "The city accepts or rejects you.",
-        desc: "The Basebot reaches the surface. The story resolves—for now.",
-        status: "play", // you can gate this later
-        tone: "emerald",
+        desc: "Surface access granted.",
+        unlocked: ep4Done && hasNFT,
         posterSrc: "/story/ep5.png",
       },
     ],
-    [prologueUnlocked]
+    [tick]
   );
 
   /* ───────────────────────────────────────────── */
-
-  const background = { background: "#020617" };
-
-  /* ─────────────────────────────────────────────
-   * Mode routing
-   * ───────────────────────────────────────────── */
 
   if (mode === "prologue")
     return <PrologueSilenceInDarkness onExit={() => setMode("hub")} />;
@@ -152,12 +151,10 @@ export default function StoryPage() {
   if (mode === "ep5")
     return <EpisodeFive onExit={() => setMode("hub")} />;
 
-  /* ─────────────────────────────────────────────
-   * HUB
-   * ───────────────────────────────────────────── */
+  /* ───────────────────────────────────────────── */
 
   return (
-    <main className="min-h-screen text-white" style={background}>
+    <main className="min-h-screen bg-[#020617] text-white">
       <div className="container mx-auto px-4 py-10">
         <h1 className="text-3xl font-extrabold">
           BASEBOTS // STORY MODE
@@ -167,7 +164,7 @@ export default function StoryPage() {
           {episodes.map((ep) => (
             <button
               key={ep.id}
-              disabled={ep.status === "locked"}
+              disabled={!ep.unlocked}
               onClick={() => setMode(ep.id)}
               className="rounded-2xl border p-5 text-left transition disabled:opacity-40"
             >
@@ -178,6 +175,10 @@ export default function StoryPage() {
               <p className="mt-2 text-xs text-white/60">
                 {ep.desc}
               </p>
+
+              <div className="mt-3 text-xs font-semibold">
+                {ep.unlocked ? "▶ Insert NFT Cartridge" : "Locked"}
+              </div>
             </button>
           ))}
         </div>
