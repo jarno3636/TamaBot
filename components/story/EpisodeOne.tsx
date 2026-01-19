@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 /* ──────────────────────────────────────────────────────────────
  * Types
@@ -66,9 +66,7 @@ function saveGame(save: SaveShape) {
 function loadPoll(): PollCounts {
   try {
     const raw = localStorage.getItem(POLL_KEY);
-    return raw
-      ? (JSON.parse(raw) as PollCounts)
-      : { ACCEPT: 0, STALL: 0, SPOOF: 0, PULL_PLUG: 0 };
+    return raw ? (JSON.parse(raw) as PollCounts) : { ACCEPT: 0, STALL: 0, SPOOF: 0, PULL_PLUG: 0 };
   } catch {
     return { ACCEPT: 0, STALL: 0, SPOOF: 0, PULL_PLUG: 0 };
   }
@@ -85,6 +83,13 @@ function bumpPoll(choiceId: EpisodeOneChoiceId) {
 function pct(n: number, total: number) {
   if (!total) return 0;
   return Math.round((n / total) * 100);
+}
+
+function formatTime(totalSeconds: number) {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${String(r).padStart(2, "0")}`;
 }
 
 /* ──────────────────────────────────────────────────────────────
@@ -160,20 +165,12 @@ function SceneImage({ src, alt }: { src: string; alt: string }) {
       }}
     >
       <div className="relative h-[180px] md:h-[220px]">
-        <Image
-          src={src}
-          alt={alt}
-          fill
-          priority={false}
-          sizes="(max-width: 768px) 100vw, 900px"
-          style={{ objectFit: "cover" }}
-        />
+        <Image src={src} alt={alt} fill priority={false} sizes="(max-width: 768px) 100vw, 900px" style={{ objectFit: "cover" }} />
         <div
           aria-hidden
           className="absolute inset-0"
           style={{
-            background:
-              "linear-gradient(180deg, rgba(2,6,23,0.10) 0%, rgba(2,6,23,0.82) 78%, rgba(2,6,23,0.92) 100%)",
+            background: "linear-gradient(180deg, rgba(2,6,23,0.10) 0%, rgba(2,6,23,0.82) 78%, rgba(2,6,23,0.92) 100%)",
           }}
         />
         <div
@@ -196,12 +193,14 @@ function SceneImage({ src, alt }: { src: string; alt: string }) {
 
 export default function EpisodeOne({ onExit }: { onExit: () => void }) {
   const existing = useMemo(() => loadSave(), []);
-  const [phase, setPhase] = useState<
-    "intro" | "signal" | "local" | "localAfter" | "choice" | "ending" | "poll"
-  >(existing ? "poll" : "intro");
+  const [phase, setPhase] = useState<"intro" | "signal" | "local" | "localAfter" | "choice" | "ending" | "poll">(
+    existing ? "poll" : "intro",
+  );
 
-  // ✅ 60 seconds for choice window
-  const [secondsLeft, setSecondsLeft] = useState(60);
+  // ✅ 1:30 (90s) for choice window
+  const CHOICE_WINDOW_SECONDS = 90;
+
+  const [secondsLeft, setSecondsLeft] = useState(CHOICE_WINDOW_SECONDS);
   const [save, setSave] = useState<SaveShape | null>(existing);
 
   // local “doesn't matter” choice, only for flavor
@@ -215,6 +214,42 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
       return true;
     }
   });
+
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Create the looping audio once
+  useEffect(() => {
+    const a = new Audio("/audio/s1.mp3"); // public/audio/s1.mp3
+    a.loop = true;
+    a.preload = "auto";
+    a.volume = 0.65;
+    audioRef.current = a;
+
+    return () => {
+      try {
+        a.pause();
+        a.src = "";
+      } catch {}
+      audioRef.current = null;
+    };
+  }, []);
+
+  // Keep audio state in sync with soundEnabled
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+
+    if (!soundEnabled) {
+      try {
+        a.pause();
+        a.currentTime = 0;
+      } catch {}
+      return;
+    }
+
+    // Attempt to play (may be blocked until user gesture; that's fine)
+    a.play().catch(() => {});
+  }, [soundEnabled]);
 
   function toggleSound() {
     setSoundEnabled((s) => {
@@ -232,13 +267,13 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
   useEffect(() => {
     if (phase !== "choice") return;
 
-    setSecondsLeft(60);
+    setSecondsLeft(CHOICE_WINDOW_SECONDS);
     const t = setInterval(() => {
       setSecondsLeft((s) => (s <= 1 ? 0 : s - 1));
     }, 1000);
 
     return () => clearInterval(t);
-  }, [phase]);
+  }, [phase, CHOICE_WINDOW_SECONDS]);
 
   useEffect(() => {
     if (phase === "choice" && secondsLeft === 0) {
@@ -262,13 +297,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
       },
       profile: {
         archetype:
-          choiceId === "ACCEPT"
-            ? "Operator"
-            : choiceId === "STALL"
-              ? "Ghost"
-              : choiceId === "SPOOF"
-                ? "Saboteur"
-                : "Severed",
+          choiceId === "ACCEPT" ? "Operator" : choiceId === "STALL" ? "Ghost" : choiceId === "SPOOF" ? "Saboteur" : "Severed",
         trust: choiceId === "ACCEPT" ? 70 : choiceId === "STALL" ? 55 : choiceId === "SPOOF" ? 26 : 16,
         threat: choiceId === "ACCEPT" ? 22 : choiceId === "STALL" ? 36 : choiceId === "SPOOF" ? 74 : 58,
       },
@@ -451,10 +480,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
             {value} • {percent}%
           </div>
         </div>
-        <div
-          className="mt-2 h-[10px] rounded-full border overflow-hidden"
-          style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.18)" }}
-        >
+        <div className="mt-2 h-[10px] rounded-full border overflow-hidden" style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.18)" }}>
           <div
             className="h-full rounded-full"
             style={{
@@ -485,7 +511,12 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
       <div className="flex items-center justify-end gap-2">
         <button
           type="button"
-          onClick={toggleSound}
+          onClick={() => {
+            toggleSound();
+            // also try to kick playback on user gesture if turning on
+            const a = audioRef.current;
+            if (a && !soundEnabled) a.play().catch(() => {});
+          }}
           className="rounded-full border px-4 py-2 text-[12px] font-extrabold transition active:scale-95 hover:brightness-110"
           style={{
             borderColor: "rgba(255,255,255,0.12)",
@@ -600,11 +631,11 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
 
             <div className="mt-3 grid gap-2 text-[13px] leading-relaxed text-white/72">
               <p>You find the node inside a wall recess—older hardware, scratched metal, a physical actuator with worn edges.</p>
-              <p>A label plate is half-peeled, but one thing is readable: <span className="font-semibold text-white/80">MANUAL OVERRIDE</span>.</p>
-              <p>No blinking lights. No friendly prompts. Just a cable port, an actuator, and an empty badge slot.</p>
-              <p className="text-white/80 font-semibold">
-                Whatever this room is, it expects an “operator”—and your Basebot is currently unowned.
+              <p>
+                A label plate is half-peeled, but one thing is readable: <span className="font-semibold text-white/80">MANUAL OVERRIDE</span>.
               </p>
+              <p>No blinking lights. No friendly prompts. Just a cable port, an actuator, and an empty badge slot.</p>
+              <p className="text-white/80 font-semibold">Whatever this room is, it expects an “operator”—and your Basebot is currently unowned.</p>
             </div>
 
             <div className="mt-5 grid gap-4 md:grid-cols-3">
@@ -617,8 +648,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 className="rounded-3xl border p-4 text-left transition active:scale-[0.99] hover:brightness-110"
                 style={{
                   borderColor: "rgba(56,189,248,0.22)",
-                  background:
-                    "radial-gradient(700px 220px at 10% 0%, rgba(56,189,248,0.16), transparent 60%), rgba(0,0,0,0.24)",
+                  background: "radial-gradient(700px 220px at 10% 0%, rgba(56,189,248,0.16), transparent 60%), rgba(0,0,0,0.24)",
                   boxShadow: "0 22px 90px rgba(0,0,0,0.60)",
                 }}
               >
@@ -635,8 +665,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 className="rounded-3xl border p-4 text-left transition active:scale-[0.99] hover:brightness-110"
                 style={{
                   borderColor: "rgba(251,191,36,0.20)",
-                  background:
-                    "radial-gradient(700px 220px at 10% 0%, rgba(251,191,36,0.14), transparent 60%), rgba(0,0,0,0.24)",
+                  background: "radial-gradient(700px 220px at 10% 0%, rgba(251,191,36,0.14), transparent 60%), rgba(0,0,0,0.24)",
                   boxShadow: "0 22px 90px rgba(0,0,0,0.60)",
                 }}
               >
@@ -653,8 +682,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 className="rounded-3xl border p-4 text-left transition active:scale-[0.99] hover:brightness-110"
                 style={{
                   borderColor: "rgba(251,113,133,0.20)",
-                  background:
-                    "radial-gradient(700px 220px at 10% 0%, rgba(251,113,133,0.14), transparent 60%), rgba(0,0,0,0.24)",
+                  background: "radial-gradient(700px 220px at 10% 0%, rgba(251,113,133,0.14), transparent 60%), rgba(0,0,0,0.24)",
                   boxShadow: "0 22px 90px rgba(0,0,0,0.60)",
                 }}
               >
@@ -702,9 +730,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
               <p>The recess goes dead. No lights. No hum. No second chance.</p>
               <p>Then the stripped-down audit text returns—cleaner now, more direct.</p>
               <p className="font-mono text-white/80">AUDIT GATE: SUBMIT OPERATOR PROFILE OR BE CLASSIFIED</p>
-              <p className="text-white/80 font-semibold">
-                This is the real decision: name yourself… refuse… counterfeit… or cut the line entirely.
-              </p>
+              <p className="text-white/80 font-semibold">This is the real decision: name yourself… refuse… counterfeit… or cut the line entirely.</p>
             </div>
 
             <button
@@ -742,13 +768,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 </div>
               </div>
 
-              <div
-                className="w-full md:w-[360px] rounded-3xl border p-4"
-                style={{
-                  borderColor: "rgba(255,255,255,0.10)",
-                  background: "rgba(0,0,0,0.22)",
-                }}
-              >
+              <div className="w-full md:w-[360px] rounded-3xl border p-4" style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.22)" }}>
                 <div className="flex items-center justify-between">
                   <div className="text-[11px] font-semibold tracking-wide text-white/62">DECISION WINDOW</div>
                   <div
@@ -759,18 +779,18 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                       color: secondsLeft <= 10 ? "rgba(255,241,242,0.92)" : "rgba(255,255,255,0.82)",
                     }}
                   >
-                    {secondsLeft}s
+                    {formatTime(secondsLeft)}
                   </div>
                 </div>
 
                 <div className="mt-3 text-[11px] text-white/58">
-                  {secondsLeft > 35 && "All actions available. Audit is tolerant."}
-                  {secondsLeft <= 35 && secondsLeft > 15 && "Sever option will be withdrawn soon."}
-                  {secondsLeft <= 15 && "Decoy submission will be withdrawn. Only record or refusal remain."}
+                  {secondsLeft > 60 && "All actions available. Audit is tolerant."}
+                  {secondsLeft <= 60 && secondsLeft > 25 && "Sever option will be withdrawn soon."}
+                  {secondsLeft <= 25 && "Decoy submission will be withdrawn. Only record or refusal remain."}
                 </div>
 
                 <div className="mt-3 text-[11px] text-white/46">
-                  Auto-finalize at 0s: <span className="text-white/70 font-semibold">Non-cooperative (STALL)</span>
+                  Auto-finalize at 0:00: <span className="text-white/70 font-semibold">Non-cooperative (STALL)</span>
                 </div>
               </div>
             </div>
@@ -796,7 +816,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
 
               <ChoiceCard
                 choiceId="SPOOF"
-                hidden={secondsLeft <= 15}
+                hidden={secondsLeft <= 25}
                 title="Submit Decoy"
                 body="Provide a plausible credential that isn’t yours—enough to pass the gate, not enough to be true."
                 risk="If audited, the mismatch escalates immediately. False credentials trigger containment."
@@ -806,7 +826,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
 
               <ChoiceCard
                 choiceId="PULL_PLUG"
-                hidden={secondsLeft <= 35}
+                hidden={secondsLeft <= 60}
                 title="Sever the Link"
                 body="Cut the channel before a profile is written. Let the room go silent and deal with the fallout."
                 risk="Severance is logged. Someone—or something—will investigate the gap."
@@ -815,9 +835,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
               />
             </div>
 
-            <div className="mt-6 text-center text-[11px] text-white/46">
-              “What gets recorded becomes what gets enforced.”
-            </div>
+            <div className="mt-6 text-center text-[11px] text-white/46">“What gets recorded becomes what gets enforced.”</div>
           </div>
         </div>
       )}
@@ -842,10 +860,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
               </div>
             </div>
 
-            <div
-              className="mt-3 rounded-2xl border p-3"
-              style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.04)" }}
-            >
+            <div className="mt-3 rounded-2xl border p-3" style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.04)" }}>
               <div className="text-[12px] text-white/75">
                 Artifact: <span className="font-extrabold text-white/92">{save.artifact.name}</span>
               </div>
@@ -857,9 +872,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 <p>You submit a credential. The text cursor stops blinking like it’s satisfied.</p>
                 <p>Immediately the room changes temperature—subtle, controlled—like a facility coming online around you.</p>
                 <p>The door releases with a soft pneumatic sigh. Not welcoming. Authorized.</p>
-                <p className="text-white/80 font-semibold">
-                  Then a second line appears beneath the audit result—formatted differently, older, not part of the gate:
-                </p>
+                <p className="text-white/80 font-semibold">Then a second line appears beneath the audit result—formatted differently, older, not part of the gate:</p>
                 <p className="font-mono text-white/80">SUBNET-12: “We’ve been waiting for you to choose a name.”</p>
               </div>
             )}
@@ -879,9 +892,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 <p>You submit a decoy credential—clean enough to look real, wrong enough to be dangerous.</p>
                 <p>The system accepts it fast. Too fast.</p>
                 <p>The door unlocks, and the corridor beyond is already lit, like it anticipated your success.</p>
-                <p className="text-white/80 font-semibold">
-                  Then your screen splits: two audit receipts, both “valid,” both incompatible—now both permanent.
-                </p>
+                <p className="text-white/80 font-semibold">Then your screen splits: two audit receipts, both “valid,” both incompatible—now both permanent.</p>
                 <p className="font-mono text-white/80">SUBNET-12: “Two names. One body. That’s rare.”</p>
               </div>
             )}
@@ -891,9 +902,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 <p>You sever the link. The audit text vanishes mid-line, like someone yanked a sheet from a printer.</p>
                 <p>The room becomes brutally quiet—no hum, no timer, no confirmation beeps.</p>
                 <p>The Basebot stays awake, optics open, scanning the door as if it expects it to open on its own.</p>
-                <p className="text-white/80 font-semibold">
-                  And then, from nowhere inside the silence, a message appears without the channel reattaching:
-                </p>
+                <p className="text-white/80 font-semibold">And then, from nowhere inside the silence, a message appears without the channel reattaching:</p>
                 <p className="font-mono text-white/80">SUBNET-12: “You cut the gate. You didn’t cut us.”</p>
               </div>
             )}
@@ -903,15 +912,14 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
               className="mt-5 rounded-3xl border p-4"
               style={{
                 borderColor: "rgba(255,255,255,0.12)",
-                background:
-                  "radial-gradient(900px 260px at 20% 0%, rgba(56,189,248,0.10), transparent 60%), rgba(255,255,255,0.03)",
+                background: "radial-gradient(900px 260px at 20% 0%, rgba(56,189,248,0.10), transparent 60%), rgba(255,255,255,0.03)",
               }}
             >
               <div className="text-[11px] font-extrabold tracking-wide text-white/70">NEXT FILE DETECTED</div>
               <div className="mt-1 text-[14px] font-extrabold text-white/92">EPISODE TWO — THE CORRIDOR</div>
               <div className="mt-2 text-[12px] leading-relaxed text-white/70">
-                The door isn’t an exit. It’s a handoff. Beyond it: a corridor lined with inactive Basebots—clean, upright,
-                unplugged—like inventory. And at the far end, a terminal already displaying your session timestamp.
+                The door isn’t an exit. It’s a handoff. Beyond it: a corridor lined with inactive Basebots—clean, upright, unplugged—like
+                inventory. And at the far end, a terminal already displaying your session timestamp.
               </div>
               <div className="mt-2 text-[12px] leading-relaxed text-white/70">
                 One last line blinks there, slow and patient: <span className="font-mono text-white/80">“Bring the artifact.”</span>
@@ -968,12 +976,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                   <PollRow choiceId="ACCEPT" value={poll.ACCEPT} total={total} highlight={save?.choiceId === "ACCEPT"} />
                   <PollRow choiceId="STALL" value={poll.STALL} total={total} highlight={save?.choiceId === "STALL"} />
                   <PollRow choiceId="SPOOF" value={poll.SPOOF} total={total} highlight={save?.choiceId === "SPOOF"} />
-                  <PollRow
-                    choiceId="PULL_PLUG"
-                    value={poll.PULL_PLUG}
-                    total={total}
-                    highlight={save?.choiceId === "PULL_PLUG"}
-                  />
+                  <PollRow choiceId="PULL_PLUG" value={poll.PULL_PLUG} total={total} highlight={save?.choiceId === "PULL_PLUG"} />
                 </div>
               );
             })()}
