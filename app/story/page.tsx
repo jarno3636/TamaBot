@@ -48,7 +48,7 @@ type EpisodeCard = {
 const UNLOCK_KEY = "basebots_bonus_unlock";
 const NFT_KEY = "basebots_has_nft";
 
-// 👉 CHANGE THIS to your real mint page
+// 🔗 Update if your mint URL changes
 const MINT_URL = "https://mint.basebots.xyz";
 
 function has(key: string) {
@@ -77,17 +77,21 @@ export default function StoryPage() {
 
   /* ─────────────────────────────────────────────
    * REAL NFT OWNERSHIP CHECK (Base mainnet)
+   * FIXED: Option A (local client capture)
    * ───────────────────────────────────────────── */
 
   useEffect(() => {
-    if (!isConnected || !address || !publicClient) return;
+    if (!isConnected || !address) return;
     if (chain?.id !== 8453) return;
+
+    const client = publicClient;
+    if (!client) return;
 
     let cancelled = false;
 
     async function checkNFT() {
       try {
-        const balance = await publicClient.readContract({
+        const balance = await client.readContract({
           address: BASEBOTS.address,
           abi: BASEBOTS.abi,
           functionName: "balanceOf",
@@ -224,7 +228,8 @@ export default function StoryPage() {
           className="relative overflow-hidden rounded-[28px] border p-6 md:p-8"
           style={{
             borderColor: "rgba(255,255,255,0.10)",
-            background: "linear-gradient(180deg, rgba(2,6,23,0.88), rgba(2,6,23,0.64))",
+            background:
+              "linear-gradient(180deg, rgba(2,6,23,0.88), rgba(2,6,23,0.64))",
             boxShadow: "0 40px 140px rgba(0,0,0,0.78)",
           }}
         >
