@@ -74,16 +74,18 @@ export default function StoryPage() {
   }, []);
 
   /* ─────────────────────────────────────────────
-   * REAL NFT CHECK — FIXED FOR TS
+   * REAL NFT CHECK — TS + wagmi SAFE
    * ───────────────────────────────────────────── */
 
   useEffect(() => {
-    if (!isConnected || !address) return;
-    if (chain?.id !== 8453) return;
+    if (!isConnected) return;
+    if (!address) return;
     if (!publicClient) return;
+    if (chain?.id !== 8453) return;
 
-    // ✅ HARD TYPE NARROWING (this is the key)
+    // ✅ CAPTURE AND NARROW TYPES
     const client = publicClient as NonNullable<typeof publicClient>;
+    const walletAddress = address as `0x${string}`;
 
     let cancelled = false;
 
@@ -93,7 +95,7 @@ export default function StoryPage() {
           address: BASEBOTS.address,
           abi: BASEBOTS.abi,
           functionName: "balanceOf",
-          args: [address],
+          args: [walletAddress],
         });
 
         if (cancelled) return;
