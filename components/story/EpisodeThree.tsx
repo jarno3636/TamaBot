@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 /* ──────────────────────────────────────────────
  * Storage keys
@@ -8,10 +8,10 @@ import { useEffect, useMemo, useState } from "react";
 
 const EP3_STATE_KEY = "basebots_ep3_state_v1";
 const EP3_DONE_KEY = "basebots_ep3_done";
+const BONUS_KEY = "basebots_bonus_echo_unlocked";
+const SOUND_KEY = "basebots_ep3_sound";
 
-/* ──────────────────────────────────────────────
- * Types
- * ────────────────────────────────────────────── */
+/* ────────────────────────────────────────────── */
 
 type Phase =
   | "intro"
@@ -28,10 +28,6 @@ type Ep3State = {
   completedAt?: number;
 };
 
-/* ──────────────────────────────────────────────
- * Helpers
- * ────────────────────────────────────────────── */
-
 function loadState(): Ep3State {
   try {
     return JSON.parse(localStorage.getItem(EP3_STATE_KEY) || "{}");
@@ -41,34 +37,65 @@ function loadState(): Ep3State {
 }
 
 function saveState(patch: Partial<Ep3State>) {
-  const current = loadState();
-  localStorage.setItem(
-    EP3_STATE_KEY,
-    JSON.stringify({ ...current, ...patch })
-  );
+  const cur = loadState();
+  localStorage.setItem(EP3_STATE_KEY, JSON.stringify({ ...cur, ...patch }));
 }
 
-/* ──────────────────────────────────────────────
- * Component
- * ────────────────────────────────────────────── */
+/* ────────────────────────────────────────────── */
 
 export default function EpisodeThree({ onExit }: { onExit: () => void }) {
   const [phase, setPhase] = useState<Phase>("intro");
-  const [glitchSeed, setGlitchSeed] = useState(0);
+  const [glitch, setGlitch] = useState(0);
+  const [showEcho, setShowEcho] = useState(false);
+  const [soundOn, setSoundOn] = useState(
+    () => localStorage.getItem(SOUND_KEY) !== "off"
+  );
 
-  /* subtle randomized glitch tick */
+  /* ── ambient glitch pulse ── */
   useEffect(() => {
     const t = setInterval(() => {
-      if (Math.random() > 0.85) {
-        setGlitchSeed(Math.random());
-      }
+      if (Math.random() > 0.88) setGlitch(Math.random());
     }, 700);
     return () => clearInterval(t);
   }, []);
 
+  /* ── eerie echo popup (once) ── */
+  useEffect(() => {
+    if (localStorage.getItem(BONUS_KEY)) return;
+
+    const delay = 3000 + Math.random() * 4000;
+    const t = setTimeout(() => {
+      setShowEcho(true);
+      setTimeout(() => setShowEcho(false), 2600);
+    }, delay);
+
+    return () => clearTimeout(t);
+  }, []);
+
+  /* ── sound ── */
+  useEffect(() => {
+    const audio = new Audio("/audio/s3.mp3");
+    audio.loop = true;
+    audio.volume = 0.6;
+
+    if (soundOn) audio.play().catch(() => {});
+    return () => audio.pause();
+  }, [soundOn]);
+
+  function toggleSound() {
+    const next = !soundOn;
+    setSoundOn(next);
+    localStorage.setItem(SOUND_KEY, next ? "on" : "off");
+  }
+
+  function acknowledgeEcho() {
+    localStorage.setItem(BONUS_KEY, "true");
+    window.dispatchEvent(new Event("basebots-progress-updated"));
+    setShowEcho(false);
+  }
+
   function finalize() {
     const s = loadState();
-
     let cognition: Ep3State["cognitionBias"] = "PRAGMATIC";
 
     if (s.contradictionChoice === "RESOLVE" && s.signalChoice === "FILTER")
@@ -77,44 +104,73 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
       cognition = "ARCHIVAL";
     if (s.contradictionChoice === "PRESERVE" && s.signalChoice === "FILTER")
       cognition = "PARANOID";
-    if (s.contradictionChoice === "RESOLVE" && s.signalChoice === "LISTEN")
-      cognition = "PRAGMATIC";
 
-    saveState({
-      cognitionBias: cognition,
-      completedAt: Date.now(),
-    });
-
+    saveState({ cognitionBias: cognition, completedAt: Date.now() });
     localStorage.setItem(EP3_DONE_KEY, "true");
     window.dispatchEvent(new Event("basebots-progress-updated"));
-
     setPhase("lock");
   }
 
   return (
     <section
-      className="relative overflow-hidden rounded-[28px] border p-6 md:p-8 text-white"
+      className="relative overflow-hidden rounded-[28px] border p-6 text-white"
       style={{
         borderColor: "rgba(255,255,255,0.12)",
         background:
-          "radial-gradient(900px 400px at 50% -10%, rgba(56,189,248,0.08), transparent 60%), linear-gradient(180deg, rgba(2,6,23,0.98), rgba(2,6,23,0.82))",
-        boxShadow: "0 50px 180px rgba(0,0,0,0.9)",
+          "radial-gradient(900px 400px at 50% -10%, rgba(168,85,247,0.08), transparent 60%), linear-gradient(180deg, rgba(2,6,23,0.98), rgba(2,6,23,0.82))",
+        boxShadow: "0 60px 200px rgba(0,0,0,0.9)",
       }}
     >
-      {/* Ambient scanlines */}
+      {/* scanlines */}
       <div
         aria-hidden
         style={{
-          pointerEvents: "none",
           position: "absolute",
           inset: 0,
+          pointerEvents: "none",
           background:
             "linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px)",
           backgroundSize: "100% 3px",
           opacity: 0.08,
-          mixBlendMode: "overlay",
         }}
       />
+
+      {/* top controls */}
+      <div className="flex justify-end gap-2">
+        <button
+          onClick={toggleSound}
+          className="rounded-full border px-3 py-1 text-xs"
+        >
+          SOUND {soundOn ? "ON" : "OFF"}
+        </button>
+        <button
+          onClick={onExit}
+          className="rounded-full border px-3 py-1 text-xs"
+        >
+          Exit
+        </button>
+      </div>
+
+      {/* ghost echo */}
+      {showEcho && (
+        <button
+          onClick={acknowledgeEcho}
+          style={{
+            position: "absolute",
+            bottom: "20%",
+            right: "10%",
+            background: "rgba(255,255,255,0.08)",
+            border: "1px solid rgba(255,255,255,0.2)",
+            padding: "10px 14px",
+            fontSize: "11px",
+            fontFamily: "monospace",
+            opacity: 0.9,
+            textShadow: "0 0 8px rgba(168,85,247,0.6)",
+          }}
+        >
+          ▒▒ do you remember before this? ▒▒
+        </button>
+      )}
 
       {/* INTRO */}
       {phase === "intro" && (
@@ -123,31 +179,28 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
             className="text-xl font-extrabold tracking-wide"
             style={{
               textShadow:
-                glitchSeed > 0
-                  ? "2px 0 rgba(168,85,247,0.6), -2px 0 rgba(56,189,248,0.6)"
+                glitch > 0
+                  ? "2px 0 rgba(168,85,247,0.7), -2px 0 rgba(56,189,248,0.7)"
                   : "none",
             }}
           >
             FAULT LINES
           </h2>
 
-          <p className="mt-4 text-sm text-white/80 leading-relaxed">
-            The designation you accepted no longer resolves cleanly.
+          <p className="mt-4 text-sm text-white/80">
+            Your designation destabilized upstream logic.
           </p>
           <p className="mt-2 text-sm text-white/60">
-            Conflicting records propagate upward.
-            <br />
-            The system must decide how to think.
+            Something older than the system is listening.
           </p>
 
           <button
             onClick={() => setPhase("context")}
-            className="mt-6 rounded-full px-5 py-2 text-[12px] font-extrabold"
+            className="mt-6 rounded-full px-5 py-2 text-xs font-extrabold"
             style={{
               background:
                 "linear-gradient(90deg, rgba(56,189,248,0.9), rgba(168,85,247,0.7))",
-              color: "rgba(2,6,23,1)",
-              boxShadow: "0 0 24px rgba(56,189,248,0.25)",
+              color: "#020617",
             }}
           >
             Continue
@@ -155,147 +208,91 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
         </>
       )}
 
-      {/* CONTEXT */}
+      {/* CONTEXT / CONTRADICTION / SIGNAL / SYNTHESIS */}
+      {/* (unchanged logic, same as before) */}
+
       {phase === "context" && (
         <>
-          <p className="text-sm text-white/75 leading-relaxed">
-            Contradictions are not errors.
-            <br />
-            They are forks in reasoning.
+          <p className="text-sm text-white/70">
+            Contradictions are scars, not errors.
           </p>
-
-          <div
-            className="mt-4 rounded-xl border p-3 text-xs"
-            style={{
-              borderColor: "rgba(255,255,255,0.14)",
-              background: "rgba(255,255,255,0.04)",
-            }}
-          >
-            ⚠ Cognitive bias will persist beyond this episode.
-          </div>
-
           <button
             onClick={() => setPhase("contradiction")}
-            className="mt-6 rounded-full px-5 py-2 text-[12px] font-extrabold border"
-            style={{
-              borderColor: "rgba(255,255,255,0.2)",
-            }}
+            className="mt-6 rounded-full px-5 py-2 text-xs font-extrabold border"
           >
             Proceed
           </button>
         </>
       )}
 
-      {/* CONTRADICTION */}
       {phase === "contradiction" && (
         <>
-          <p className="text-sm text-white/80">
-            Two verified records disagree.
-          </p>
-
-          <div className="mt-5 space-y-3">
-            <button
-              onClick={() => {
-                saveState({ contradictionChoice: "RESOLVE" });
-                setPhase("signal");
-              }}
-              className="w-full rounded-xl px-4 py-3 text-sm font-semibold"
-              style={{
-                background: "rgba(56,189,248,0.15)",
-              }}
-            >
-              Resolve — enforce coherence
-            </button>
-
-            <button
-              onClick={() => {
-                saveState({ contradictionChoice: "PRESERVE" });
-                setPhase("signal");
-              }}
-              className="w-full rounded-xl px-4 py-3 text-sm font-semibold"
-              style={{
-                background: "rgba(255,255,255,0.06)",
-              }}
-            >
-              Preserve — retain ambiguity
-            </button>
-          </div>
-        </>
-      )}
-
-      {/* SIGNAL */}
-      {phase === "signal" && (
-        <>
-          <p className="text-sm text-white/80">
-            External signals bleed into cognition.
-          </p>
-
-          <div className="mt-5 space-y-3">
-            <button
-              onClick={() => {
-                saveState({ signalChoice: "FILTER" });
-                setPhase("synthesis");
-              }}
-              className="w-full rounded-xl px-4 py-3 text-sm font-semibold"
-              style={{ background: "rgba(255,255,255,0.06)" }}
-            >
-              Filter — protect internal state
-            </button>
-
-            <button
-              onClick={() => {
-                saveState({ signalChoice: "LISTEN" });
-                setPhase("synthesis");
-              }}
-              className="w-full rounded-xl px-4 py-3 text-sm font-semibold"
-              style={{ background: "rgba(168,85,247,0.18)" }}
-            >
-              Listen — expand perception
-            </button>
-          </div>
-        </>
-      )}
-
-      {/* SYNTHESIS */}
-      {phase === "synthesis" && (
-        <>
-          <p className="text-sm text-white/80">
-            Cognitive synthesis underway…
-          </p>
-
-          <div className="mt-4 text-xs text-white/50 font-mono">
-            Mapping contradiction handling → reasoning bias
-          </div>
-
           <button
-            onClick={finalize}
-            className="mt-6 rounded-full px-5 py-2 text-[12px] font-extrabold"
-            style={{
-              background:
-                "linear-gradient(90deg, rgba(56,189,248,0.9), rgba(168,85,247,0.7))",
-              color: "rgba(2,6,23,1)",
+            onClick={() => {
+              saveState({ contradictionChoice: "RESOLVE" });
+              setPhase("signal");
             }}
+            className="w-full rounded-xl px-4 py-3 mt-4"
           >
-            Commit cognition model
+            Resolve contradiction
+          </button>
+          <button
+            onClick={() => {
+              saveState({ contradictionChoice: "PRESERVE" });
+              setPhase("signal");
+            }}
+            className="w-full rounded-xl px-4 py-3 mt-3"
+          >
+            Preserve ambiguity
           </button>
         </>
       )}
 
-      {/* LOCK */}
+      {phase === "signal" && (
+        <>
+          <button
+            onClick={() => {
+              saveState({ signalChoice: "FILTER" });
+              setPhase("synthesis");
+            }}
+            className="w-full rounded-xl px-4 py-3 mt-4"
+          >
+            Filter signal
+          </button>
+          <button
+            onClick={() => {
+              saveState({ signalChoice: "LISTEN" });
+              setPhase("synthesis");
+            }}
+            className="w-full rounded-xl px-4 py-3 mt-3"
+          >
+            Listen
+          </button>
+        </>
+      )}
+
+      {phase === "synthesis" && (
+        <>
+          <p className="text-sm text-white/70">
+            Cognition crystallizing…
+          </p>
+          <button
+            onClick={finalize}
+            className="mt-6 rounded-full px-5 py-2 text-xs font-extrabold"
+          >
+            Commit cognition
+          </button>
+        </>
+      )}
+
       {phase === "lock" && (
         <>
-          <p className="font-mono text-sm tracking-widest text-white/80">
+          <p className="font-mono text-sm tracking-widest">
             COGNITION MODEL LOCKED
           </p>
-
-          <p className="mt-3 text-xs text-white/50">
-            This bias will silently influence future decisions.
-          </p>
-
           <button
             onClick={onExit}
-            className="mt-6 rounded-full px-5 py-2 text-[12px] font-extrabold border"
-            style={{ borderColor: "rgba(255,255,255,0.2)" }}
+            className="mt-6 rounded-full px-5 py-2 text-xs font-extrabold border"
           >
             Return to hub
           </button>
