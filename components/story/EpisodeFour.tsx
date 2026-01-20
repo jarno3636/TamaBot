@@ -1,124 +1,211 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+/* ──────────────────────────────────────────────
+ * Storage keys
+ * ────────────────────────────────────────────── */
+
+const EP3_STATE_KEY = "basebots_ep3_state_v1";
 const EP4_KEY = "basebots_ep4_profile_v1";
 const EP4_DONE_KEY = "basebots_ep4_done";
 
-type Phase = "hold" | "choice" | "name" | "lock";
+/* ──────────────────────────────────────────────
+ * Types
+ * ────────────────────────────────────────────── */
 
-function sanitizeName(v: string) {
-  return v.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+type Phase = "intro" | "analysis" | "assignment" | "lock";
+
+type Ep3State = {
+  cognitionBias?: "DETERMINISTIC" | "ARCHIVAL" | "PRAGMATIC" | "PARANOID";
+};
+
+type Profile =
+  | "EXECUTOR"
+  | "OBSERVER"
+  | "OPERATOR"
+  | "SENTINEL";
+
+/* ──────────────────────────────────────────────
+ * Helpers
+ * ────────────────────────────────────────────── */
+
+function loadEp3(): Ep3State {
+  try {
+    return JSON.parse(localStorage.getItem(EP3_STATE_KEY) || "{}");
+  } catch {
+    return {};
+  }
 }
 
-export default function EpisodeFour({
-  onExit,
-}: {
-  onExit: () => void;
-}) {
-  const [phase, setPhase] = useState<Phase>("hold");
-  const [bias, setBias] = useState<"ALIGN" | "ADAPT" | "WITHDRAW" | null>(null);
-  const [name, setName] = useState("");
-
-  function commitProfile(selectedBias: "ALIGN" | "ADAPT" | "WITHDRAW") {
-    setBias(selectedBias);
-    setPhase("name");
+function mapBiasToProfile(bias?: Ep3State["cognitionBias"]): Profile {
+  switch (bias) {
+    case "DETERMINISTIC":
+      return "EXECUTOR";
+    case "ARCHIVAL":
+      return "OBSERVER";
+    case "PARANOID":
+      return "SENTINEL";
+    case "PRAGMATIC":
+    default:
+      return "OPERATOR";
   }
+}
 
-  function finalize() {
-    if (!bias || name.length !== 7) return;
+/* ──────────────────────────────────────────────
+ * Component
+ * ────────────────────────────────────────────── */
 
+export default function EpisodeFour({ onExit }: { onExit: () => void }) {
+  const ep3 = useMemo(() => loadEp3(), []);
+  const profile = useMemo(
+    () => mapBiasToProfile(ep3.cognitionBias),
+    [ep3.cognitionBias]
+  );
+
+  const [phase, setPhase] = useState<Phase>("intro");
+
+  function commit() {
     localStorage.setItem(
       EP4_KEY,
       JSON.stringify({
-        bias,
-        name,
-        at: Date.now(),
+        profile,
+        sourceBias: ep3.cognitionBias ?? "UNKNOWN",
+        assignedAt: Date.now(),
       })
     );
 
-    localStorage.setItem(EP4_DONE_KEY, String(Date.now()));
+    localStorage.setItem(EP4_DONE_KEY, "true");
+    window.dispatchEvent(new Event("basebots-progress-updated"));
+
     setPhase("lock");
   }
 
   return (
-    <section className="rounded-3xl border p-6 bg-[#020617] text-white">
-      {/* HOLD */}
-      {phase === "hold" && (
+    <section
+      className="relative overflow-hidden rounded-[28px] border p-6 md:p-8 text-white"
+      style={{
+        borderColor: "rgba(255,255,255,0.12)",
+        background:
+          "radial-gradient(900px 420px at 50% -10%, rgba(168,85,247,0.10), transparent 60%), linear-gradient(180deg, rgba(2,6,23,0.98), rgba(2,6,23,0.82))",
+        boxShadow: "0 50px 180px rgba(0,0,0,0.9)",
+      }}
+    >
+      {/* ambient grid */}
+      <div
+        aria-hidden
+        style={{
+          pointerEvents: "none",
+          position: "absolute",
+          inset: 0,
+          backgroundImage:
+            "linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px)",
+          backgroundSize: "60px 60px",
+          opacity: 0.08,
+          maskImage:
+            "radial-gradient(600px 280px at 50% 20%, black 40%, transparent 70%)",
+        }}
+      />
+
+      {/* INTRO */}
+      {phase === "intro" && (
         <>
-          <h2 className="text-xl font-extrabold">THRESHOLD</h2>
-          <p className="mt-3 text-sm text-white/70">
-            Pre-surface alignment required. Multiple directives detected.
+          <h2 className="text-xl font-extrabold tracking-wide">
+            THRESHOLD
+          </h2>
+
+          <p className="mt-4 text-sm text-white/80 leading-relaxed">
+            Cognitive scaffolding complete.
           </p>
+
+          <p className="mt-2 text-sm text-white/60">
+            The system prepares to finalize behavioral posture.
+          </p>
+
           <button
-            className="mt-6 px-4 py-2 rounded-full border"
-            onClick={() => setPhase("choice")}
+            onClick={() => setPhase("analysis")}
+            className="mt-6 rounded-full px-5 py-2 text-[12px] font-extrabold"
+            style={{
+              background:
+                "linear-gradient(90deg, rgba(56,189,248,0.9), rgba(168,85,247,0.7))",
+              color: "rgba(2,6,23,1)",
+              boxShadow: "0 0 28px rgba(56,189,248,0.25)",
+            }}
           >
             Continue
           </button>
         </>
       )}
 
-      {/* CHOICE */}
-      {phase === "choice" && (
+      {/* ANALYSIS */}
+      {phase === "analysis" && (
         <>
-          <p className="text-sm text-white/70">
-            Select directive priority.
+          <p className="text-sm text-white/75 leading-relaxed">
+            Prior contradiction handling produced a stable cognition bias:
           </p>
-          <div className="mt-4 space-y-2">
-            <button
-              onClick={() => commitProfile("ALIGN")}
-              className="block w-full border px-4 py-2 rounded"
-            >
-              Align with Core
-            </button>
-            <button
-              onClick={() => commitProfile("ADAPT")}
-              className="block w-full border px-4 py-2 rounded"
-            >
-              Adapt to variance
-            </button>
-            <button
-              onClick={() => commitProfile("WITHDRAW")}
-              className="block w-full border px-4 py-2 rounded"
-            >
-              Withdraw internally
-            </button>
+
+          <div
+            className="mt-4 rounded-2xl border px-4 py-3 text-sm font-mono tracking-wide"
+            style={{
+              borderColor: "rgba(255,255,255,0.14)",
+              background: "rgba(0,0,0,0.35)",
+              boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.02)",
+            }}
+          >
+            {ep3.cognitionBias ?? "UNCLASSIFIED"}
           </div>
+
+          <p className="mt-4 text-sm text-white/60">
+            This bias constrains response strategies under uncertainty.
+          </p>
+
+          <button
+            onClick={() => setPhase("assignment")}
+            className="mt-6 rounded-full px-5 py-2 text-[12px] font-extrabold border"
+            style={{ borderColor: "rgba(255,255,255,0.22)" }}
+          >
+            Proceed
+          </button>
         </>
       )}
 
-      {/* NAME */}
-      {phase === "name" && (
+      {/* ASSIGNMENT */}
+      {phase === "assignment" && (
         <>
-          <p className="text-sm text-white/70">
-            Designation required.
+          <p className="text-sm text-white/75 leading-relaxed">
+            Behavioral profile synthesized:
           </p>
 
-          <p className="mt-2 text-xs text-white/50">
-            Seven characters. Letters and numbers only.
-          </p>
-
-          <input
-            value={name}
-            onChange={(e) =>
-              setName(sanitizeName(e.target.value).slice(0, 7))
-            }
-            className="mt-4 w-full rounded-lg border bg-black px-3 py-2 font-mono text-sm tracking-widest text-white outline-none"
-            placeholder="_______"
-            maxLength={7}
-          />
-
-          <div className="mt-2 text-xs text-white/50">
-            {name.length}/7
+          <div
+            className="mt-4 rounded-3xl border p-5 text-center"
+            style={{
+              borderColor: "rgba(255,255,255,0.18)",
+              background:
+                "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))",
+            }}
+          >
+            <div className="text-lg font-extrabold tracking-widest">
+              {profile}
+            </div>
+            <div className="mt-2 text-xs text-white/60">
+              Derived from cognition bias
+            </div>
           </div>
 
+          <p className="mt-4 text-sm text-white/60">
+            This profile will govern surface interaction and long-term behavior.
+          </p>
+
           <button
-            disabled={name.length !== 7}
-            onClick={finalize}
-            className="mt-6 px-4 py-2 rounded-full border disabled:opacity-40"
+            onClick={commit}
+            className="mt-6 rounded-full px-5 py-2 text-[12px] font-extrabold"
+            style={{
+              background:
+                "linear-gradient(90deg, rgba(168,85,247,0.85), rgba(56,189,248,0.85))",
+              color: "rgba(2,6,23,1)",
+            }}
           >
-            Confirm designation
+            Lock profile
           </button>
         </>
       )}
@@ -126,18 +213,20 @@ export default function EpisodeFour({
       {/* LOCK */}
       {phase === "lock" && (
         <>
-          <p className="font-mono text-sm text-white/80">
+          <p className="font-mono text-sm tracking-widest text-white/80">
             PROFILE ASSIGNED
           </p>
-          <p className="mt-2 font-mono text-xs text-white/60">
-            DESIGNATION: {name}
+
+          <p className="mt-3 text-xs text-white/50">
+            Emergence protocols unlocked.
           </p>
 
           <button
-            className="mt-6 px-4 py-2 rounded-full border"
             onClick={onExit}
+            className="mt-6 rounded-full px-5 py-2 text-[12px] font-extrabold border"
+            style={{ borderColor: "rgba(255,255,255,0.2)" }}
           >
-            Return
+            Return to hub
           </button>
         </>
       )}
