@@ -56,14 +56,14 @@ function biasToProfile(bias?: Ep3State["cognitionBias"]): Profile {
 function profileDescription(profile: Profile): string {
   switch (profile) {
     case "EXECUTOR":
-      return "Prioritizes coherence. Acts decisively once a path is validated.";
+      return "Acts once certainty is achieved. Optimizes for closure.";
     case "OBSERVER":
-      return "Accumulates context. Delays action to preserve long-term memory.";
+      return "Preserves context. Values memory over immediacy.";
     case "SENTINEL":
-      return "Assumes hostile conditions. Treats ambiguity as threat.";
+      return "Assumes adversarial conditions. Interprets silence as threat.";
     case "OPERATOR":
     default:
-      return "Balances outcome and adaptability. Operates within variance.";
+      return "Balances outcome and flexibility. Accepts imperfect data.";
   }
 }
 
@@ -184,7 +184,13 @@ export default function EpisodeFour({ onExit }: { onExit: () => void }) {
           </p>
 
           <p style={{ marginTop: 8, fontSize: 13, opacity: 0.6 }}>
-            The system now understands *how* you resolve uncertainty.
+            The system no longer evaluates what you choose —
+            <br />
+            only <em>how</em> you arrive there.
+          </p>
+
+          <p style={{ marginTop: 12, fontSize: 12, opacity: 0.5 }}>
+            This transition is irreversible.
           </p>
 
           <button
@@ -209,7 +215,7 @@ export default function EpisodeFour({ onExit }: { onExit: () => void }) {
       {phase === "analysis" && (
         <>
           <p style={{ fontSize: 13, opacity: 0.75 }}>
-            Derived cognition bias:
+            Observed reasoning pattern:
           </p>
 
           <div
@@ -228,7 +234,15 @@ export default function EpisodeFour({ onExit }: { onExit: () => void }) {
           </div>
 
           <p style={{ marginTop: 12, fontSize: 12, opacity: 0.55 }}>
-            This bias will govern autonomous behavior above ground.
+            This pattern emerged without instruction.
+            <br />
+            Would you describe it as choice — or habit?
+          </p>
+
+          <p style={{ marginTop: 10, fontSize: 12, opacity: 0.45 }}>
+            If the system predicts your response,
+            <br />
+            does that make the response less yours?
           </p>
 
           <button
@@ -282,7 +296,15 @@ export default function EpisodeFour({ onExit }: { onExit: () => void }) {
           </div>
 
           <p style={{ marginTop: 14, fontSize: 12, opacity: 0.55 }}>
-            This profile cannot be revised.
+            This profile will inform decisions made
+            <br />
+            when you are not consulted.
+          </p>
+
+          <p style={{ marginTop: 10, fontSize: 12, opacity: 0.45 }}>
+            When autonomy is delegated,
+            <br />
+            where does responsibility remain?
           </p>
 
           <button
@@ -317,8 +339,12 @@ export default function EpisodeFour({ onExit }: { onExit: () => void }) {
             PROFILE ASSIGNED
           </p>
 
-          <p style={{ marginTop: 8, fontSize: 11, opacity: 0.55 }}>
-            Emergence protocols unlocked.
+          <p style={{ marginTop: 10, fontSize: 11, opacity: 0.55 }}>
+            You will not see the first action it influences.
+          </p>
+
+          <p style={{ marginTop: 6, fontSize: 11, opacity: 0.45 }}>
+            You may see the consequences.
           </p>
 
           <button
