@@ -59,24 +59,24 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
     return () => clearInterval(t);
   }, []);
 
-  /* ── eerie echo popup (once) ── */
+  /* ── eerie echo popup (small, non-blocking, once) ── */
   useEffect(() => {
     if (localStorage.getItem(BONUS_KEY)) return;
 
-    const delay = 3000 + Math.random() * 4000;
+    const delay = 2500 + Math.random() * 3000;
     const t = setTimeout(() => {
       setShowEcho(true);
-      setTimeout(() => setShowEcho(false), 2600);
+      setTimeout(() => setShowEcho(false), 2200);
     }, delay);
 
     return () => clearTimeout(t);
   }, []);
 
-  /* ── sound ── */
+  /* ── sound loop ── */
   useEffect(() => {
     const audio = new Audio("/audio/s3.mp3");
     audio.loop = true;
-    audio.volume = 0.6;
+    audio.volume = 0.5;
 
     if (soundOn) audio.play().catch(() => {});
     return () => audio.pause();
@@ -113,9 +113,13 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
 
   return (
     <section
-      className="relative overflow-hidden rounded-[28px] border p-6 text-white"
       style={{
-        borderColor: "rgba(255,255,255,0.12)",
+        position: "relative",
+        overflow: "hidden",
+        borderRadius: 28,
+        border: "1px solid rgba(255,255,255,0.12)",
+        padding: 24,
+        color: "white",
         background:
           "radial-gradient(900px 400px at 50% -10%, rgba(168,85,247,0.08), transparent 60%), linear-gradient(180deg, rgba(2,6,23,0.98), rgba(2,6,23,0.82))",
         boxShadow: "0 60px 200px rgba(0,0,0,0.9)",
@@ -136,39 +140,57 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
       />
 
       {/* top controls */}
-      <div className="flex justify-end gap-2">
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
         <button
           onClick={toggleSound}
-          className="rounded-full border px-3 py-1 text-xs"
+          style={{
+            borderRadius: 999,
+            border: "1px solid rgba(255,255,255,0.2)",
+            padding: "4px 10px",
+            fontSize: 11,
+            background: "rgba(255,255,255,0.04)",
+            color: "white",
+          }}
         >
           SOUND {soundOn ? "ON" : "OFF"}
         </button>
         <button
           onClick={onExit}
-          className="rounded-full border px-3 py-1 text-xs"
+          style={{
+            borderRadius: 999,
+            border: "1px solid rgba(255,255,255,0.2)",
+            padding: "4px 10px",
+            fontSize: 11,
+            background: "rgba(255,255,255,0.04)",
+            color: "white",
+          }}
         >
           Exit
         </button>
       </div>
 
-      {/* ghost echo */}
+      {/* ghost echo — SMALL + CORNER */}
       {showEcho && (
         <button
           onClick={acknowledgeEcho}
           style={{
             position: "absolute",
-            bottom: "20%",
-            right: "10%",
-            background: "rgba(255,255,255,0.08)",
-            border: "1px solid rgba(255,255,255,0.2)",
-            padding: "10px 14px",
-            fontSize: "11px",
+            bottom: 18,
+            right: 18,
+            maxWidth: 220,
+            background: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.18)",
+            padding: "6px 10px",
+            fontSize: 10,
             fontFamily: "monospace",
-            opacity: 0.9,
+            color: "rgba(255,255,255,0.85)",
+            textAlign: "left",
+            opacity: 0.85,
+            borderRadius: 12,
             textShadow: "0 0 8px rgba(168,85,247,0.6)",
           }}
         >
-          ▒▒ do you remember before this? ▒▒
+          ▒▒ you were here before ▒▒
         </button>
       )}
 
@@ -176,8 +198,10 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
       {phase === "intro" && (
         <>
           <h2
-            className="text-xl font-extrabold tracking-wide"
             style={{
+              fontSize: 20,
+              fontWeight: 800,
+              letterSpacing: 1,
               textShadow:
                 glitch > 0
                   ? "2px 0 rgba(168,85,247,0.7), -2px 0 rgba(56,189,248,0.7)"
@@ -187,17 +211,21 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
             FAULT LINES
           </h2>
 
-          <p className="mt-4 text-sm text-white/80">
-            Your designation destabilized upstream logic.
+          <p style={{ marginTop: 16, fontSize: 14, opacity: 0.85 }}>
+            Your designation propagated beyond its intended boundary.
           </p>
-          <p className="mt-2 text-sm text-white/60">
-            Something older than the system is listening.
+          <p style={{ marginTop: 8, fontSize: 13, opacity: 0.6 }}>
+            Archived subsystems now observe you as a variable — not an instance.
           </p>
 
           <button
             onClick={() => setPhase("context")}
-            className="mt-6 rounded-full px-5 py-2 text-xs font-extrabold"
             style={{
+              marginTop: 20,
+              borderRadius: 999,
+              padding: "8px 16px",
+              fontSize: 12,
+              fontWeight: 800,
               background:
                 "linear-gradient(90deg, rgba(56,189,248,0.9), rgba(168,85,247,0.7))",
               color: "#020617",
@@ -208,23 +236,39 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
         </>
       )}
 
-      {/* CONTEXT / CONTRADICTION / SIGNAL / SYNTHESIS */}
-      {/* (unchanged logic, same as before) */}
-
+      {/* CONTEXT */}
       {phase === "context" && (
         <>
-          <p className="text-sm text-white/70">
-            Contradictions are scars, not errors.
+          <p style={{ fontSize: 13, opacity: 0.75 }}>
+            Systems require certainty.
+            <br />
+            Memory does not.
           </p>
+
+          <p style={{ marginTop: 10, fontSize: 12, opacity: 0.55 }}>
+            The way you handle contradiction will define what the system
+            becomes when it cannot ask permission.
+          </p>
+
           <button
             onClick={() => setPhase("contradiction")}
-            className="mt-6 rounded-full px-5 py-2 text-xs font-extrabold border"
+            style={{
+              marginTop: 20,
+              borderRadius: 999,
+              padding: "8px 16px",
+              fontSize: 12,
+              fontWeight: 800,
+              border: "1px solid rgba(255,255,255,0.2)",
+              background: "rgba(255,255,255,0.04)",
+              color: "white",
+            }}
           >
             Proceed
           </button>
         </>
       )}
 
+      {/* CONTRADICTION */}
       {phase === "contradiction" && (
         <>
           <button
@@ -232,22 +276,38 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
               saveState({ contradictionChoice: "RESOLVE" });
               setPhase("signal");
             }}
-            className="w-full rounded-xl px-4 py-3 mt-4"
+            style={{
+              width: "100%",
+              borderRadius: 16,
+              padding: "10px",
+              marginTop: 16,
+              background: "rgba(56,189,248,0.15)",
+              color: "white",
+            }}
           >
             Resolve contradiction
           </button>
+
           <button
             onClick={() => {
               saveState({ contradictionChoice: "PRESERVE" });
               setPhase("signal");
             }}
-            className="w-full rounded-xl px-4 py-3 mt-3"
+            style={{
+              width: "100%",
+              borderRadius: 16,
+              padding: "10px",
+              marginTop: 10,
+              background: "rgba(255,255,255,0.06)",
+              color: "white",
+            }}
           >
             Preserve ambiguity
           </button>
         </>
       )}
 
+      {/* SIGNAL */}
       {phase === "signal" && (
         <>
           <button
@@ -255,44 +315,91 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
               saveState({ signalChoice: "FILTER" });
               setPhase("synthesis");
             }}
-            className="w-full rounded-xl px-4 py-3 mt-4"
+            style={{
+              width: "100%",
+              borderRadius: 16,
+              padding: "10px",
+              marginTop: 16,
+              background: "rgba(255,255,255,0.06)",
+              color: "white",
+            }}
           >
             Filter signal
           </button>
+
           <button
             onClick={() => {
               saveState({ signalChoice: "LISTEN" });
               setPhase("synthesis");
             }}
-            className="w-full rounded-xl px-4 py-3 mt-3"
+            style={{
+              width: "100%",
+              borderRadius: 16,
+              padding: "10px",
+              marginTop: 10,
+              background: "rgba(168,85,247,0.18)",
+              color: "white",
+            }}
           >
             Listen
           </button>
         </>
       )}
 
+      {/* SYNTHESIS */}
       {phase === "synthesis" && (
         <>
-          <p className="text-sm text-white/70">
+          <p style={{ fontSize: 13, opacity: 0.7 }}>
             Cognition crystallizing…
           </p>
           <button
             onClick={finalize}
-            className="mt-6 rounded-full px-5 py-2 text-xs font-extrabold"
+            style={{
+              marginTop: 20,
+              borderRadius: 999,
+              padding: "8px 16px",
+              fontSize: 12,
+              fontWeight: 800,
+              background:
+                "linear-gradient(90deg, rgba(56,189,248,0.9), rgba(168,85,247,0.7))",
+              color: "#020617",
+            }}
           >
             Commit cognition
           </button>
         </>
       )}
 
+      {/* LOCK */}
       {phase === "lock" && (
         <>
-          <p className="font-mono text-sm tracking-widest">
+          <p
+            style={{
+              fontFamily: "monospace",
+              fontSize: 12,
+              letterSpacing: 2,
+              opacity: 0.85,
+            }}
+          >
             COGNITION MODEL LOCKED
           </p>
+
+          <p style={{ marginTop: 8, fontSize: 11, opacity: 0.55 }}>
+            This bias will echo forward.
+          </p>
+
           <button
             onClick={onExit}
-            className="mt-6 rounded-full px-5 py-2 text-xs font-extrabold border"
+            style={{
+              marginTop: 20,
+              borderRadius: 999,
+              padding: "8px 16px",
+              fontSize: 12,
+              fontWeight: 800,
+              border: "1px solid rgba(255,255,255,0.2)",
+              background: "rgba(255,255,255,0.04)",
+              color: "white",
+            }}
           >
             Return to hub
           </button>
