@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 /* ──────────────────────────────────────────────
  * Storage keys
@@ -42,8 +42,10 @@ function loadState(): Ep3State {
 
 function saveState(patch: Partial<Ep3State>) {
   const current = loadState();
-  const next = { ...current, ...patch };
-  localStorage.setItem(EP3_STATE_KEY, JSON.stringify(next));
+  localStorage.setItem(
+    EP3_STATE_KEY,
+    JSON.stringify({ ...current, ...patch })
+  );
 }
 
 /* ──────────────────────────────────────────────
@@ -52,6 +54,17 @@ function saveState(patch: Partial<Ep3State>) {
 
 export default function EpisodeThree({ onExit }: { onExit: () => void }) {
   const [phase, setPhase] = useState<Phase>("intro");
+  const [glitchSeed, setGlitchSeed] = useState(0);
+
+  /* subtle randomized glitch tick */
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (Math.random() > 0.85) {
+        setGlitchSeed(Math.random());
+      }
+    }, 700);
+    return () => clearInterval(t);
+  }, []);
 
   function finalize() {
     const s = loadState();
@@ -84,22 +97,47 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
       style={{
         borderColor: "rgba(255,255,255,0.12)",
         background:
-          "linear-gradient(180deg, rgba(2,6,23,0.98), rgba(2,6,23,0.82))",
+          "radial-gradient(900px 400px at 50% -10%, rgba(56,189,248,0.08), transparent 60%), linear-gradient(180deg, rgba(2,6,23,0.98), rgba(2,6,23,0.82))",
         boxShadow: "0 50px 180px rgba(0,0,0,0.9)",
       }}
     >
+      {/* Ambient scanlines */}
+      <div
+        aria-hidden
+        style={{
+          pointerEvents: "none",
+          position: "absolute",
+          inset: 0,
+          background:
+            "linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px)",
+          backgroundSize: "100% 3px",
+          opacity: 0.08,
+          mixBlendMode: "overlay",
+        }}
+      />
+
       {/* INTRO */}
       {phase === "intro" && (
         <>
-          <h2 className="text-xl font-extrabold tracking-wide">
+          <h2
+            className="text-xl font-extrabold tracking-wide"
+            style={{
+              textShadow:
+                glitchSeed > 0
+                  ? "2px 0 rgba(168,85,247,0.6), -2px 0 rgba(56,189,248,0.6)"
+                  : "none",
+            }}
+          >
             FAULT LINES
           </h2>
+
           <p className="mt-4 text-sm text-white/80 leading-relaxed">
-            The system encounters irreconcilable truth states.
+            The designation you accepted no longer resolves cleanly.
           </p>
           <p className="mt-2 text-sm text-white/60">
-            This is not a malfunction.  
-            This is a cognitive event.
+            Conflicting records propagate upward.
+            <br />
+            The system must decide how to think.
           </p>
 
           <button
@@ -109,6 +147,7 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
               background:
                 "linear-gradient(90deg, rgba(56,189,248,0.9), rgba(168,85,247,0.7))",
               color: "rgba(2,6,23,1)",
+              boxShadow: "0 0 24px rgba(56,189,248,0.25)",
             }}
           >
             Continue
@@ -120,8 +159,9 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
       {phase === "context" && (
         <>
           <p className="text-sm text-white/75 leading-relaxed">
-            How contradictions are handled will influence
-            future reasoning patterns.
+            Contradictions are not errors.
+            <br />
+            They are forks in reasoning.
           </p>
 
           <div
@@ -131,12 +171,15 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
               background: "rgba(255,255,255,0.04)",
             }}
           >
-            ⚠ Cognition model is mutable at this stage.
+            ⚠ Cognitive bias will persist beyond this episode.
           </div>
 
           <button
             onClick={() => setPhase("contradiction")}
             className="mt-6 rounded-full px-5 py-2 text-[12px] font-extrabold border"
+            style={{
+              borderColor: "rgba(255,255,255,0.2)",
+            }}
           >
             Proceed
           </button>
@@ -147,7 +190,7 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
       {phase === "contradiction" && (
         <>
           <p className="text-sm text-white/80">
-            Two verified records conflict.
+            Two verified records disagree.
           </p>
 
           <div className="mt-5 space-y-3">
@@ -174,7 +217,7 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
                 background: "rgba(255,255,255,0.06)",
               }}
             >
-              Preserve — allow ambiguity
+              Preserve — retain ambiguity
             </button>
           </div>
         </>
@@ -184,7 +227,7 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
       {phase === "signal" && (
         <>
           <p className="text-sm text-white/80">
-            External data leaks into the system.
+            External signals bleed into cognition.
           </p>
 
           <div className="mt-5 space-y-3">
@@ -196,7 +239,7 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
               className="w-full rounded-xl px-4 py-3 text-sm font-semibold"
               style={{ background: "rgba(255,255,255,0.06)" }}
             >
-              Suppress — protect internal state
+              Filter — protect internal state
             </button>
 
             <button
@@ -207,7 +250,7 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
               className="w-full rounded-xl px-4 py-3 text-sm font-semibold"
               style={{ background: "rgba(168,85,247,0.18)" }}
             >
-              Record — expand perception
+              Listen — expand perception
             </button>
           </div>
         </>
@@ -217,7 +260,7 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
       {phase === "synthesis" && (
         <>
           <p className="text-sm text-white/80">
-            Cognitive synthesis in progress…
+            Cognitive synthesis underway…
           </p>
 
           <div className="mt-4 text-xs text-white/50 font-mono">
@@ -242,16 +285,17 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
       {phase === "lock" && (
         <>
           <p className="font-mono text-sm tracking-widest text-white/80">
-            COGNITION MODEL UPDATED
+            COGNITION MODEL LOCKED
           </p>
 
           <p className="mt-3 text-xs text-white/50">
-            This bias will affect future behavior.
+            This bias will silently influence future decisions.
           </p>
 
           <button
             onClick={onExit}
             className="mt-6 rounded-full px-5 py-2 text-[12px] font-extrabold border"
+            style={{ borderColor: "rgba(255,255,255,0.2)" }}
           >
             Return to hub
           </button>
