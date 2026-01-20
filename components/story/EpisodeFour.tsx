@@ -9,12 +9,13 @@ import { useEffect, useMemo, useState } from "react";
 const EP3_STATE_KEY = "basebots_ep3_state_v1";
 const EP4_KEY = "basebots_ep4_profile_v1";
 const EP4_DONE_KEY = "basebots_ep4_done";
+const SOUND_KEY = "basebots_ep4_sound";
 
 /* ──────────────────────────────────────────────
  * Types
  * ────────────────────────────────────────────── */
 
-type Phase = "intro" | "analysis" | "assignment" | "lock";
+type Phase = "intro" | "analysis" | "projection" | "lock";
 
 type Ep3State = {
   cognitionBias?: "DETERMINISTIC" | "ARCHIVAL" | "PRAGMATIC" | "PARANOID";
@@ -38,7 +39,7 @@ function loadEp3(): Ep3State {
   }
 }
 
-function mapBiasToProfile(bias?: Ep3State["cognitionBias"]): Profile {
+function biasToProfile(bias?: Ep3State["cognitionBias"]): Profile {
   switch (bias) {
     case "DETERMINISTIC":
       return "EXECUTOR";
@@ -52,6 +53,20 @@ function mapBiasToProfile(bias?: Ep3State["cognitionBias"]): Profile {
   }
 }
 
+function profileDescription(profile: Profile): string {
+  switch (profile) {
+    case "EXECUTOR":
+      return "Prioritizes coherence. Acts decisively once a path is validated.";
+    case "OBSERVER":
+      return "Accumulates context. Delays action to preserve long-term memory.";
+    case "SENTINEL":
+      return "Assumes hostile conditions. Treats ambiguity as threat.";
+    case "OPERATOR":
+    default:
+      return "Balances outcome and adaptability. Operates within variance.";
+  }
+}
+
 /* ──────────────────────────────────────────────
  * Component
  * ────────────────────────────────────────────── */
@@ -59,77 +74,130 @@ function mapBiasToProfile(bias?: Ep3State["cognitionBias"]): Profile {
 export default function EpisodeFour({ onExit }: { onExit: () => void }) {
   const ep3 = useMemo(() => loadEp3(), []);
   const profile = useMemo(
-    () => mapBiasToProfile(ep3.cognitionBias),
+    () => biasToProfile(ep3.cognitionBias),
     [ep3.cognitionBias]
   );
 
   const [phase, setPhase] = useState<Phase>("intro");
+  const [soundOn, setSoundOn] = useState(
+    () => localStorage.getItem(SOUND_KEY) !== "off"
+  );
 
-  function commit() {
+  /* ── ambient audio ── */
+  useEffect(() => {
+    const audio = new Audio("/audio/s4.mp3");
+    audio.loop = true;
+    audio.volume = 0.45;
+
+    if (soundOn) audio.play().catch(() => {});
+    return () => audio.pause();
+  }, [soundOn]);
+
+  function toggleSound() {
+    const next = !soundOn;
+    setSoundOn(next);
+    localStorage.setItem(SOUND_KEY, next ? "on" : "off");
+  }
+
+  function finalize() {
     localStorage.setItem(
       EP4_KEY,
       JSON.stringify({
         profile,
-        sourceBias: ep3.cognitionBias ?? "UNKNOWN",
+        derivedFrom: ep3.cognitionBias ?? "UNKNOWN",
         assignedAt: Date.now(),
       })
     );
 
     localStorage.setItem(EP4_DONE_KEY, "true");
     window.dispatchEvent(new Event("basebots-progress-updated"));
-
     setPhase("lock");
   }
 
   return (
     <section
-      className="relative overflow-hidden rounded-[28px] border p-6 md:p-8 text-white"
       style={{
-        borderColor: "rgba(255,255,255,0.12)",
+        position: "relative",
+        overflow: "hidden",
+        borderRadius: 28,
+        border: "1px solid rgba(255,255,255,0.12)",
+        padding: 24,
+        color: "white",
         background:
-          "radial-gradient(900px 420px at 50% -10%, rgba(168,85,247,0.10), transparent 60%), linear-gradient(180deg, rgba(2,6,23,0.98), rgba(2,6,23,0.82))",
-        boxShadow: "0 50px 180px rgba(0,0,0,0.9)",
+          "radial-gradient(900px 380px at 50% -10%, rgba(56,189,248,0.08), transparent 60%), linear-gradient(180deg, rgba(2,6,23,0.98), rgba(2,6,23,0.80))",
+        boxShadow: "0 60px 220px rgba(0,0,0,0.9)",
       }}
     >
-      {/* ambient grid */}
+      {/* scanlines */}
       <div
         aria-hidden
         style={{
-          pointerEvents: "none",
           position: "absolute",
           inset: 0,
-          backgroundImage:
-            "linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px)",
-          backgroundSize: "60px 60px",
-          opacity: 0.08,
-          maskImage:
-            "radial-gradient(600px 280px at 50% 20%, black 40%, transparent 70%)",
+          pointerEvents: "none",
+          background:
+            "linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px)",
+          backgroundSize: "100% 3px",
+          opacity: 0.07,
         }}
       />
+
+      {/* top controls */}
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <button
+          onClick={toggleSound}
+          style={{
+            borderRadius: 999,
+            border: "1px solid rgba(255,255,255,0.2)",
+            padding: "4px 10px",
+            fontSize: 11,
+            background: "rgba(255,255,255,0.04)",
+            color: "white",
+          }}
+        >
+          SOUND {soundOn ? "ON" : "OFF"}
+        </button>
+        <button
+          onClick={onExit}
+          style={{
+            borderRadius: 999,
+            border: "1px solid rgba(255,255,255,0.2)",
+            padding: "4px 10px",
+            fontSize: 11,
+            background: "rgba(255,255,255,0.04)",
+            color: "white",
+          }}
+        >
+          Exit
+        </button>
+      </div>
 
       {/* INTRO */}
       {phase === "intro" && (
         <>
-          <h2 className="text-xl font-extrabold tracking-wide">
+          <h2 style={{ fontSize: 20, fontWeight: 800, letterSpacing: 1 }}>
             THRESHOLD
           </h2>
 
-          <p className="mt-4 text-sm text-white/80 leading-relaxed">
-            Cognitive scaffolding complete.
+          <p style={{ marginTop: 16, fontSize: 14, opacity: 0.85 }}>
+            Cognitive stabilization complete.
           </p>
 
-          <p className="mt-2 text-sm text-white/60">
-            The system prepares to finalize behavioral posture.
+          <p style={{ marginTop: 8, fontSize: 13, opacity: 0.6 }}>
+            The system now understands *how* you resolve uncertainty.
           </p>
 
           <button
             onClick={() => setPhase("analysis")}
-            className="mt-6 rounded-full px-5 py-2 text-[12px] font-extrabold"
             style={{
+              marginTop: 20,
+              borderRadius: 999,
+              padding: "8px 16px",
+              fontSize: 12,
+              fontWeight: 800,
               background:
                 "linear-gradient(90deg, rgba(56,189,248,0.9), rgba(168,85,247,0.7))",
-              color: "rgba(2,6,23,1)",
-              boxShadow: "0 0 28px rgba(56,189,248,0.25)",
+              color: "#020617",
             }}
           >
             Continue
@@ -140,69 +208,94 @@ export default function EpisodeFour({ onExit }: { onExit: () => void }) {
       {/* ANALYSIS */}
       {phase === "analysis" && (
         <>
-          <p className="text-sm text-white/75 leading-relaxed">
-            Prior contradiction handling produced a stable cognition bias:
+          <p style={{ fontSize: 13, opacity: 0.75 }}>
+            Derived cognition bias:
           </p>
 
           <div
-            className="mt-4 rounded-2xl border px-4 py-3 text-sm font-mono tracking-wide"
             style={{
-              borderColor: "rgba(255,255,255,0.14)",
-              background: "rgba(0,0,0,0.35)",
-              boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.02)",
+              marginTop: 12,
+              borderRadius: 16,
+              padding: "10px",
+              fontFamily: "monospace",
+              fontSize: 13,
+              letterSpacing: 2,
+              background: "rgba(0,0,0,0.4)",
+              border: "1px solid rgba(255,255,255,0.18)",
             }}
           >
             {ep3.cognitionBias ?? "UNCLASSIFIED"}
           </div>
 
-          <p className="mt-4 text-sm text-white/60">
-            This bias constrains response strategies under uncertainty.
+          <p style={{ marginTop: 12, fontSize: 12, opacity: 0.55 }}>
+            This bias will govern autonomous behavior above ground.
           </p>
 
           <button
-            onClick={() => setPhase("assignment")}
-            className="mt-6 rounded-full px-5 py-2 text-[12px] font-extrabold border"
-            style={{ borderColor: "rgba(255,255,255,0.22)" }}
+            onClick={() => setPhase("projection")}
+            style={{
+              marginTop: 20,
+              borderRadius: 999,
+              padding: "8px 16px",
+              fontSize: 12,
+              fontWeight: 800,
+              border: "1px solid rgba(255,255,255,0.2)",
+              background: "rgba(255,255,255,0.04)",
+              color: "white",
+            }}
           >
-            Proceed
+            Project outcome
           </button>
         </>
       )}
 
-      {/* ASSIGNMENT */}
-      {phase === "assignment" && (
+      {/* PROJECTION */}
+      {phase === "projection" && (
         <>
-          <p className="text-sm text-white/75 leading-relaxed">
+          <p style={{ fontSize: 13, opacity: 0.75 }}>
             Behavioral profile synthesized:
           </p>
 
           <div
-            className="mt-4 rounded-3xl border p-5 text-center"
             style={{
-              borderColor: "rgba(255,255,255,0.18)",
+              marginTop: 14,
+              borderRadius: 20,
+              padding: "14px",
+              textAlign: "center",
               background:
                 "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))",
+              border: "1px solid rgba(255,255,255,0.18)",
             }}
           >
-            <div className="text-lg font-extrabold tracking-widest">
+            <div
+              style={{
+                fontSize: 18,
+                fontWeight: 800,
+                letterSpacing: 3,
+              }}
+            >
               {profile}
             </div>
-            <div className="mt-2 text-xs text-white/60">
-              Derived from cognition bias
+            <div style={{ marginTop: 6, fontSize: 12, opacity: 0.6 }}>
+              {profileDescription(profile)}
             </div>
           </div>
 
-          <p className="mt-4 text-sm text-white/60">
-            This profile will govern surface interaction and long-term behavior.
+          <p style={{ marginTop: 14, fontSize: 12, opacity: 0.55 }}>
+            This profile cannot be revised.
           </p>
 
           <button
-            onClick={commit}
-            className="mt-6 rounded-full px-5 py-2 text-[12px] font-extrabold"
+            onClick={finalize}
             style={{
+              marginTop: 20,
+              borderRadius: 999,
+              padding: "8px 16px",
+              fontSize: 12,
+              fontWeight: 800,
               background:
                 "linear-gradient(90deg, rgba(168,85,247,0.85), rgba(56,189,248,0.85))",
-              color: "rgba(2,6,23,1)",
+              color: "#020617",
             }}
           >
             Lock profile
@@ -213,18 +306,33 @@ export default function EpisodeFour({ onExit }: { onExit: () => void }) {
       {/* LOCK */}
       {phase === "lock" && (
         <>
-          <p className="font-mono text-sm tracking-widest text-white/80">
+          <p
+            style={{
+              fontFamily: "monospace",
+              fontSize: 12,
+              letterSpacing: 2,
+              opacity: 0.85,
+            }}
+          >
             PROFILE ASSIGNED
           </p>
 
-          <p className="mt-3 text-xs text-white/50">
+          <p style={{ marginTop: 8, fontSize: 11, opacity: 0.55 }}>
             Emergence protocols unlocked.
           </p>
 
           <button
             onClick={onExit}
-            className="mt-6 rounded-full px-5 py-2 text-[12px] font-extrabold border"
-            style={{ borderColor: "rgba(255,255,255,0.2)" }}
+            style={{
+              marginTop: 20,
+              borderRadius: 999,
+              padding: "8px 16px",
+              fontSize: 12,
+              fontWeight: 800,
+              border: "1px solid rgba(255,255,255,0.2)",
+              background: "rgba(255,255,255,0.04)",
+              color: "white",
+            }}
           >
             Return to hub
           </button>
