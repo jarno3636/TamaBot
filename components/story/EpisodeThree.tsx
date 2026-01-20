@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 
 /* ──────────────────────────────────────────────
  * Storage keys
@@ -15,15 +15,16 @@ const EP3_DONE_KEY = "basebots_ep3_done";
 
 type Phase =
   | "intro"
-  | "anomaly"
+  | "context"
   | "contradiction"
-  | "decision"
   | "signal"
+  | "synthesis"
   | "lock";
 
 type Ep3State = {
   contradictionChoice?: "RESOLVE" | "PRESERVE";
   signalChoice?: "FILTER" | "LISTEN";
+  cognitionBias?: "DETERMINISTIC" | "ARCHIVAL" | "PRAGMATIC" | "PARANOID";
   completedAt?: number;
 };
 
@@ -31,19 +32,18 @@ type Ep3State = {
  * Helpers
  * ────────────────────────────────────────────── */
 
-function saveState(patch: Partial<Ep3State>) {
+function loadState(): Ep3State {
   try {
-    const current = JSON.parse(
-      localStorage.getItem(EP3_STATE_KEY) || "{}"
-    ) as Ep3State;
+    return JSON.parse(localStorage.getItem(EP3_STATE_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
 
-    const next: Ep3State = {
-      ...current,
-      ...patch,
-    };
-
-    localStorage.setItem(EP3_STATE_KEY, JSON.stringify(next));
-  } catch {}
+function saveState(patch: Partial<Ep3State>) {
+  const current = loadState();
+  const next = { ...current, ...patch };
+  localStorage.setItem(EP3_STATE_KEY, JSON.stringify(next));
 }
 
 /* ──────────────────────────────────────────────
@@ -53,251 +53,209 @@ function saveState(patch: Partial<Ep3State>) {
 export default function EpisodeThree({ onExit }: { onExit: () => void }) {
   const [phase, setPhase] = useState<Phase>("intro");
 
-  /* ──────────────────────────────────────────────
-   * Completion handler
-   * ────────────────────────────────────────────── */
+  function finalize() {
+    const s = loadState();
 
-  function completeEpisode() {
-    saveState({ completedAt: Date.now() });
+    let cognition: Ep3State["cognitionBias"] = "PRAGMATIC";
 
-    // legacy + hub unlock
+    if (s.contradictionChoice === "RESOLVE" && s.signalChoice === "FILTER")
+      cognition = "DETERMINISTIC";
+    if (s.contradictionChoice === "PRESERVE" && s.signalChoice === "LISTEN")
+      cognition = "ARCHIVAL";
+    if (s.contradictionChoice === "PRESERVE" && s.signalChoice === "FILTER")
+      cognition = "PARANOID";
+    if (s.contradictionChoice === "RESOLVE" && s.signalChoice === "LISTEN")
+      cognition = "PRAGMATIC";
+
+    saveState({
+      cognitionBias: cognition,
+      completedAt: Date.now(),
+    });
+
     localStorage.setItem(EP3_DONE_KEY, "true");
-
-    // notify hub immediately
     window.dispatchEvent(new Event("basebots-progress-updated"));
 
     setPhase("lock");
   }
 
-  /* ──────────────────────────────────────────────
-   * Render
-   * ────────────────────────────────────────────── */
-
   return (
     <section
       className="relative overflow-hidden rounded-[28px] border p-6 md:p-8 text-white"
       style={{
-        borderColor: "rgba(255,255,255,0.10)",
+        borderColor: "rgba(255,255,255,0.12)",
         background:
-          "linear-gradient(180deg, rgba(2,6,23,0.96), rgba(2,6,23,0.78))",
-        boxShadow: "0 40px 160px rgba(0,0,0,0.82)",
+          "linear-gradient(180deg, rgba(2,6,23,0.98), rgba(2,6,23,0.82))",
+        boxShadow: "0 50px 180px rgba(0,0,0,0.9)",
       }}
     >
       {/* INTRO */}
       {phase === "intro" && (
-        <div className="mt-4">
+        <>
           <h2 className="text-xl font-extrabold tracking-wide">
             FAULT LINES
           </h2>
-
-          <p className="mt-4 text-sm text-white/75 leading-relaxed">
-            Subsurface memory strata destabilize.  
-            Archived actions contradict live telemetry.
+          <p className="mt-4 text-sm text-white/80 leading-relaxed">
+            The system encounters irreconcilable truth states.
           </p>
-
-          <p className="mt-3 text-sm text-white/60 leading-relaxed">
-            Both records validate. Neither yields priority.
+          <p className="mt-2 text-sm text-white/60">
+            This is not a malfunction.  
+            This is a cognitive event.
           </p>
 
           <button
-            onClick={() => setPhase("anomaly")}
+            onClick={() => setPhase("context")}
             className="mt-6 rounded-full px-5 py-2 text-[12px] font-extrabold"
             style={{
-              border: "1px solid rgba(255,255,255,0.12)",
               background:
-                "linear-gradient(90deg, rgba(56,189,248,0.85), rgba(168,85,247,0.70))",
-              color: "rgba(2,6,23,0.98)",
+                "linear-gradient(90deg, rgba(56,189,248,0.9), rgba(168,85,247,0.7))",
+              color: "rgba(2,6,23,1)",
             }}
           >
             Continue
           </button>
-        </div>
+        </>
       )}
 
-      {/* ANOMALY */}
-      {phase === "anomaly" && (
-        <div className="mt-4">
+      {/* CONTEXT */}
+      {phase === "context" && (
+        <>
           <p className="text-sm text-white/75 leading-relaxed">
-            Diagnostic routines fail to reconcile divergence.
+            How contradictions are handled will influence
+            future reasoning patterns.
           </p>
 
-          <p className="mt-3 text-sm text-white/60 leading-relaxed">
-            A contradiction persists across all verification layers.
-          </p>
-
-          <p className="mt-3 text-sm text-white/60 leading-relaxed">
-            The system defers judgment.
-          </p>
+          <div
+            className="mt-4 rounded-xl border p-3 text-xs"
+            style={{
+              borderColor: "rgba(255,255,255,0.14)",
+              background: "rgba(255,255,255,0.04)",
+            }}
+          >
+            ⚠ Cognition model is mutable at this stage.
+          </div>
 
           <button
             onClick={() => setPhase("contradiction")}
-            className="mt-6 rounded-full px-5 py-2 text-[12px] font-extrabold"
-            style={{
-              border: "1px solid rgba(255,255,255,0.12)",
-              background: "rgba(255,255,255,0.06)",
-              color: "rgba(255,255,255,0.85)",
-            }}
+            className="mt-6 rounded-full px-5 py-2 text-[12px] font-extrabold border"
           >
             Proceed
           </button>
-        </div>
+        </>
       )}
 
       {/* CONTRADICTION */}
       {phase === "contradiction" && (
-        <div className="mt-4">
-          <p className="text-sm text-white/75 leading-relaxed">
-            Two deployment logs remain active.
+        <>
+          <p className="text-sm text-white/80">
+            Two verified records conflict.
           </p>
 
-          <p className="mt-3 text-sm text-white/60 leading-relaxed">
-            Selecting one will invalidate the other.
-          </p>
-
-          <div className="mt-6 space-y-3">
+          <div className="mt-5 space-y-3">
             <button
               onClick={() => {
                 saveState({ contradictionChoice: "RESOLVE" });
-                setPhase("decision");
+                setPhase("signal");
               }}
               className="w-full rounded-xl px-4 py-3 text-sm font-semibold"
               style={{
-                border: "1px solid rgba(255,255,255,0.14)",
-                background:
-                  "linear-gradient(90deg, rgba(168,85,247,0.85), rgba(56,189,248,0.80))",
-                color: "rgba(2,6,23,0.98)",
+                background: "rgba(56,189,248,0.15)",
               }}
             >
-              Resolve contradiction  
-              <span className="block text-xs opacity-70">
-                Enforce a single truth
-              </span>
+              Resolve — enforce coherence
             </button>
 
             <button
               onClick={() => {
                 saveState({ contradictionChoice: "PRESERVE" });
-                setPhase("decision");
+                setPhase("signal");
               }}
               className="w-full rounded-xl px-4 py-3 text-sm font-semibold"
               style={{
-                border: "1px solid rgba(255,255,255,0.14)",
                 background: "rgba(255,255,255,0.06)",
-                color: "rgba(255,255,255,0.88)",
               }}
             >
-              Preserve both records  
-              <span className="block text-xs opacity-60">
-                Accept inconsistency
-              </span>
+              Preserve — allow ambiguity
             </button>
           </div>
-        </div>
-      )}
-
-      {/* DECISION */}
-      {phase === "decision" && (
-        <div className="mt-4">
-          <p className="text-sm text-white/75 leading-relaxed">
-            Resolution incomplete.
-          </p>
-
-          <p className="mt-3 text-sm text-white/60 leading-relaxed">
-            External signal interference detected.
-          </p>
-
-          <button
-            onClick={() => setPhase("signal")}
-            className="mt-6 rounded-full px-5 py-2 text-[12px] font-extrabold"
-            style={{
-              border: "1px solid rgba(255,255,255,0.12)",
-              background:
-                "linear-gradient(90deg, rgba(56,189,248,0.85), rgba(168,85,247,0.70))",
-              color: "rgba(2,6,23,0.98)",
-            }}
-          >
-            Inspect signal
-          </button>
-        </div>
+        </>
       )}
 
       {/* SIGNAL */}
       {phase === "signal" && (
-        <div className="mt-4">
-          <p className="text-sm text-white/75 leading-relaxed">
-            Fragmented external traffic bypasses suppression filters.
+        <>
+          <p className="text-sm text-white/80">
+            External data leaks into the system.
           </p>
 
-          <p className="mt-3 text-sm text-white/60 leading-relaxed">
-            Listening risks contamination.  
-            Filtering risks ignorance.
-          </p>
-
-          <div className="mt-6 space-y-3">
+          <div className="mt-5 space-y-3">
             <button
               onClick={() => {
                 saveState({ signalChoice: "FILTER" });
-                completeEpisode();
+                setPhase("synthesis");
               }}
               className="w-full rounded-xl px-4 py-3 text-sm font-semibold"
-              style={{
-                border: "1px solid rgba(255,255,255,0.14)",
-                background: "rgba(255,255,255,0.06)",
-                color: "rgba(255,255,255,0.88)",
-              }}
+              style={{ background: "rgba(255,255,255,0.06)" }}
             >
-              Suppress signal  
-              <span className="block text-xs opacity-60">
-                Maintain system integrity
-              </span>
+              Suppress — protect internal state
             </button>
 
             <button
               onClick={() => {
                 saveState({ signalChoice: "LISTEN" });
-                completeEpisode();
+                setPhase("synthesis");
               }}
               className="w-full rounded-xl px-4 py-3 text-sm font-semibold"
-              style={{
-                border: "1px solid rgba(255,255,255,0.14)",
-                background:
-                  "linear-gradient(90deg, rgba(168,85,247,0.85), rgba(56,189,248,0.80))",
-                color: "rgba(2,6,23,0.98)",
-              }}
+              style={{ background: "rgba(168,85,247,0.18)" }}
             >
-              Record fragments  
-              <span className="block text-xs opacity-70">
-                Accept external influence
-              </span>
+              Record — expand perception
             </button>
           </div>
-        </div>
+        </>
+      )}
+
+      {/* SYNTHESIS */}
+      {phase === "synthesis" && (
+        <>
+          <p className="text-sm text-white/80">
+            Cognitive synthesis in progress…
+          </p>
+
+          <div className="mt-4 text-xs text-white/50 font-mono">
+            Mapping contradiction handling → reasoning bias
+          </div>
+
+          <button
+            onClick={finalize}
+            className="mt-6 rounded-full px-5 py-2 text-[12px] font-extrabold"
+            style={{
+              background:
+                "linear-gradient(90deg, rgba(56,189,248,0.9), rgba(168,85,247,0.7))",
+              color: "rgba(2,6,23,1)",
+            }}
+          >
+            Commit cognition model
+          </button>
+        </>
       )}
 
       {/* LOCK */}
       {phase === "lock" && (
-        <div className="mt-10 text-center">
+        <>
           <p className="font-mono text-sm tracking-widest text-white/80">
-            MEMORY STATE COMMITTED
+            COGNITION MODEL UPDATED
           </p>
 
           <p className="mt-3 text-xs text-white/50">
-            Ascent continues.
+            This bias will affect future behavior.
           </p>
 
           <button
             onClick={onExit}
-            className="mt-6 rounded-full px-5 py-2 text-[12px] font-extrabold"
-            style={{
-              border: "1px solid rgba(255,255,255,0.12)",
-              background:
-                "linear-gradient(90deg, rgba(56,189,248,0.85), rgba(168,85,247,0.70))",
-              color: "rgba(2,6,23,0.98)",
-            }}
+            className="mt-6 rounded-full px-5 py-2 text-[12px] font-extrabold border"
           >
             Return to hub
           </button>
-        </div>
+        </>
       )}
     </section>
   );
