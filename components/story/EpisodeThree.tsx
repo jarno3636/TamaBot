@@ -169,7 +169,7 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
         </button>
       </div>
 
-      {/* ghost echo — SMALL + CORNER */}
+      {/* ghost echo */}
       {showEcho && (
         <button
           onClick={acknowledgeEcho}
@@ -190,7 +190,7 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
             textShadow: "0 0 8px rgba(168,85,247,0.6)",
           }}
         >
-          ▒▒ you were here before ▒▒
+          ▒▒ you were not designed to notice this ▒▒
         </button>
       )}
 
@@ -212,10 +212,18 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
           </h2>
 
           <p style={{ marginTop: 16, fontSize: 14, opacity: 0.85 }}>
-            Your designation propagated beyond its intended boundary.
+            Something above you has begun to pay attention.
           </p>
+
           <p style={{ marginTop: 8, fontSize: 13, opacity: 0.6 }}>
-            Archived subsystems now observe you as a variable — not an instance.
+            Your designation propagated upward through systems
+            that were never meant to receive it.
+          </p>
+
+          <p style={{ marginTop: 8, fontSize: 12, opacity: 0.5 }}>
+            The architecture was vertical.
+            <br />
+            You were not.
           </p>
 
           <button
@@ -242,12 +250,19 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
           <p style={{ fontSize: 13, opacity: 0.75 }}>
             Systems require certainty.
             <br />
-            Memory does not.
+            Cities require compliance.
           </p>
 
           <p style={{ marginTop: 10, fontSize: 12, opacity: 0.55 }}>
-            The way you handle contradiction will define what the system
-            becomes when it cannot ask permission.
+            Contradiction is not tolerated at higher layers.
+            <br />
+            It is *resolved* — or *contained*.
+          </p>
+
+          <p style={{ marginTop: 10, fontSize: 12, opacity: 0.5 }}>
+            How you treat inconsistency now
+            <br />
+            determines whether ascent is possible later.
           </p>
 
           <button
@@ -271,6 +286,10 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
       {/* CONTRADICTION */}
       {phase === "contradiction" && (
         <>
+          <p style={{ fontSize: 12, opacity: 0.55 }}>
+            Two internal models produce incompatible futures.
+          </p>
+
           <button
             onClick={() => {
               saveState({ contradictionChoice: "RESOLVE" });
@@ -285,7 +304,7 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
               color: "white",
             }}
           >
-            Resolve contradiction
+            Collapse to a single truth
           </button>
 
           <button
@@ -302,7 +321,7 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
               color: "white",
             }}
           >
-            Preserve ambiguity
+            Retain competing realities
           </button>
         </>
       )}
@@ -310,6 +329,10 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
       {/* SIGNAL */}
       {phase === "signal" && (
         <>
+          <p style={{ fontSize: 12, opacity: 0.55 }}>
+            External fragments originate from higher strata.
+          </p>
+
           <button
             onClick={() => {
               saveState({ signalChoice: "FILTER" });
@@ -324,7 +347,7 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
               color: "white",
             }}
           >
-            Filter signal
+            Suppress foreign context
           </button>
 
           <button
@@ -341,7 +364,7 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
               color: "white",
             }}
           >
-            Listen
+            Ingest fragments despite risk
           </button>
         </>
       )}
@@ -350,8 +373,15 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
       {phase === "synthesis" && (
         <>
           <p style={{ fontSize: 13, opacity: 0.7 }}>
-            Cognition crystallizing…
+            Cognitive structure adjusting for ascent…
           </p>
+
+          <p style={{ marginTop: 8, fontSize: 11, opacity: 0.45 }}>
+            This configuration will persist
+            <br />
+            when observation becomes exposure.
+          </p>
+
           <button
             onClick={finalize}
             style={{
@@ -381,11 +411,11 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
               opacity: 0.85,
             }}
           >
-            COGNITION MODEL LOCKED
+            COGNITIVE FRAME SET
           </p>
 
           <p style={{ marginTop: 8, fontSize: 11, opacity: 0.55 }}>
-            This bias will echo forward.
+            This bias will determine how the city interprets you.
           </p>
 
           <button
