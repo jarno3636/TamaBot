@@ -55,6 +55,13 @@ export default function EpisodeTwo({ onExit }: { onExit: () => void }) {
   const [phase, setPhase] = useState<Phase>("descent");
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [glitchTick, setGlitchTick] = useState(0);
+
+  /* ───────────── Ambient glitch tick ───────────── */
+  useEffect(() => {
+    const t = setInterval(() => setGlitchTick((n) => n + 1), 1200);
+    return () => clearInterval(t);
+  }, []);
 
   /* ───────────── Sound ───────────── */
   const [soundEnabled, setSoundEnabled] = useState(() => {
@@ -110,62 +117,141 @@ export default function EpisodeTwo({ onExit }: { onExit: () => void }) {
       lockedAt: Date.now(),
     };
 
-    // ✅ LEGACY WRITE
     localStorage.setItem(EP2_KEY, JSON.stringify(save));
     localStorage.setItem(EP2_DONE_KEY, "true");
 
-    // ✅ FORCE HUB SYNC
     window.dispatchEvent(new Event("basebots-progress-updated"));
 
     setPhase("binding");
-    setTimeout(() => setPhase("approach"), 1400);
+    setTimeout(() => setPhase("approach"), 1600);
   }
+
+  /* ────────────────────────────────────────────── */
 
   return (
     <section
-      className="relative overflow-hidden rounded-[28px] border p-6 md:p-8 text-white"
+      role="region"
+      aria-label="Episode Two: Designation"
       style={{
-        borderColor: "rgba(255,255,255,0.10)",
-        background: "linear-gradient(180deg, rgba(2,6,23,0.94), rgba(2,6,23,0.72))",
-        boxShadow: "0 40px 160px rgba(0,0,0,0.80)",
+        position: "relative",
+        overflow: "hidden",
+        borderRadius: 28,
+        padding: "24px",
+        color: "white",
+        border: "1px solid rgba(255,255,255,0.12)",
+        background:
+          "linear-gradient(180deg, rgba(2,6,23,0.96), rgba(2,6,23,0.72))",
+        boxShadow: "0 40px 160px rgba(0,0,0,0.85)",
       }}
     >
+      {/* Scanline overlay */}
+      <div
+        aria-hidden
+        style={{
+          pointerEvents: "none",
+          position: "absolute",
+          inset: 0,
+          background:
+            "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px)",
+          backgroundSize: "100% 3px",
+          opacity: 0.12,
+          mixBlendMode: "overlay",
+        }}
+      />
+
       {/* Controls */}
-      <div className="flex justify-end gap-2">
-        <button onClick={toggleSound} className="rounded-full border px-4 py-2 text-xs">
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <button
+          onClick={toggleSound}
+          aria-label="Toggle sound"
+          style={{
+            borderRadius: 999,
+            padding: "6px 14px",
+            fontSize: 11,
+            fontWeight: 800,
+            border: "1px solid rgba(255,255,255,0.18)",
+            background: "rgba(255,255,255,0.06)",
+            color: "rgba(255,255,255,0.85)",
+            cursor: "pointer",
+          }}
+        >
           SOUND: {soundEnabled ? "ON" : "OFF"}
         </button>
-        <button onClick={onExit} className="rounded-full border px-4 py-2 text-xs">
-          Exit
+
+        <button
+          onClick={onExit}
+          style={{
+            borderRadius: 999,
+            padding: "6px 14px",
+            fontSize: 11,
+            fontWeight: 800,
+            border: "1px solid rgba(255,255,255,0.18)",
+            background: "rgba(255,255,255,0.04)",
+            color: "rgba(255,255,255,0.7)",
+            cursor: "pointer",
+          }}
+        >
+          EXIT
         </button>
       </div>
 
       {/* DESCENT */}
       {phase === "descent" && (
-        <div className="mt-6">
-          <h2 className="text-xl font-extrabold">VERTICAL TRANSFER</h2>
-          <p className="mt-3 text-sm text-white/70">
-            The lift rises through stacked infrastructure.  
-            Your prior classification ({ep1?.profile?.archetype ?? "UNKNOWN"}) propagates ahead of you.
+        <div style={{ marginTop: 28 }}>
+          <h2
+            style={{
+              fontSize: 20,
+              fontWeight: 900,
+              letterSpacing: 0.5,
+              textShadow:
+                glitchTick % 2
+                  ? "1px 0 rgba(56,189,248,0.6)"
+                  : "-1px 0 rgba(168,85,247,0.6)",
+            }}
+          >
+            VERTICAL TRANSFER
+          </h2>
+
+          <p style={{ marginTop: 12, fontSize: 13, opacity: 0.75 }}>
+            The lift ascends through obsolete strata.  
+            Your prior classification —{" "}
+            <strong>{ep1?.profile?.archetype ?? "UNKNOWN"}</strong> — propagates
+            ahead of you.
           </p>
-          <p className="mt-2 text-sm text-white/60">
-            Systems above request a stable designation.
+
+          <p style={{ marginTop: 10, fontSize: 13, opacity: 0.6 }}>
+            Upper systems demand a stable designation before arrival.
           </p>
+
           <button
             onClick={() => setPhase("input")}
-            className="mt-6 rounded-full px-5 py-2 text-xs font-extrabold"
+            style={{
+              marginTop: 24,
+              borderRadius: 999,
+              padding: "10px 18px",
+              fontSize: 12,
+              fontWeight: 900,
+              border: "1px solid rgba(255,255,255,0.16)",
+              background:
+                "linear-gradient(90deg, rgba(56,189,248,0.9), rgba(168,85,247,0.7))",
+              color: "#020617",
+              cursor: "pointer",
+            }}
           >
-            Continue
+            CONTINUE
           </button>
         </div>
       )}
 
       {/* INPUT */}
       {phase === "input" && (
-        <div className="mt-6">
-          <h2 className="text-xl font-extrabold">ASSIGN DESIGNATION</h2>
-          <p className="mt-2 text-sm text-white/60">
-            Seven characters. Alphanumeric. Permanent.
+        <div style={{ marginTop: 28 }}>
+          <h2 style={{ fontSize: 20, fontWeight: 900 }}>
+            ASSIGN DESIGNATION
+          </h2>
+
+          <p style={{ marginTop: 8, fontSize: 12, opacity: 0.65 }}>
+            Seven characters. Alphanumeric. Immutable once confirmed.
           </p>
 
           <input
@@ -175,42 +261,93 @@ export default function EpisodeTwo({ onExit }: { onExit: () => void }) {
               setValue(e.target.value.toUpperCase());
             }}
             maxLength={7}
-            className="mt-4 w-full rounded-xl border p-3 bg-black/40 font-mono tracking-widest text-center"
+            aria-label="Designation input"
+            style={{
+              marginTop: 18,
+              width: "100%",
+              borderRadius: 14,
+              padding: "14px",
+              fontFamily: "monospace",
+              fontSize: 18,
+              letterSpacing: 4,
+              textAlign: "center",
+              color: "white",
+              background: "rgba(0,0,0,0.45)",
+              border: "1px solid rgba(255,255,255,0.18)",
+              outline: "none",
+            }}
           />
 
-          {error && <div className="mt-2 text-xs text-red-400">{error}</div>}
+          {error && (
+            <div style={{ marginTop: 8, fontSize: 11, color: "#f87171" }}>
+              {error}
+            </div>
+          )}
 
           <button
             onClick={commit}
-            className="mt-6 rounded-full px-5 py-2 text-xs font-extrabold"
+            style={{
+              marginTop: 22,
+              borderRadius: 999,
+              padding: "10px 18px",
+              fontSize: 12,
+              fontWeight: 900,
+              border: "1px solid rgba(255,255,255,0.16)",
+              background:
+                "linear-gradient(90deg, rgba(56,189,248,0.85), rgba(168,85,247,0.65))",
+              color: "#020617",
+              cursor: "pointer",
+            }}
           >
-            Confirm Designation
+            CONFIRM DESIGNATION
           </button>
         </div>
       )}
 
       {/* BINDING */}
       {phase === "binding" && (
-        <div className="mt-10 text-center font-mono tracking-widest text-white/80">
+        <div
+          style={{
+            marginTop: 60,
+            textAlign: "center",
+            fontFamily: "monospace",
+            letterSpacing: 6,
+            opacity: 0.85,
+          }}
+        >
           IDENTITY LOCKED
         </div>
       )}
 
-      {/* APPROACH */}
+      {/* APPROACH (UPDATED STORY) */}
       {phase === "approach" && (
-        <div className="mt-6">
-          <p className="text-sm text-white/70">
-            Designation accepted.  
-            Conflicting acknowledgements detected upstream.
+        <div style={{ marginTop: 28 }}>
+          <p style={{ fontSize: 13, opacity: 0.75 }}>
+            Designation accepted.
           </p>
-          <p className="mt-2 text-sm text-white/60">
-            Fault conditions registered.
+          <p style={{ marginTop: 8, fontSize: 13, opacity: 0.6 }}>
+            Parallel systems reject consensus.  
+            Your identifier appears in conflicting registries.
           </p>
+          <p style={{ marginTop: 8, fontSize: 13, opacity: 0.55 }}>
+            You are being allowed through — not cleared.
+          </p>
+
           <button
             onClick={onExit}
-            className="mt-6 rounded-full px-5 py-2 text-xs font-extrabold"
+            style={{
+              marginTop: 24,
+              borderRadius: 999,
+              padding: "10px 18px",
+              fontSize: 12,
+              fontWeight: 900,
+              border: "1px solid rgba(255,255,255,0.16)",
+              background: "rgba(255,255,255,0.06)",
+              color: "rgba(255,255,255,0.85)",
+              cursor: "pointer",
+            }}
           >
-            Return to hub
+            RETURN TO HUB
           </button>
         </div>
       )}
