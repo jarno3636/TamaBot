@@ -9,6 +9,7 @@ import EpisodeThree from "@/components/story/EpisodeThree";
 import EpisodeFour from "@/components/story/EpisodeFour";
 import EpisodeFive from "@/components/story/EpisodeFive";
 import PrologueSilenceInDarkness from "@/components/story/PrologueSilenceInDarkness";
+import BonusEcho from "@/components/story/BonusEcho";
 
 import { BASEBOTS } from "@/lib/abi";
 
@@ -17,6 +18,7 @@ import { BASEBOTS } from "@/lib/abi";
  * ───────────────────────────────────────────── */
 
 const UNLOCK_KEY = "basebots_bonus_unlock";
+const BONUS_DONE_KEY = "basebots_bonus_echo_done";
 const NFT_KEY = "basebots_has_nft";
 const EP1_KEY = "basebots_ep1_done";
 const EP2_KEY = "basebots_ep2_done";
@@ -63,6 +65,7 @@ function migrateLegacy(addr?: `0x${string}`) {
   if (!addr) return;
   writeWalletProgress(addr, {
     basebots_bonus_unlock: Boolean(safeGet(UNLOCK_KEY)),
+    basebots_bonus_echo_done: Boolean(safeGet(BONUS_DONE_KEY)),
     basebots_has_nft: Boolean(safeGet(NFT_KEY)),
     basebots_ep1_done: Boolean(safeGet(EP1_KEY)),
     basebots_ep2_done: Boolean(safeGet(EP2_KEY)),
@@ -75,6 +78,17 @@ function readFlag(key: string, addr?: `0x${string}`) {
   const wallet = addr ? readWalletProgress(addr) : {};
   if (typeof wallet[key] === "boolean") return wallet[key];
   return Boolean(safeGet(key));
+}
+
+function getStatus(opts: {
+  unlocked: boolean;
+  done?: boolean;
+  requiresNFT?: boolean;
+}) {
+  if (opts.done) return "COMPLETE";
+  if (!opts.unlocked)
+    return opts.requiresNFT ? "NFT REQUIRED" : "LOCKED";
+  return "AVAILABLE";
 }
 
 /* ─────────────────────────────────────────────
@@ -121,20 +135,82 @@ export default function StoryPage() {
   const ep3Done = readFlag(EP3_KEY, wallet);
   const ep4Done = readFlag(EP4_KEY, wallet);
   const prologueUnlocked = readFlag(UNLOCK_KEY, wallet);
+  const bonusDone = readFlag(BONUS_DONE_KEY, wallet);
 
   const episodes = useMemo(
     () => [
-      { id: "prologue", title: "Prologue: Silence in Darkness", unlocked: prologueUnlocked, img: "/story/prologue.png", note: "Unlocked when the environment changes." },
-      { id: "ep1", title: "Awakening Protocol", unlocked: true, img: "/story/01-awakening.png", note: "Your entry point." },
-      { id: "ep2", title: "Signal Fracture", unlocked: ep1Done && hasNFT, img: "/story/ep2.png", note: "Requires a Basebot NFT." },
-      { id: "ep3", title: "Fault Lines", unlocked: ep2Done, img: "/story/ep3.png", note: "Unlocked by prior decisions." },
-      { id: "ep4", title: "Threshold", unlocked: ep3Done, img: "/story/ep4.png", note: "Identity alignment begins." },
-      { id: "ep5", title: "Emergence", unlocked: ep4Done && hasNFT, img: "/story/ep5.png", note: "NFT holders only." },
+      {
+        id: "prologue",
+        title: "Prologue: Silence in Darkness",
+        unlocked: prologueUnlocked,
+        done: prologueUnlocked,
+        img: "/story/prologue.png",
+        note: "An archived signal stirs.",
+      },
+      {
+        id: "ep1",
+        title: "Awakening Protocol",
+        unlocked: true,
+        done: ep1Done,
+        img: "/story/01-awakening.png",
+        note: "System initialization.",
+      },
+      {
+        id: "ep2",
+        title: "Signal Fracture",
+        unlocked: ep1Done && hasNFT,
+        done: ep2Done,
+        img: "/story/ep2.png",
+        note: "External interference detected.",
+        requiresNFT: true,
+      },
+      {
+        id: "ep3",
+        title: "Fault Lines",
+        unlocked: ep2Done,
+        done: ep3Done,
+        img: "/story/ep3.png",
+        note: "Cognition destabilizes.",
+      },
+      {
+        id: "ep4",
+        title: "Threshold",
+        unlocked: ep3Done,
+        done: ep4Done,
+        img: "/story/ep4.png",
+        note: "Alignment before emergence.",
+      },
+      {
+        id: "ep5",
+        title: "Emergence",
+        unlocked: ep4Done && hasNFT,
+        done: false,
+        img: "/story/ep5.png",
+        note: "Surface access granted.",
+        requiresNFT: true,
+      },
+      {
+        id: "bonus",
+        title: "Echo: Residual Memory",
+        unlocked: prologueUnlocked,
+        done: bonusDone,
+        img: "/story/b1.png",
+        note: "Unindexed fragments recovered.",
+        isBonus: true,
+      },
     ],
-    [hasNFT, ep1Done, ep2Done, ep3Done, ep4Done, prologueUnlocked]
+    [
+      hasNFT,
+      ep1Done,
+      ep2Done,
+      ep3Done,
+      ep4Done,
+      bonusDone,
+      prologueUnlocked,
+    ]
   );
 
-  /* route to episode */
+  /* route */
   if (mode !== "hub") {
     const map: any = {
       prologue: <PrologueSilenceInDarkness onExit={() => setMode("hub")} />,
@@ -143,18 +219,14 @@ export default function StoryPage() {
       ep3: <EpisodeThree onExit={() => setMode("hub")} />,
       ep4: <EpisodeFour onExit={() => setMode("hub")} />,
       ep5: <EpisodeFive onExit={() => setMode("hub")} />,
+      bonus: <BonusEcho onExit={() => setMode("hub")} />,
     };
     return map[mode];
   }
 
-  /* ─────────────────────────────────────────────
-   * HUB UI
-   * ───────────────────────────────────────────── */
-
+  /* HUB UI */
   return (
     <main
-      role="main"
-      aria-label="Basebots Story Hub"
       style={{
         minHeight: "100vh",
         background:
@@ -164,16 +236,15 @@ export default function StoryPage() {
       }}
     >
       <header style={{ maxWidth: 1200, margin: "0 auto 32px" }}>
-        <h1 style={{ fontSize: 32, fontWeight: 900, letterSpacing: -0.5 }}>
+        <h1 style={{ fontSize: 32, fontWeight: 900 }}>
           BASEBOTS // STORY MODE
         </h1>
-        <p style={{ opacity: 0.7, maxWidth: 600 }}>
-          This narrative records what you choose — and what you avoid.
+        <p style={{ opacity: 0.7 }}>
+          This system records interpretation, not obedience.
         </p>
       </header>
 
       <section
-        aria-label="Episodes"
         style={{
           maxWidth: 1200,
           margin: "0 auto",
@@ -183,13 +254,21 @@ export default function StoryPage() {
         }}
       >
         {episodes.map((ep) => {
+          const status = getStatus(ep);
           const locked = !ep.unlocked;
-          const requiresNFT = ep.note.toLowerCase().includes("nft");
+
+          const badgeColor =
+            status === "COMPLETE"
+              ? "rgba(34,197,94,0.9)"
+              : status === "AVAILABLE"
+              ? "rgba(56,189,248,0.9)"
+              : status === "NFT REQUIRED"
+              ? "rgba(168,85,247,0.9)"
+              : "rgba(255,255,255,0.4)";
 
           return (
             <article
               key={ep.id}
-              aria-disabled={locked}
               style={{
                 borderRadius: 24,
                 overflow: "hidden",
@@ -197,54 +276,64 @@ export default function StoryPage() {
                 border: locked
                   ? "1px solid rgba(255,255,255,0.12)"
                   : "1px solid rgba(56,189,248,0.35)",
-                boxShadow: locked
-                  ? "0 20px 60px rgba(0,0,0,0.6)"
-                  : "0 30px 90px rgba(56,189,248,0.18)",
                 opacity: locked ? 0.55 : 1,
-                transition: "transform 0.25s ease, box-shadow 0.25s ease",
               }}
             >
               <img
                 src={ep.img}
-                alt=""
-                aria-hidden
                 style={{
                   width: "100%",
                   height: 220,
                   objectFit: "cover",
-                  filter: locked ? "grayscale(0.5) brightness(0.8)" : "none",
+                  filter: locked
+                    ? "grayscale(0.6) brightness(0.75)"
+                    : "none",
                 }}
               />
 
               <div style={{ padding: 20 }}>
+                <div
+                  style={{
+                    display: "inline-block",
+                    padding: "4px 10px",
+                    borderRadius: 999,
+                    background: badgeColor,
+                    color: "#020617",
+                    fontSize: 10,
+                    fontWeight: 900,
+                    marginBottom: 8,
+                  }}
+                >
+                  {status}
+                </div>
+
                 <h2 style={{ fontWeight: 800 }}>{ep.title}</h2>
-                <p style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
+                <p style={{ fontSize: 12, opacity: 0.7 }}>
                   {ep.note}
                 </p>
 
                 <button
-                  aria-label={locked ? "Episode locked" : "Insert NFT Cartridge"}
                   disabled={locked}
                   onClick={() => setMode(ep.id)}
                   style={{
                     marginTop: 14,
                     width: "100%",
                     borderRadius: 999,
-                    padding: "10px 14px",
+                    padding: "10px",
                     fontSize: 12,
                     fontWeight: 800,
-                    cursor: locked ? "not-allowed" : "pointer",
                     border: "1px solid rgba(255,255,255,0.14)",
                     background: locked
                       ? "rgba(255,255,255,0.06)"
                       : "linear-gradient(90deg, rgba(56,189,248,0.95), rgba(168,85,247,0.85))",
                     color: locked ? "rgba(255,255,255,0.6)" : "#020617",
+                    cursor: locked ? "not-allowed" : "pointer",
                   }}
                 >
                   {locked
-                    ? requiresNFT
-                      ? "NFT REQUIRED"
-                      : "LOCKED"
+                    ? status
+                    : ep.isBonus
+                    ? "▶ Read Echo"
                     : "▶ Insert NFT Cartridge"}
                 </button>
               </div>
@@ -261,7 +350,7 @@ export default function StoryPage() {
           opacity: 0.5,
         }}
       >
-        Some records only respond when the room changes.
+        Some records only respond when acknowledged.
       </footer>
     </main>
   );
