@@ -124,11 +124,14 @@ export default function EpisodeTwo({ onExit }: { onExit: () => void }) {
 
     try {
       localStorage.setItem(EP2_KEY, JSON.stringify(save));
-      localStorage.setItem(EP2_DONE_KEY, "true"); // 🔓 unlock Episode 3
+      localStorage.setItem(EP2_DONE_KEY, "true");
+
+      // 🔔 notify hub + wallet sync layer
+      window.dispatchEvent(new Event("basebots-progress-updated"));
     } catch {}
 
     setPhase("binding");
-    setTimeout(() => setPhase("approach"), 1200);
+    setTimeout(() => setPhase("approach"), 1400);
   }
 
   /* ──────────────────────────────────────────────
@@ -140,7 +143,7 @@ export default function EpisodeTwo({ onExit }: { onExit: () => void }) {
       className="relative overflow-hidden rounded-[28px] border p-6 md:p-8 text-white"
       style={{
         borderColor: "rgba(255,255,255,0.10)",
-        background: "linear-gradient(180deg, rgba(2,6,23,0.94), rgba(2,6,23,0.72))",
+        background: "linear-gradient(180deg, rgba(2,6,23,0.96), rgba(2,6,23,0.72))",
         boxShadow: "0 40px 160px rgba(0,0,0,0.80)",
       }}
     >
@@ -175,16 +178,33 @@ export default function EpisodeTwo({ onExit }: { onExit: () => void }) {
       {phase === "descent" && (
         <div className="mt-6">
           <h2 className="text-xl font-extrabold">VERTICAL TRANSFER</h2>
-          <p className="mt-3 text-sm text-white/70">
-            The lift ascends through stacked corridors. Signal latency increases.  
-            Your prior classification ({ep1?.profile?.archetype ?? "UNKNOWN"}) is carried forward.
-          </p>
+          <div className="mt-3 grid gap-2 text-sm leading-relaxed text-white/70">
+            <p>
+              The lift ascends through stacked corridors carved into the
+              understructure—levels never shown on public schematics.
+            </p>
+            <p>
+              Each layer introduces delay. Not mechanical. Deliberate.
+            </p>
+            <p>
+              Your prior classification (
+              <span className="font-semibold text-white/80">
+                {ep1?.profile?.archetype ?? "UNKNOWN"}
+              </span>
+              ) is echoed across systems that do not announce themselves.
+            </p>
+            <p className="text-white/80 font-semibold">
+              You are no longer alone in the stack.
+            </p>
+          </div>
+
           <button
             onClick={() => setPhase("input")}
             className="mt-6 rounded-full px-5 py-2 text-[12px] font-extrabold"
             style={{
               border: "1px solid rgba(255,255,255,0.12)",
-              background: "linear-gradient(90deg, rgba(56,189,248,0.90), rgba(168,85,247,0.70))",
+              background:
+                "linear-gradient(90deg, rgba(56,189,248,0.90), rgba(168,85,247,0.70))",
               color: "rgba(2,6,23,0.98)",
             }}
           >
@@ -197,9 +217,13 @@ export default function EpisodeTwo({ onExit }: { onExit: () => void }) {
       {phase === "input" && (
         <div className="mt-6">
           <h2 className="text-xl font-extrabold">ASSIGN DESIGNATION</h2>
-          <p className="mt-2 text-sm text-white/60">
-            7 characters. Alphanumeric. Permanent.
-          </p>
+          <div className="mt-2 text-sm text-white/60">
+            This identifier will follow the Basebot beyond the lift.
+            <br />
+            <span className="text-white/80 font-semibold">
+              Seven characters. No revisions.
+            </span>
+          </div>
 
           <input
             value={value}
@@ -223,11 +247,12 @@ export default function EpisodeTwo({ onExit }: { onExit: () => void }) {
             className="mt-6 rounded-full px-5 py-2 text-[12px] font-extrabold"
             style={{
               border: "1px solid rgba(255,255,255,0.12)",
-              background: "linear-gradient(90deg, rgba(168,85,247,0.90), rgba(56,189,248,0.84))",
+              background:
+                "linear-gradient(90deg, rgba(168,85,247,0.90), rgba(56,189,248,0.84))",
               color: "rgba(2,6,23,0.98)",
             }}
           >
-            Confirm
+            Confirm Designation
           </button>
         </div>
       )}
@@ -235,8 +260,11 @@ export default function EpisodeTwo({ onExit }: { onExit: () => void }) {
       {/* BINDING */}
       {phase === "binding" && (
         <div className="mt-10 text-center">
-          <p className="font-mono text-white/80 tracking-widest">
-            IDENTITY LOCKED
+          <p className="font-mono tracking-widest text-white/80">
+            IDENTITY SEALED
+          </p>
+          <p className="mt-2 text-xs text-white/50">
+            Conflicts detected above the access layer.
           </p>
         </div>
       )}
@@ -244,17 +272,28 @@ export default function EpisodeTwo({ onExit }: { onExit: () => void }) {
       {/* APPROACH */}
       {phase === "approach" && (
         <div className="mt-6">
-          <p className="text-sm text-white/70">
-            Surface access pending.  
-            Designation registered. Routing stabilized.
-          </p>
+          <div className="grid gap-2 text-sm leading-relaxed text-white/70">
+            <p>
+              Surface access denied—for now.
+            </p>
+            <p>
+              Your designation has propagated faster than expected.
+            </p>
+            <p className="text-white/80 font-semibold">
+              Consensus does not exist.
+            </p>
+            <p>
+              A fault line forms where identity should be singular.
+            </p>
+          </div>
 
           <button
             onClick={onExit}
             className="mt-6 rounded-full px-5 py-2 text-[12px] font-extrabold"
             style={{
               border: "1px solid rgba(255,255,255,0.12)",
-              background: "linear-gradient(90deg, rgba(56,189,248,0.85), rgba(168,85,247,0.70))",
+              background:
+                "linear-gradient(90deg, rgba(56,189,248,0.85), rgba(168,85,247,0.70))",
               color: "rgba(2,6,23,0.98)",
             }}
           >
