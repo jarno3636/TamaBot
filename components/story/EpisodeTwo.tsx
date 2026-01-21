@@ -73,6 +73,7 @@ export default function EpisodeTwo({
   useEffect(() => setHydrated(true), []);
 
   const tokenIdBig = useMemo(() => normalizeTokenId(tokenId), [tokenId]);
+  const hasValidTokenId = tokenIdBig !== null;
 
   /* ───────── episode state ───────── */
   const ep1 = useMemo(() => loadEp1(), []);
@@ -90,11 +91,11 @@ export default function EpisodeTwo({
   const isBase = chain?.id === 8453;
 
   const ready =
-    Boolean(address && walletClient && publicClient && isBase && tokenIdBig);
+    Boolean(address && walletClient && publicClient && isBase && hasValidTokenId);
 
   /* ───────── chain read (EP2) ───────── */
   useEffect(() => {
-    if (!publicClient || !tokenIdBig) return;
+    if (!publicClient || !hasValidTokenId) return;
 
     let cancelled = false;
 
@@ -105,7 +106,7 @@ export default function EpisodeTwo({
           address: BASEBOTS_S2.address,
           abi: BASEBOTS_S2.abi,
           functionName: "getBotState",
-          args: [tokenIdBig],
+          args: [tokenIdBig!],
         });
 
         const ep2Set =
@@ -128,7 +129,7 @@ export default function EpisodeTwo({
     return () => {
       cancelled = true;
     };
-  }, [publicClient, tokenIdBig]);
+  }, [publicClient, hasValidTokenId, tokenIdBig]);
 
   /* ───────── ambient glitch ───────── */
   const [glitchTick, setGlitchTick] = useState(0);
@@ -227,8 +228,6 @@ export default function EpisodeTwo({
 
   return (
     <section
-      role="region"
-      aria-label="Episode Two: Designation"
       style={{
         borderRadius: 28,
         padding: 22,
@@ -241,18 +240,17 @@ export default function EpisodeTwo({
       {/* Boot console */}
       <div style={{ fontSize: 11, opacity: 0.78, marginBottom: 12 }}>
         Boot: {hydrated ? "hydrated" : "hydrating"} • tokenId:{" "}
-        <b>{tokenIdBig ? tokenIdBig.toString() : "INVALID"}</b> • chain:{" "}
+        <b>{hasValidTokenId ? tokenIdBig!.toString() : "INVALID"}</b> • chain:{" "}
         <b>{isBase ? "Base" : chain?.id ?? "none"}</b> • status: <b>{chainStatus}</b>
       </div>
 
-      {!tokenIdBig && (
+      {!hasValidTokenId && (
         <div style={{ fontSize: 13, color: "#f87171" }}>
           Invalid tokenId. Pass tokenId as a string or number from the hub.
         </div>
       )}
 
-      {/* DESCENT */}
-      {phase === "descent" && tokenIdBig && (
+      {phase === "descent" && hasValidTokenId && (
         <div>
           <h2
             style={{
@@ -282,7 +280,6 @@ export default function EpisodeTwo({
         </div>
       )}
 
-      {/* INPUT */}
       {phase === "input" && (
         <div>
           <h2 style={{ fontSize: 20, fontWeight: 900 }}>ASSIGN DESIGNATION</h2>
@@ -319,7 +316,6 @@ export default function EpisodeTwo({
         </div>
       )}
 
-      {/* BINDING */}
       {phase === "binding" && (
         <div
           style={{
@@ -334,7 +330,6 @@ export default function EpisodeTwo({
         </div>
       )}
 
-      {/* APPROACH */}
       {phase === "approach" && (
         <div>
           <p>Designation accepted.</p>
