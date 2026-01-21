@@ -55,13 +55,13 @@ const STORAGE_KEY = "basebots_ep1_cinematic_v1";
 const SOUND_KEY = "basebots_ep1_sound";
 
 /* ──────────────────────────────────────────────
- * Persistence (cinematic only)
+ * Persistence
  * ────────────────────────────────────────────── */
 
 function loadSave(): SaveShape | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as SaveShape) : null;
+    return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
@@ -73,47 +73,49 @@ function saveGame(save: SaveShape) {
   } catch {}
 }
 
-function formatTime(totalSeconds: number) {
-  const s = Math.max(0, Math.floor(totalSeconds));
-  const m = Math.floor(s / 60);
-  const r = s % 60;
-  return `${m}:${String(r).padStart(2, "0")}`;
-}
-
 /* ──────────────────────────────────────────────
  * UI helpers
  * ────────────────────────────────────────────── */
 
+const fadeIn = {
+  animation: "fadeIn 420ms ease-out both",
+};
+
 function cardShell() {
   return {
-    border: "1px solid rgba(255,255,255,0.10)",
-    background: "rgba(0,0,0,0.22)",
-    boxShadow: "0 26px 110px rgba(0,0,0,0.65)",
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(0,0,0,0.30)",
+    boxShadow: "0 40px 160px rgba(0,0,0,0.75)",
+    backdropFilter: "blur(6px)",
   } as const;
 }
 
-function SceneImage({ alt }: { alt: string }) {
+function SceneImage({ src }: { src: string }) {
   return (
     <div
-      className="relative overflow-hidden rounded-3xl border"
       style={{
-        borderColor: "rgba(255,255,255,0.10)",
-        background:
-          "radial-gradient(900px 300px at 20% 0%, rgba(56,189,248,0.18), transparent 60%), radial-gradient(900px 300px at 90% 10%, rgba(168,85,247,0.14), transparent 62%), linear-gradient(180deg, rgba(2,6,23,0.92), rgba(2,6,23,0.78))",
-        boxShadow: "0 28px 120px rgba(0,0,0,0.60)",
+        height: 220,
+        borderRadius: 28,
+        border: "1px solid rgba(255,255,255,0.10)",
+        background: `
+          radial-gradient(900px 300px at 20% 0%, rgba(56,189,248,0.18), transparent 60%),
+          radial-gradient(900px 300px at 90% 10%, rgba(168,85,247,0.14), transparent 62%),
+          linear-gradient(180deg, rgba(2,6,23,0.20), rgba(2,6,23,0.92))
+        `,
+        boxShadow: "0 30px 140px rgba(0,0,0,0.8)",
       }}
-    >
-      <div className="relative h-[180px] md:h-[220px] flex items-end p-4">
-        <div className="text-[11px] font-mono tracking-wide text-white/60">
-          SCENE // {alt}
-        </div>
-      </div>
-    </div>
+    />
   );
 }
 
+function formatTime(sec: number) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 /* ──────────────────────────────────────────────
- * Episode Component
+ * Component
  * ────────────────────────────────────────────── */
 
 export default function EpisodeOne({
@@ -137,45 +139,38 @@ export default function EpisodeOne({
   const { address, chain } = useAccount();
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
-
   const isBase = chain?.id === 8453;
   const ready = !!address && !!walletClient && !!publicClient && isBase;
 
+  /* ───────── chain state ───────── */
   const [chainChoice, setChainChoice] = useState<EpisodeOneChoiceId | null>(null);
-  const [chainLoading, setChainLoading] = useState(true);
-
-  async function fetchEp1FromChain() {
-    if (!publicClient) return;
-    setChainLoading(true);
-    try {
-      const state: any = await publicClient.readContract({
-        address: BASEBOTS_SEASON2_STATE_ADDRESS,
-        abi: BASEBOTS_SEASON2_STATE_ABI,
-        functionName: "getBotState",
-        args: [tokenId],
-      });
-
-      const raw = state?.episode1Choice ?? state?.[0];
-      const n = typeof raw === "bigint" ? Number(raw) : raw;
-
-      if (n in EP1_FROM_ENUM) setChainChoice(EP1_FROM_ENUM[n]);
-      else setChainChoice(null);
-    } catch {
-      setChainChoice(null);
-    } finally {
-      setChainLoading(false);
-    }
-  }
 
   useEffect(() => {
-    fetchEp1FromChain();
-    const handler = () => fetchEp1FromChain();
-    window.addEventListener("basebots-progress-updated", handler);
-    return () => window.removeEventListener("basebots-progress-updated", handler);
+    if (!publicClient) return;
+    (async () => {
+      try {
+        const state: any = await publicClient.readContract({
+          address: BASEBOTS_SEASON2_STATE_ADDRESS,
+          abi: BASEBOTS_SEASON2_STATE_ABI,
+          functionName: "getBotState",
+          args: [tokenId],
+        });
+        const raw = Number(state?.episode1Choice ?? state?.[0]);
+        if (raw in EP1_FROM_ENUM) {
+          setChainChoice(EP1_FROM_ENUM[raw]);
+          if (!save) {
+            const synthetic = buildSave(EP1_FROM_ENUM[raw], soundEnabled);
+            setSave(synthetic);
+            saveGame(synthetic);
+            setPhase("ending");
+          }
+        }
+      } catch {}
+    })();
   }, [tokenId, publicClient]);
 
-  /* ───────── Sound ───────── */
-  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
+  /* ───────── sound ───────── */
+  const [soundEnabled, setSoundEnabled] = useState(() => {
     try {
       return localStorage.getItem(SOUND_KEY) !== "off";
     } catch {
@@ -188,11 +183,12 @@ export default function EpisodeOne({
   useEffect(() => {
     const a = new Audio("/audio/s1.mp3");
     a.loop = true;
-    a.volume = 0.65;
+    a.volume = 0.6;
     audioRef.current = a;
+    if (soundEnabled) a.play().catch(() => {});
     return () => {
       a.pause();
-      a.src = "";
+      audioRef.current = null;
     };
   }, []);
 
@@ -202,20 +198,15 @@ export default function EpisodeOne({
     if (!soundEnabled) {
       a.pause();
       a.currentTime = 0;
-      return;
+    } else {
+      a.play().catch(() => {});
     }
-    a.play().catch(() => {});
+    try {
+      localStorage.setItem(SOUND_KEY, soundEnabled ? "on" : "off");
+    } catch {}
   }, [soundEnabled]);
 
-  function toggleSound() {
-    setSoundEnabled((s) => {
-      const next = !s;
-      localStorage.setItem(SOUND_KEY, next ? "on" : "off");
-      return next;
-    });
-  }
-
-  /* ───────── Timer ───────── */
+  /* ───────── timer ───────── */
   useEffect(() => {
     if (phase !== "choice") return;
     setSecondsLeft(CHOICE_WINDOW_SECONDS);
@@ -231,7 +222,9 @@ export default function EpisodeOne({
     }
   }, [secondsLeft, phase]);
 
-  function buildSave(choiceId: EpisodeOneChoiceId): SaveShape {
+  /* ───────── helpers ───────── */
+
+  function buildSave(choiceId: EpisodeOneChoiceId, soundOn: boolean): SaveShape {
     return {
       v: 1,
       episodeId: "ep1",
@@ -241,7 +234,7 @@ export default function EpisodeOne({
         cautious: choiceId === "STALL",
         adversarial: choiceId === "SPOOF",
         severed: choiceId === "PULL_PLUG",
-        soundOff: !soundEnabled,
+        soundOff: !soundOn,
       },
       profile: {
         archetype:
@@ -252,26 +245,12 @@ export default function EpisodeOne({
             : choiceId === "SPOOF"
             ? "Saboteur"
             : "Severed",
-        trust: choiceId === "ACCEPT" ? 70 : choiceId === "STALL" ? 55 : choiceId === "SPOOF" ? 26 : 16,
-        threat: choiceId === "ACCEPT" ? 22 : choiceId === "STALL" ? 36 : choiceId === "SPOOF" ? 74 : 58,
+        trust: choiceId === "ACCEPT" ? 70 : choiceId === "STALL" ? 55 : 30,
+        threat: choiceId === "ACCEPT" ? 22 : choiceId === "STALL" ? 36 : 68,
       },
       artifact: {
-        name:
-          choiceId === "ACCEPT"
-            ? "Compliance Record"
-            : choiceId === "STALL"
-            ? "Observation Gap"
-            : choiceId === "SPOOF"
-            ? "Contradictory Authority"
-            : "Termination Evidence",
-        desc:
-          choiceId === "ACCEPT"
-            ? "A credentialed profile registered without challenge."
-            : choiceId === "STALL"
-            ? "A refusal logged as non-cooperative."
-            : choiceId === "SPOOF"
-            ? "A forged credential accepted long enough to duplicate records."
-            : "A sever logged with a surviving trace.",
+        name: "Audit Record",
+        desc: "A permanent trace bound to your Basebot’s session.",
       },
       createdAt: Date.now(),
     };
@@ -283,75 +262,156 @@ export default function EpisodeOne({
       return;
     }
     if (!ready) {
-      alert(!isBase ? "Switch to Base (8453)." : "Connect wallet.");
+      alert("Connect wallet on Base to continue.");
       return;
     }
 
-    const hash = await walletClient!.writeContract({
-      address: BASEBOTS_SEASON2_STATE_ADDRESS,
-      abi: BASEBOTS_SEASON2_STATE_ABI,
-      functionName: "setEpisode1",
-      args: [tokenId, EP1_ENUM[choiceId]],
-    });
+    try {
+      const hash = await walletClient!.writeContract({
+        address: BASEBOTS_SEASON2_STATE_ADDRESS,
+        abi: BASEBOTS_SEASON2_STATE_ABI,
+        functionName: "setEpisode1",
+        args: [tokenId, EP1_ENUM[choiceId]],
+      });
 
-    await publicClient!.waitForTransactionReceipt({ hash });
+      await publicClient!.waitForTransactionReceipt({ hash });
 
-    const s = buildSave(choiceId);
-    saveGame(s);
-    setSave(s);
-    setChainChoice(choiceId);
-    setPhase("ending");
-
-    window.dispatchEvent(new Event("basebots-progress-updated"));
+      const s = buildSave(choiceId, soundEnabled);
+      saveGame(s);
+      setSave(s);
+      setChainChoice(choiceId);
+      setPhase("ending");
+    } catch {
+      alert("Transaction failed.");
+    }
   }
 
-  function restartEpisode() {
-    localStorage.removeItem(STORAGE_KEY);
+  function resetEpisode() {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(SOUND_KEY);
+    } catch {}
     setSave(null);
     setLocalPick(null);
     setChainChoice(null);
-    setSecondsLeft(CHOICE_WINDOW_SECONDS);
     setPhase("intro");
     window.scrollTo({ top: 0, behavior: "instant" });
   }
 
-  /* ───────── Render ───────── */
+  /* ───────────────────────── render ───────────────────────── */
 
   return (
-    <section className="relative overflow-hidden rounded-[28px] border p-5 md:p-7">
-      <div className="flex justify-end gap-2">
-        <button onClick={toggleSound}>SOUND: {soundEnabled ? "ON" : "OFF"}</button>
-        <button onClick={restartEpisode}>Restart Episode</button>
+    <section
+      style={{
+        padding: 20,
+        borderRadius: 32,
+        border: "1px solid rgba(255,255,255,0.10)",
+        background: "linear-gradient(180deg, rgba(2,6,23,0.96), rgba(2,6,23,0.75))",
+        boxShadow: "0 60px 200px rgba(0,0,0,0.85)",
+      }}
+    >
+      {/* Controls */}
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <button onClick={() => setSoundEnabled((s) => !s)}>SOUND {soundEnabled ? "ON" : "OFF"}</button>
+        <button onClick={resetEpisode}>Restart</button>
         <button onClick={onExit}>Exit</button>
       </div>
 
+      {/* INTRO */}
       {phase === "intro" && (
-        <div className="mt-6 grid gap-5">
-          <SceneImage alt="Awakening" />
-          <div className="rounded-3xl border p-5" style={cardShell()}>
-            <h2 className="text-xl font-extrabold text-white">AWAKENING</h2>
-            <p className="mt-3 text-white/70">
-              Cold boot. No startup tone. No friendly status lights.
-            </p>
-            <button onClick={() => setPhase("signal")} className="mt-6">
-              Continue
+        <div style={{ marginTop: 24, ...fadeIn }}>
+          <SceneImage src="/story/ep1/01-awakening.webp" />
+          <div style={{ marginTop: 20, padding: 24, borderRadius: 28, ...cardShell() }}>
+            <h2>AWAKENING</h2>
+            <p>You boot in a sealed relay container. No owner. No credential.</p>
+            <button onClick={() => setPhase("signal")}>Continue</button>
+          </div>
+        </div>
+      )}
+
+      {/* SIGNAL */}
+      {phase === "signal" && (
+        <div style={{ marginTop: 24, ...fadeIn }}>
+          <SceneImage src="/story/ep1/02-transmission.webp" />
+          <div style={{ marginTop: 20, padding: 24, borderRadius: 28, ...cardShell() }}>
+            <h2>SIGNAL DROP</h2>
+            <p>Audit gate requires an operator profile.</p>
+            <button onClick={() => setPhase("local")}>Find local terminal</button>
+          </div>
+        </div>
+      )}
+
+      {/* LOCAL */}
+      {phase === "local" && (
+        <div style={{ marginTop: 24, ...fadeIn }}>
+          <SceneImage src="/story/ep1/03-local-node.webp" />
+          <div style={{ marginTop: 20, padding: 24, borderRadius: 28, ...cardShell() }}>
+            <h2>LOCAL NODE</h2>
+            <button onClick={() => { setLocalPick("PRESS"); setPhase("localAfter"); }}>
+              Press override
+            </button>
+            <button onClick={() => { setLocalPick("LEAVE"); setPhase("localAfter"); }}>
+              Leave it
+            </button>
+            <button onClick={() => { setLocalPick("BACK"); setPhase("localAfter"); }}>
+              Step back
             </button>
           </div>
         </div>
       )}
 
-      {phase === "ending" && save && (
-        <div className="mt-6 grid gap-5">
-          <SceneImage alt="Evaluation" />
-          <div className="rounded-3xl border p-5" style={cardShell()}>
-            <h2 className="text-xl font-extrabold text-white">AUDIT RESULT</h2>
-            <p className="mt-3 text-white/70">{save.artifact.desc}</p>
-            <button onClick={restartEpisode} className="mt-6">
-              Replay Episode
-            </button>
+      {/* AFTER */}
+      {phase === "localAfter" && (
+        <div style={{ marginTop: 24, ...fadeIn }}>
+          <SceneImage src="/story/ep1/04-sparks.webp" />
+          <div style={{ marginTop: 20, padding: 24, borderRadius: 28, ...cardShell() }}>
+            <h2>OVERRIDE REJECTED</h2>
+            <p>The system demands classification.</p>
+            <button onClick={() => setPhase("choice")}>Open audit prompt</button>
           </div>
         </div>
       )}
+
+      {/* CHOICE */}
+      {phase === "choice" && (
+        <div style={{ marginTop: 24, ...fadeIn }}>
+          <SceneImage src="/story/ep1/05-decision-window.webp" />
+          <div style={{ marginTop: 20, padding: 24, borderRadius: 28, ...cardShell() }}>
+            <h2>AUDIT PROMPT</h2>
+            <div>Decision window: {formatTime(secondsLeft)}</div>
+            <button onClick={() => resolveChoice("ACCEPT")}>Submit Credential</button>
+            <button onClick={() => resolveChoice("STALL")}>Refuse</button>
+            <button onClick={() => resolveChoice("SPOOF")}>Submit Decoy</button>
+            <button onClick={() => resolveChoice("PULL_PLUG")}>Sever Link</button>
+          </div>
+        </div>
+      )}
+
+      {/* ENDING */}
+      {phase === "ending" && save && (
+        <div style={{ marginTop: 24, ...fadeIn }}>
+          <SceneImage src="/story/ep1/06-outcome.webp" />
+          <div style={{ marginTop: 20, padding: 24, borderRadius: 28, ...cardShell() }}>
+            <h2>AUDIT RESULT</h2>
+            <p>{save.profile.archetype}</p>
+            <p>{save.artifact.desc}</p>
+            <button onClick={onExit}>Return to hub</button>
+          </div>
+        </div>
+      )}
+
+      <style jsx global>{`
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+            transform: translateY(8px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
     </section>
   );
 }
