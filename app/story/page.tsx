@@ -25,7 +25,7 @@ import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 const BASE_CHAIN_ID = 8453;
 
 /* ─────────────────────────────────────────────
- * Helpers
+ * Types / Helpers
  * ───────────────────────────────────────────── */
 
 type CoreProgress = {
@@ -73,7 +73,7 @@ function badgeTone(status: string) {
 }
 
 /* ─────────────────────────────────────────────
- * Episode Card (with distortion support)
+ * Episode Card (supports distortion)
  * ───────────────────────────────────────────── */
 
 function EpisodeCard(ep: {
@@ -195,7 +195,9 @@ export default function StoryPage() {
   }, [fid]);
 
   const hasIdentity = Boolean(fidString);
-  const wrongChain = Boolean(chain?.id) && chain.id !== BASE_CHAIN_ID;
+
+  /* ✅ FIXED: chain-safe narrowing */
+  const wrongChain = chain?.id !== undefined && chain.id !== BASE_CHAIN_ID;
 
   /* Basebot presence */
   const { data: tokenUri } = useReadContract({
@@ -221,7 +223,7 @@ export default function StoryPage() {
   const canPlayCore = Boolean(address && hasBasebot && !wrongChain);
   const currentCore = useMemo(() => nextCoreMode(progress), [progress]);
 
-  /* Bonus unlocks */
+  /* Bonus unlock rules */
   const prologueUnlocked = Boolean(progress?.ep1);
   const bonus1Unlocked = Boolean(progress?.ep3);
   const bonus2Unlocked = Boolean(progress?.ep5);
@@ -318,7 +320,7 @@ export default function StoryPage() {
           </div>
         </section>
 
-        {/* ARCHIVAL / BONUSES */}
+        {/* ARCHIVAL */}
         <section style={{ marginTop: 36 }}>
           <h3 style={{ fontSize: 12, letterSpacing: 1.8, fontWeight: 900, marginBottom: 12 }}>
             ARCHIVAL ECHOES
