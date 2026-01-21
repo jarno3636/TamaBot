@@ -6,7 +6,7 @@ import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 
 /* ──────────────────────────────────────────────
- * Storage keys (cosmetic only)
+ * Storage
  * ────────────────────────────────────────────── */
 
 const SOUND_KEY = "basebots_ep4_sound";
@@ -32,6 +32,19 @@ type Profile =
 /* ──────────────────────────────────────────────
  * Helpers
  * ────────────────────────────────────────────── */
+
+function normalizeTokenId(input: string | number | bigint): bigint | null {
+  try {
+    if (typeof input === "bigint") return input;
+    if (typeof input === "number")
+      return Number.isFinite(input) ? BigInt(Math.floor(input)) : null;
+    if (typeof input === "string" && input.trim())
+      return BigInt(input.trim());
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 function biasToProfile(bias?: CognitionBias): Profile {
   switch (bias) {
@@ -69,12 +82,23 @@ export default function EpisodeFour({
   tokenId,
   onExit,
 }: {
-  tokenId: bigint;
+  tokenId: string | number | bigint;
   onExit: () => void;
 }) {
+  /* ───────── hydration ───────── */
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
+
+  const tokenIdBig = useMemo(() => normalizeTokenId(tokenId), [tokenId]);
+
+  /* ───────── state ───────── */
   const [phase, setPhase] = useState<Phase>("intro");
   const [submitting, setSubmitting] = useState(false);
   const [alreadySet, setAlreadySet] = useState(false);
+  const [chainStatus, setChainStatus] = useState("Idle");
+
+  /* ───────── chain derived ───────── */
+  const [cognitionBias, setCognitionBias] = useState<CognitionBias | undefined>();
 
   /* ───────── wagmi ───────── */
   const { address, chain } = useAccount();
@@ -83,36 +107,52 @@ export default function EpisodeFour({
   const isBase = chain?.id === 8453;
 
   const ready =
-    !!address && !!walletClient && !!publicClient && !!tokenId && isBase;
+    Boolean(address && walletClient && publicClient && isBase && tokenIdBig);
 
-  /* ───────── read on-chain state ───────── */
-  const [cognitionBias, setCognitionBias] = useState<CognitionBias | undefined>();
-
+  /* ───────── read chain state ───────── */
   useEffect(() => {
-    if (!publicClient || !tokenId) return;
+    if (!publicClient || !tokenIdBig) return;
+
+    let cancelled = false;
 
     (async () => {
       try {
-        const state = (await publicClient.readContract({
+        setChainStatus("Reading chain…");
+
+        const state: any = await publicClient.readContract({
           address: BASEBOTS_S2.address,
           abi: BASEBOTS_S2.abi,
           functionName: "getBotState",
-          args: [tokenId],
-        })) as any;
+          args: [tokenIdBig],
+        });
 
-        if (state?.ep4Set) {
-          setAlreadySet(true);
-          setPhase("lock");
-        }
+        if (cancelled) return;
 
         if (state?.cognitionBias) {
           setCognitionBias(state.cognitionBias);
         }
+
+        const ep4Set =
+          state?.ep4Set ??
+          state?.episode4Set ??
+          (Array.isArray(state) ? state[4] : false);
+
+        if (ep4Set) {
+          setAlreadySet(true);
+          setPhase("lock");
+          setChainStatus("Profile already registered");
+        } else {
+          setChainStatus("Profile pending");
+        }
       } catch {
-        // silent
+        if (!cancelled) setChainStatus("Chain read failed");
       }
     })();
-  }, [tokenId, publicClient]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [publicClient, tokenIdBig]);
 
   const profile = useMemo(
     () => biasToProfile(cognitionBias),
@@ -120,20 +160,29 @@ export default function EpisodeFour({
   );
 
   /* ───────── sound ───────── */
-  const [soundOn, setSoundOn] = useState(
-    () => localStorage.getItem(SOUND_KEY) !== "off"
-  );
+  const [soundOn, setSoundOn] = useState(() => {
+    try {
+      return localStorage.getItem(SOUND_KEY) !== "off";
+    } catch {
+      return true;
+    }
+  });
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    const audio = new Audio("/audio/s4.mp3");
-    audio.loop = true;
-    audio.volume = 0.45;
-    audioRef.current = audio;
-
-    if (soundOn) audio.play().catch(() => {});
-    return () => audio.pause();
+    const a = new Audio("/audio/s4.mp3");
+    a.loop = true;
+    a.volume = 0.45;
+    audioRef.current = a;
+    if (soundOn) a.play().catch(() => {});
+    return () => {
+      try {
+        a.pause();
+        a.src = "";
+      } catch {}
+      audioRef.current = null;
+    };
   }, []);
 
   useEffect(() => {
@@ -142,42 +191,45 @@ export default function EpisodeFour({
     if (!soundOn) {
       a.pause();
       a.currentTime = 0;
-      return;
+    } else {
+      a.play().catch(() => {});
     }
-    a.play().catch(() => {});
+    try {
+      localStorage.setItem(SOUND_KEY, soundOn ? "on" : "off");
+    } catch {}
   }, [soundOn]);
 
-  function toggleSound() {
-    const next = !soundOn;
-    setSoundOn(next);
-    localStorage.setItem(SOUND_KEY, next ? "on" : "off");
-  }
-
-  /* ───────── commit profile (ON-CHAIN) ───────── */
+  /* ───────── commit profile ───────── */
   async function finalize() {
     if (alreadySet || submitting) return;
     if (!ready || !profile) return;
 
     setSubmitting(true);
+    setChainStatus("Authorizing profile…");
 
     try {
       const hash = await walletClient!.writeContract({
         address: BASEBOTS_S2.address,
         abi: BASEBOTS_S2.abi,
         functionName: "setEpisode4Profile",
-        args: [tokenId, profile],
+        args: [tokenIdBig!, profile],
       });
 
       await publicClient!.waitForTransactionReceipt({ hash });
 
       window.dispatchEvent(new Event("basebots-progress-updated"));
+      setChainStatus("Profile registered");
       setPhase("lock");
-    } catch (e) {
-      console.error(e);
+    } catch {
+      setChainStatus("Transaction failed");
     } finally {
       setSubmitting(false);
     }
   }
+
+  /* ──────────────────────────────────────────────
+   * Render
+   * ────────────────────────────────────────────── */
 
   return (
     <section
@@ -189,27 +241,21 @@ export default function EpisodeFour({
         padding: 24,
         color: "white",
         background:
-          "radial-gradient(900px 380px at 50% -10%, rgba(56,189,248,0.08), transparent 60%), linear-gradient(180deg, rgba(2,6,23,0.98), rgba(2,6,23,0.80))",
+          "radial-gradient(900px 380px at 50% -10%, rgba(56,189,248,0.10), transparent 60%), linear-gradient(180deg, rgba(2,6,23,0.98), rgba(2,6,23,0.80))",
         boxShadow: "0 60px 220px rgba(0,0,0,0.9)",
       }}
     >
-      {/* scanlines */}
-      <div
-        aria-hidden
-        style={{
-          position: "absolute",
-          inset: 0,
-          pointerEvents: "none",
-          background:
-            "linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px)",
-          backgroundSize: "100% 3px",
-          opacity: 0.07,
-        }}
-      />
+      {/* boot console */}
+      <div style={{ fontSize: 11, opacity: 0.78, marginBottom: 14 }}>
+        Boot: {hydrated ? "hydrated" : "hydrating"} • tokenId:{" "}
+        <b>{tokenIdBig ? tokenIdBig.toString() : "INVALID"}</b> • chain:{" "}
+        <b>{isBase ? "Base" : chain?.id ?? "none"}</b> • status:{" "}
+        <b>{chainStatus}</b>
+      </div>
 
       {/* controls */}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-        <button onClick={toggleSound} style={{ fontSize: 11 }}>
+        <button onClick={() => setSoundOn((s) => !s)} style={{ fontSize: 11 }}>
           SOUND {soundOn ? "ON" : "OFF"}
         </button>
         <button onClick={onExit} style={{ fontSize: 11 }}>
@@ -220,15 +266,15 @@ export default function EpisodeFour({
       {/* INTRO */}
       {phase === "intro" && (
         <>
-          <h2 style={{ fontSize: 20, fontWeight: 800, letterSpacing: 1 }}>
+          <h2 style={{ fontSize: 20, fontWeight: 900, letterSpacing: 1 }}>
             THRESHOLD
           </h2>
 
           <p style={{ marginTop: 16, fontSize: 14, opacity: 0.85 }}>
-            You are no longer being observed for accuracy.
+            Observation has concluded. You are being prepared for deployment.
           </p>
 
-          <button onClick={() => setPhase("analysis")} style={{ marginTop: 20 }}>
+          <button onClick={() => setPhase("analysis")} style={{ marginTop: 22 }}>
             Continue
           </button>
         </>
@@ -245,8 +291,8 @@ export default function EpisodeFour({
             style={{
               marginTop: 12,
               borderRadius: 16,
-              padding: "10px",
-              fontFamily: "monospace",
+              padding: 12,
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
               fontSize: 13,
               letterSpacing: 2,
               background: "rgba(0,0,0,0.45)",
@@ -266,24 +312,24 @@ export default function EpisodeFour({
       {phase === "projection" && (
         <>
           <p style={{ fontSize: 13, opacity: 0.75 }}>
-            Behavioral role projected for surface deployment:
+            Projected operational role:
           </p>
 
           <div
             style={{
               marginTop: 14,
               borderRadius: 20,
-              padding: "14px",
+              padding: 16,
               textAlign: "center",
               background:
                 "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))",
               border: "1px solid rgba(255,255,255,0.18)",
             }}
           >
-            <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: 3 }}>
+            <div style={{ fontSize: 18, fontWeight: 900, letterSpacing: 3 }}>
               {profile}
             </div>
-            <div style={{ marginTop: 6, fontSize: 12, opacity: 0.6 }}>
+            <div style={{ marginTop: 8, fontSize: 12, opacity: 0.65 }}>
               {profileDescription(profile)}
             </div>
           </div>
@@ -291,7 +337,7 @@ export default function EpisodeFour({
           <button
             onClick={finalize}
             disabled={submitting}
-            style={{ marginTop: 20 }}
+            style={{ marginTop: 22 }}
           >
             {submitting ? "AUTHORIZING…" : "Authorize profile"}
           </button>
@@ -301,7 +347,14 @@ export default function EpisodeFour({
       {/* LOCK */}
       {phase === "lock" && (
         <>
-          <p style={{ fontFamily: "monospace", fontSize: 12, letterSpacing: 2 }}>
+          <p
+            style={{
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+              fontSize: 12,
+              letterSpacing: 2,
+              opacity: 0.85,
+            }}
+          >
             SURFACE PROFILE REGISTERED
           </p>
 
