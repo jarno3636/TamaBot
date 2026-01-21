@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 
@@ -193,14 +192,6 @@ function SceneImage({ src, alt }: { src: string; alt: string }) {
       }}
     >
       <div className="relative h-[180px] md:h-[220px]">
-        <Image
-          src={src}
-          alt={alt}
-          fill
-          priority={false}
-          sizes="(max-width: 768px) 100vw, 900px"
-          style={{ objectFit: "cover" }}
-        />
         <div
           aria-hidden
           className="absolute inset-0"
