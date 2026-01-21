@@ -72,6 +72,42 @@ function badgeTone(status: string) {
   }
 }
 
+/**
+ * getBotState returns:
+ * [
+ *  designation(bytes7),
+ *  ep1Choice(uint8),
+ *  cognitionBias(uint8),
+ *  profile(uint8),
+ *  outcome(uint8),
+ *  bonusFlags(uint16),
+ *  schemaVersion(uint8),
+ *  finalized(bool),
+ *  ep1Set(bool),
+ *  ep2Set(bool),
+ *  ep3Set(bool),
+ *  ep4Set(bool),
+ *  ep5Set(bool),
+ *  updatedAt(uint40),
+ *  finalizedAt(uint40)
+ * ]
+ */
+function deriveProgressFromBotState(botState: unknown): CoreProgress | undefined {
+  if (!botState || !Array.isArray(botState)) return undefined;
+
+  // Defensive: make sure it has at least the flags we need
+  if (botState.length < 13) return undefined;
+
+  const finalized = Boolean(botState[7]);
+  const ep1 = Boolean(botState[8]);
+  const ep2 = Boolean(botState[9]);
+  const ep3 = Boolean(botState[10]);
+  const ep4 = Boolean(botState[11]);
+  const ep5 = Boolean(botState[12]);
+
+  return { ep1, ep2, ep3, ep4, ep5, finalized };
+}
+
 /* ─────────────────────────────────────────────
  * Episode Card (supports distortion)
  * ───────────────────────────────────────────── */
@@ -188,6 +224,7 @@ export default function StoryPage() {
   const { address, chain } = useAccount();
   const { fid } = useFid();
 
+  // Keep tokenId stable as STRING; episode components convert to bigint internally.
   const fidString = useMemo(() => {
     if (typeof fid === "number" && fid > 0) return String(fid);
     if (typeof fid === "string" && /^\d+$/.test(fid)) return fid;
@@ -196,7 +233,7 @@ export default function StoryPage() {
 
   const hasIdentity = Boolean(fidString);
 
-  /* ✅ FIXED: chain-safe narrowing */
+  /* chain-safe narrowing */
   const wrongChain = chain?.id !== undefined && chain.id !== BASE_CHAIN_ID;
 
   /* Basebot presence */
@@ -211,19 +248,32 @@ export default function StoryPage() {
     typeof tokenUri === "string" &&
     tokenUri.startsWith("data:application/json;base64,");
 
-  /* Progress */
-  const { data: progress } = useReadContract({
+  /**
+   * ✅ FIXED: Season2State ABI does NOT have getProgressFlags.
+   * Use getBotState() and derive progress flags.
+   */
+  const { data: botState } = useReadContract({
     address: BASEBOTS_S2.address,
     abi: BASEBOTS_S2.abi,
-    functionName: "getProgressFlags",
+    functionName: "getBotState",
     args: fidString ? ([BigInt(fidString)] as [bigint]) : undefined,
     query: { enabled: hasIdentity && hasBasebot },
-  }) as { data?: CoreProgress };
+  });
 
+  const progress: CoreProgress | undefined = useMemo(
+    () => deriveProgressFromBotState(botState),
+    [botState]
+  );
+
+  /**
+   * ✅ GATING LOGIC (unchanged intent):
+   * - Having an FID alone does NOT mean they own the NFT.
+   * - Core play requires: wallet connected + Base chain + Basebot NFT detected.
+   */
   const canPlayCore = Boolean(address && hasBasebot && !wrongChain);
   const currentCore = useMemo(() => nextCoreMode(progress), [progress]);
 
-  /* Bonus unlock rules */
+  /* Bonus unlock rules (as you requested): EP1 unlocks prologue, EP3 unlocks bonus1, EP5 unlocks bonus2 */
   const prologueUnlocked = Boolean(progress?.ep1);
   const bonus1Unlocked = Boolean(progress?.ep3);
   const bonus2Unlocked = Boolean(progress?.ep5);
@@ -231,11 +281,11 @@ export default function StoryPage() {
   /* ROUTING */
   if (mode !== "hub") {
     const map: Record<string, React.ReactNode> = {
-      ep1: fidString && <EpisodeOne tokenId={fidString} onExit={() => setMode("hub")} />,
-      ep2: fidString && <EpisodeTwo tokenId={fidString} onExit={() => setMode("hub")} />,
-      ep3: fidString && <EpisodeThree tokenId={fidString} onExit={() => setMode("hub")} />,
-      ep4: fidString && <EpisodeFour tokenId={fidString} onExit={() => setMode("hub")} />,
-      ep5: fidString && <EpisodeFive tokenId={fidString} onExit={() => setMode("hub")} />,
+      ep1: fidString ? <EpisodeOne tokenId={fidString} onExit={() => setMode("hub")} /> : null,
+      ep2: fidString ? <EpisodeTwo tokenId={fidString} onExit={() => setMode("hub")} /> : null,
+      ep3: fidString ? <EpisodeThree tokenId={fidString} onExit={() => setMode("hub")} /> : null,
+      ep4: fidString ? <EpisodeFour tokenId={fidString} onExit={() => setMode("hub")} /> : null,
+      ep5: fidString ? <EpisodeFive tokenId={fidString} onExit={() => setMode("hub")} /> : null,
       prologue: <PrologueSilenceInDarkness onExit={() => setMode("hub")} />,
       bonus1: <BonusEcho onExit={() => setMode("hub")} />,
       bonus2: <BonusEchoArchive onExit={() => setMode("hub")} />,
@@ -259,6 +309,39 @@ export default function StoryPage() {
           <p style={{ fontSize: 13, opacity: 0.75 }}>
             A premium narrative sequence bound to your Basebot. Choices are committed on-chain.
           </p>
+
+          {/* Optional quick status line (safe + helps debugging without "tokenId==fid" verbiage) */}
+          <div
+            style={{
+              marginTop: 12,
+              borderRadius: 16,
+              border: "1px solid rgba(255,255,255,0.10)",
+              background: "rgba(0,0,0,0.30)",
+              padding: 12,
+              fontSize: 12,
+              opacity: 0.9,
+              lineHeight: 1.5,
+            }}
+          >
+            <div>
+              Identity: <b>{hasIdentity ? `FID ${fidString}` : "Not detected"}</b>
+            </div>
+            <div>
+              Wallet: <b>{address ? "Connected" : "Not connected"}</b>
+            </div>
+            <div>
+              Network:{" "}
+              <b style={{ color: wrongChain ? "#fb7185" : "rgba(255,255,255,0.92)" }}>
+                {wrongChain ? "Wrong network (switch to Base)" : "Base"}
+              </b>
+            </div>
+            <div>
+              Basebot NFT:{" "}
+              <b style={{ color: hasBasebot ? "#22c55e" : "rgba(255,255,255,0.65)" }}>
+                {hasBasebot ? "Detected" : "Not detected"}
+              </b>
+            </div>
+          </div>
         </header>
 
         {/* CORE */}
@@ -334,7 +417,7 @@ export default function StoryPage() {
               img="/story/prologue.png"
               unlocked={prologueUnlocked}
               distorted={!prologueUnlocked}
-              onClick={() => setMode("prologue")}
+              onClick={prologueUnlocked ? () => setMode("prologue") : undefined}
             />
             <EpisodeCard
               id="bonus1"
@@ -343,7 +426,7 @@ export default function StoryPage() {
               img="/story/b1.png"
               unlocked={bonus1Unlocked}
               distorted={!bonus1Unlocked}
-              onClick={() => setMode("bonus1")}
+              onClick={bonus1Unlocked ? () => setMode("bonus1") : undefined}
             />
             <EpisodeCard
               id="bonus2"
@@ -352,7 +435,7 @@ export default function StoryPage() {
               img="/story/b2.png"
               unlocked={bonus2Unlocked}
               distorted={!bonus2Unlocked}
-              onClick={() => setMode("bonus2")}
+              onClick={bonus2Unlocked ? () => setMode("bonus2") : undefined}
             />
           </div>
         </section>
