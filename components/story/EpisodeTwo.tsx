@@ -2,10 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAccount, usePublicClient, useWalletClient } from "wagmi";
-import {
-  BASEBOTS_SEASON2_STATE_ADDRESS,
-  BASEBOTS_SEASON2_STATE_ABI,
-} from "@/lib/abi/basebotsSeason2State";
+
+import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 
 /* ──────────────────────────────────────────────
  * Storage keys (cosmetic only)
@@ -61,6 +59,7 @@ export default function EpisodeTwo({
   const [error, setError] = useState<string | null>(null);
   const [glitchTick, setGlitchTick] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [alreadySet, setAlreadySet] = useState(false);
 
   /* ───────────── wagmi ───────────── */
   const { address, chain } = useAccount();
@@ -69,29 +68,27 @@ export default function EpisodeTwo({
   const isBase = chain?.id === 8453;
 
   const ready =
-    !!address && !!walletClient && !!publicClient && isBase;
+    !!address && !!walletClient && !!publicClient && isBase && !!tokenId;
 
-  /* ───────────── Check chain state ───────────── */
-  const [alreadySet, setAlreadySet] = useState(false);
-
+  /* ───────────── Read chain state once ───────────── */
   useEffect(() => {
-    if (!publicClient) return;
+    if (!publicClient || !tokenId) return;
 
     (async () => {
       try {
-        const state: any = await publicClient.readContract({
-          address: BASEBOTS_SEASON2_STATE_ADDRESS,
-          abi: BASEBOTS_SEASON2_STATE_ABI,
+        const state = (await publicClient.readContract({
+          address: BASEBOTS_S2.address,
+          abi: BASEBOTS_S2.abi,
           functionName: "getBotState",
           args: [tokenId],
-        });
+        })) as any;
 
         if (state?.ep2Set) {
           setAlreadySet(true);
           setPhase("approach");
         }
       } catch {
-        // ignore
+        // silent fail (UI already gated)
       }
     })();
   }, [tokenId, publicClient]);
@@ -145,7 +142,7 @@ export default function EpisodeTwo({
 
   /* ───────────── Commit designation (ON-CHAIN) ───────────── */
   async function commit() {
-    if (alreadySet) return;
+    if (alreadySet || submitting) return;
 
     const err = validate(value);
     if (err) {
@@ -163,10 +160,10 @@ export default function EpisodeTwo({
 
     try {
       const hash = await walletClient!.writeContract({
-        address: BASEBOTS_SEASON2_STATE_ADDRESS,
-        abi: BASEBOTS_SEASON2_STATE_ABI,
+        address: BASEBOTS_S2.address,
+        abi: BASEBOTS_S2.abi,
         functionName: "setEpisode2Designation",
-        args: [tokenId, value as `0x${string}` | string],
+        args: [tokenId, value],
       });
 
       await publicClient!.waitForTransactionReceipt({ hash });
@@ -184,7 +181,7 @@ export default function EpisodeTwo({
   }
 
   /* ──────────────────────────────────────────────
-   * RENDER (unchanged visuals)
+   * RENDER (visuals unchanged)
    * ────────────────────────────────────────────── */
 
   return (
@@ -220,10 +217,16 @@ export default function EpisodeTwo({
 
       {/* Controls */}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-        <button onClick={toggleSound} style={{ borderRadius: 999, padding: "6px 14px", fontSize: 11, fontWeight: 800 }}>
+        <button
+          onClick={toggleSound}
+          style={{ borderRadius: 999, padding: "6px 14px", fontSize: 11, fontWeight: 800 }}
+        >
           SOUND: {soundEnabled ? "ON" : "OFF"}
         </button>
-        <button onClick={onExit} style={{ borderRadius: 999, padding: "6px 14px", fontSize: 11, fontWeight: 800 }}>
+        <button
+          onClick={onExit}
+          style={{ borderRadius: 999, padding: "6px 14px", fontSize: 11, fontWeight: 800 }}
+        >
           EXIT
         </button>
       </div>
@@ -246,10 +249,8 @@ export default function EpisodeTwo({
           </h2>
 
           <p style={{ marginTop: 12, fontSize: 13, opacity: 0.75 }}>
-            The lift ascends through obsolete strata.  
-            Your prior classification —{" "}
-            <strong>{ep1?.profile?.archetype ?? "UNKNOWN"}</strong> — propagates
-            ahead of you.
+            The lift ascends through obsolete strata. Your prior classification —{" "}
+            <strong>{ep1?.profile?.archetype ?? "UNKNOWN"}</strong> — propagates ahead of you.
           </p>
 
           <p style={{ marginTop: 10, fontSize: 13, opacity: 0.6 }}>
