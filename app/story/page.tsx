@@ -69,7 +69,7 @@ function nextCoreMode(flags?: {
 export default function StoryPage() {
   const [mode, setMode] = useState<any>("hub");
 
-  const { chain } = useAccount();
+  const { address, chain } = useAccount();
   const fid = useFid();
 
   const tokenId = useMemo(() => {
@@ -80,6 +80,7 @@ export default function StoryPage() {
     }
   }, [fid]);
 
+  const hasToken = Boolean(tokenId);
   const wrongChain = Boolean(chain?.id) && chain?.id !== BASE_CHAIN_ID;
 
   /* ── Ownership gate via tokenURI ── */
@@ -88,7 +89,7 @@ export default function StoryPage() {
     ...BASEBOTS,
     functionName: "tokenURI",
     args: tokenId ? ([tokenId] as unknown as [bigint]) : undefined,
-    query: { enabled: Boolean(tokenId) },
+    query: { enabled: hasToken },
   });
 
   const hasBasebot =
@@ -102,7 +103,7 @@ export default function StoryPage() {
     abi: BASEBOTS_S2.abi,
     functionName: "getProgressFlags",
     args: tokenId ? [tokenId] : undefined,
-    query: { enabled: Boolean(tokenId) && hasBasebot },
+    query: { enabled: hasToken && hasBasebot },
   });
 
   const progress = progressFlags as
@@ -123,7 +124,7 @@ export default function StoryPage() {
     abi: BASEBOTS_S2.abi,
     functionName: "hasBonusBit",
     args: tokenId ? [tokenId, BONUS1_BIT] : undefined,
-    query: { enabled: Boolean(tokenId) && hasBasebot },
+    query: { enabled: hasToken && hasBasebot },
   });
 
   const { data: hasB2 } = useReadContract({
@@ -131,7 +132,7 @@ export default function StoryPage() {
     abi: BASEBOTS_S2.abi,
     functionName: "hasBonusBit",
     args: tokenId ? [tokenId, BONUS2_BIT] : undefined,
-    query: { enabled: Boolean(tokenId) && hasBasebot },
+    query: { enabled: hasToken && hasBasebot },
   });
 
   /* ── Core gating ── */
@@ -156,44 +157,29 @@ export default function StoryPage() {
   if (mode !== "hub") {
     const map: any = {
       prologue: <PrologueSilenceInDarkness onExit={() => setMode("hub")} />,
-      ep1:
-        tokenId ? (
-          <EpisodeOne tokenId={tokenId} onExit={() => setMode("hub")} />
-        ) : null,
-      ep2:
-        tokenId ? (
-          <EpisodeTwo tokenId={tokenId} onExit={() => setMode("hub")} />
-        ) : null,
+      ep1: tokenId ? <EpisodeOne tokenId={tokenId} onExit={() => setMode("hub")} /> : null,
+      ep2: tokenId ? <EpisodeTwo tokenId={tokenId} onExit={() => setMode("hub")} /> : null,
       ep3: <EpisodeThree onExit={() => setMode("hub")} />,
       ep4: <EpisodeFour onExit={() => setMode("hub")} />,
       ep5: <EpisodeFive onExit={() => setMode("hub")} />,
       bonus: <BonusEcho onExit={() => setMode("hub")} />,
     };
 
-    return map[mode] ?? (
-      <main style={{ minHeight: "100vh", background: "#020617", color: "white", padding: 24 }}>
-        <div style={{ maxWidth: 900, margin: "0 auto" }}>
-          <div style={{ fontWeight: 900, fontSize: 18 }}>UNKNOWN ROUTE</div>
-          <button
-            onClick={() => setMode("hub")}
-            style={{
-              marginTop: 14,
-              borderRadius: 999,
-              padding: "10px 14px",
-              border: "1px solid rgba(255,255,255,0.18)",
-              background: "rgba(255,255,255,0.06)",
-              color: "white",
-              cursor: "pointer",
-              fontWeight: 800,
-              fontSize: 12,
-            }}
-          >
-            Return to hub
-          </button>
-        </div>
-      </main>
-    );
+    return map[mode] ?? null;
   }
+
+  /* ── Top status strip ── */
+
+  const topStatus = useMemo(() => {
+    if (!address) return { title: "Connect wallet", detail: "A link is required to read the archive." };
+    if (!hasToken) return { title: "FID not found", detail: "TokenId is derived from your Farcaster FID." };
+    if (wrongChain) return { title: "Wrong network", detail: "Switch to Base to access Core Memory." };
+    if (!hasBasebot) return { title: "No Basebot detected", detail: "Mint a Basebot to unlock Core Memory." };
+    return {
+      title: "Link established",
+      detail: `Basebot #${tokenId?.toString()} recognized. Core Memory available.`,
+    };
+  }, [address, hasToken, wrongChain, hasBasebot, tokenId])
 
   /* card renderer (supports “distorted locked” + size tiers) */
   function EpisodeCard(ep: {
