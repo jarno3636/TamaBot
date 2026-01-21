@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useAccount, usePublicClient } from "wagmi";
+import { useAccount, useReadContract } from "wagmi";
 
 import EpisodeOne from "@/components/story/EpisodeOne";
 import EpisodeTwo from "@/components/story/EpisodeTwo";
@@ -11,135 +11,151 @@ import EpisodeFive from "@/components/story/EpisodeFive";
 import PrologueSilenceInDarkness from "@/components/story/PrologueSilenceInDarkness";
 import BonusEcho from "@/components/story/BonusEcho";
 
+// ✅ Basebots NFT (ERC721)
 import { BASEBOTS } from "@/lib/abi";
 
+// ✅ Season 2 state contract ABI file you mentioned
+// Ensure this exports: export const BASEBOTS_S2 = { address: "0x738f...", abi: [...] as const }
+import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
+
 /* ─────────────────────────────────────────────
- * Storage keys
+ * Config
  * ───────────────────────────────────────────── */
 
-const UNLOCK_KEY = "basebots_bonus_unlock";
-const BONUS_DONE_KEY = "basebots_bonus_echo_done";
-const NFT_KEY = "basebots_has_nft";
-const EP1_KEY = "basebots_ep1_done";
-const EP2_KEY = "basebots_ep2_done";
-const EP3_KEY = "basebots_ep3_done";
-const EP4_KEY = "basebots_ep4_done";
-
-const PROGRESS_PREFIX = "basebots_progress_v1:";
 const BASE_CHAIN_ID = 8453;
 
+// bonus bits (choose the indices you actually use in contract)
+const BONUS1_BIT = 1; // b1
+const BONUS2_BIT = 2; // b2 (unlocked by Ep5 secret key on-chain)
+
 /* ─────────────────────────────────────────────
- * Helpers
+ * Helpers (no localStorage gating)
  * ───────────────────────────────────────────── */
 
-function safeGet(k: string) {
-  try {
-    return localStorage.getItem(k);
-  } catch {
-    return null;
-  }
-}
-
-function progressKey(addr?: `0x${string}`) {
-  return addr ? `${PROGRESS_PREFIX}${addr.toLowerCase()}` : "";
-}
-
-function readWalletProgress(addr?: `0x${string}`) {
-  if (!addr) return {};
-  try {
-    return JSON.parse(safeGet(progressKey(addr)) || "{}");
-  } catch {
-    return {};
-  }
-}
-
-function writeWalletProgress(addr: `0x${string}`, patch: any) {
-  const cur = readWalletProgress(addr);
-  localStorage.setItem(
-    progressKey(addr),
-    JSON.stringify({ ...cur, ...patch, updatedAt: Date.now() })
-  );
-}
-
-function migrateLegacy(addr?: `0x${string}`) {
-  if (!addr) return;
-  writeWalletProgress(addr, {
-    basebots_bonus_unlock: Boolean(safeGet(UNLOCK_KEY)),
-    basebots_bonus_echo_done: Boolean(safeGet(BONUS_DONE_KEY)),
-    basebots_has_nft: Boolean(safeGet(NFT_KEY)),
-    basebots_ep1_done: Boolean(safeGet(EP1_KEY)),
-    basebots_ep2_done: Boolean(safeGet(EP2_KEY)),
-    basebots_ep3_done: Boolean(safeGet(EP3_KEY)),
-    basebots_ep4_done: Boolean(safeGet(EP4_KEY)),
-  });
-}
-
-function readFlag(key: string, addr?: `0x${string}`) {
-  const wallet = addr ? readWalletProgress(addr) : {};
-  if (typeof wallet[key] === "boolean") return wallet[key];
-  return Boolean(safeGet(key));
-}
-
-function statusOf({
-  unlocked,
-  done,
-  requiresNFT,
-}: {
+function statusOf(opts: {
   unlocked: boolean;
   done?: boolean;
   requiresNFT?: boolean;
+  current?: boolean;
 }) {
-  if (done) return "COMPLETE";
-  if (!unlocked) return requiresNFT ? "NFT REQUIRED" : "LOCKED";
+  if (opts.done) return "COMPLETE";
+  if (!opts.unlocked) return opts.requiresNFT ? "NFT REQUIRED" : "LOCKED";
+  if (opts.current) return "CURRENT";
   return "AVAILABLE";
+}
+
+function badgeColorFor(status: string) {
+  if (status === "COMPLETE") return "rgba(34,197,94,0.92)";
+  if (status === "CURRENT") return "rgba(250,204,21,0.92)";
+  if (status === "AVAILABLE") return "rgba(56,189,248,0.92)";
+  if (status === "NFT REQUIRED") return "rgba(168,85,247,0.92)";
+  return "rgba(255,255,255,0.35)";
+}
+
+function nextCoreMode(flags?: {
+  ep1?: boolean;
+  ep2?: boolean;
+  ep3?: boolean;
+  ep4?: boolean;
+  ep5?: boolean;
+}) {
+  if (!flags?.ep1) return "ep1";
+  if (!flags?.ep2) return "ep2";
+  if (!flags?.ep3) return "ep3";
+  if (!flags?.ep4) return "ep4";
+  if (!flags?.ep5) return "ep5";
+  return "ep5";
 }
 
 /* ─────────────────────────────────────────────
  * Component
  * ───────────────────────────────────────────── */
 
-export default function StoryPage() {
+export default function StoryPage({
+  // Optional: if you already have fid in a nav/store, pass it in.
+  // If not passed, we fall back to 0 and disable gated items.
+  fid,
+}: {
+  fid?: number;
+}) {
   const [mode, setMode] = useState<any>("hub");
-  const [tick, setTick] = useState(0);
 
   const { address, chain } = useAccount();
-  const publicClient = usePublicClient();
-  const wallet = address as `0x${string}` | undefined;
 
-  /* sync */
-  useEffect(() => {
-    if (wallet) migrateLegacy(wallet);
-  }, [wallet, tick]);
+  // tokenId == fid (your design)
+  const tokenId = useMemo(() => {
+    try {
+      return typeof fid === "number" && fid > 0 ? BigInt(fid) : undefined;
+    } catch {
+      return undefined;
+    }
+  }, [fid]);
 
-  useEffect(() => {
-    const h = () => setTick((n) => n + 1);
-    window.addEventListener("basebots-progress-updated", h);
-    return () =>
-      window.removeEventListener("basebots-progress-updated", h);
-  }, []);
+  const wrongChain = Boolean(chain?.id) && chain?.id !== BASE_CHAIN_ID;
 
-  /* NFT check */
-  useEffect(() => {
-    if (!wallet || !publicClient || chain?.id !== BASE_CHAIN_ID) return;
-    publicClient
-      .readContract({
-        address: BASEBOTS.address,
-        abi: BASEBOTS.abi,
-        functionName: "balanceOf",
-        args: [wallet],
-      })
-      .then((bal) =>
-        writeWalletProgress(wallet, { basebots_has_nft: bal > 0n })
-      );
-  }, [wallet, publicClient, chain?.id]);
+  // ── NFT owner gate (strongest gate)
+  const { data: ownerOfToken } = useReadContract({
+    address: BASEBOTS.address,
+    abi: BASEBOTS.abi,
+    functionName: "ownerOf",
+    args: tokenId ? [tokenId] : undefined,
+    query: { enabled: Boolean(tokenId) && Boolean(BASEBOTS?.address) },
+  });
 
-  const hasNFT = readFlag(NFT_KEY, wallet);
-  const ep1Done = readFlag(EP1_KEY, wallet);
-  const ep2Done = readFlag(EP2_KEY, wallet);
-  const ep3Done = readFlag(EP3_KEY, wallet);
-  const ep4Done = readFlag(EP4_KEY, wallet);
-  const prologueUnlocked = readFlag(UNLOCK_KEY, wallet);
-  const bonusDone = readFlag(BONUS_DONE_KEY, wallet);
+  const isOwner =
+    Boolean(address) &&
+    Boolean(ownerOfToken) &&
+    String(ownerOfToken).toLowerCase() === String(address).toLowerCase();
+
+  // ── Season2 progress flags (on-chain truth)
+  const { data: progressFlags } = useReadContract({
+    address: BASEBOTS_S2.address,
+    abi: BASEBOTS_S2.abi,
+    functionName: "getProgressFlags",
+    args: tokenId ? [tokenId] : undefined,
+    query: { enabled: Boolean(tokenId) && Boolean(BASEBOTS_S2?.address) },
+  });
+
+  const progress = useMemo(() => {
+    const p = progressFlags as
+      | { ep1: boolean; ep2: boolean; ep3: boolean; ep4: boolean; ep5: boolean; finalized: boolean }
+      | undefined;
+    return p;
+  }, [progressFlags]);
+
+  // ── Bonus bits (on-chain, so Ep5 secret unlock works reliably)
+  const { data: hasB1 } = useReadContract({
+    address: BASEBOTS_S2.address,
+    abi: BASEBOTS_S2.abi,
+    functionName: "hasBonusBit",
+    args: tokenId ? [tokenId, BONUS1_BIT] : undefined,
+    query: { enabled: Boolean(tokenId) },
+  });
+
+  const { data: hasB2 } = useReadContract({
+    address: BASEBOTS_S2.address,
+    abi: BASEBOTS_S2.abi,
+    functionName: "hasBonusBit",
+    args: tokenId ? [tokenId, BONUS2_BIT] : undefined,
+    query: { enabled: Boolean(tokenId) },
+  });
+
+  // ── Core gating
+  const hasToken = Boolean(tokenId);
+  const canPlayCore = hasToken && isOwner && !wrongChain; // you can loosen this for ep1 if you want
+  const ep1Unlocked = canPlayCore; // ep1 writes state on-chain, so require ownership
+  const ep2Unlocked = canPlayCore && Boolean(progress?.ep1);
+  const ep3Unlocked = canPlayCore && Boolean(progress?.ep2);
+  const ep4Unlocked = canPlayCore && Boolean(progress?.ep3);
+  const ep5Unlocked = canPlayCore && Boolean(progress?.ep4);
+  const ep5Done = Boolean(progress?.ep5);
+
+  // Prologue / bonuses tiering
+  const prologueUnlocked = canPlayCore && Boolean(hasB1); // or choose a different unlock rule
+  const bonus1Unlocked = canPlayCore && Boolean(hasB1);
+  const bonus2Unlocked = canPlayCore && Boolean(hasB2);
+
+  const currentCore = useMemo(() => nextCoreMode(progress), [progress]);
 
   /* route */
   if (mode !== "hub") {
@@ -151,127 +167,446 @@ export default function StoryPage() {
       ep4: <EpisodeFour onExit={() => setMode("hub")} />,
       ep5: <EpisodeFive onExit={() => setMode("hub")} />,
       bonus: <BonusEcho onExit={() => setMode("hub")} />,
+      // bonus2: <BonusRedacted onExit={() => setMode("hub")} /> // if/when you add component
+      stats: null,
     };
-    return map[mode];
+    return map[mode] ?? (
+      <main style={{ minHeight: "100vh", background: "#020617", color: "white", padding: 24 }}>
+        <div style={{ maxWidth: 900, margin: "0 auto" }}>
+          <div style={{ fontWeight: 900, fontSize: 18 }}>UNKNOWN ROUTE</div>
+          <button
+            onClick={() => setMode("hub")}
+            style={{
+              marginTop: 14,
+              borderRadius: 999,
+              padding: "10px 14px",
+              border: "1px solid rgba(255,255,255,0.18)",
+              background: "rgba(255,255,255,0.06)",
+              color: "white",
+              cursor: "pointer",
+              fontWeight: 800,
+              fontSize: 12,
+            }}
+          >
+            Return to hub
+          </button>
+        </div>
+      </main>
+    );
   }
 
-  /* helper to render cards */
-  function renderCard(ep: any) {
-    const status = statusOf(ep);
+  /* card renderer (supports “distorted locked” + size tiers) */
+  function EpisodeCard(ep: {
+    id: any;
+    title: string;
+    note: string;
+    img: string;
+    unlocked: boolean;
+    done?: boolean;
+    requiresNFT?: boolean;
+    isBonus?: boolean;
+    isMeta?: boolean;
+    size?: "core" | "sub";
+    current?: boolean;
+    cta?: string;
+  }) {
     const locked = !ep.unlocked;
+    const status = statusOf(ep);
+    const badge = badgeColorFor(status);
 
-    const badgeColor =
-      status === "COMPLETE"
-        ? "rgba(34,197,94,0.9)"
-        : status === "AVAILABLE"
-        ? "rgba(56,189,248,0.9)"
-        : status === "NFT REQUIRED"
-        ? "rgba(168,85,247,0.9)"
-        : "rgba(255,255,255,0.4)";
+    const cardRadius = ep.size === "sub" ? 18 : 24;
+    const imgH = ep.size === "sub" ? 150 : 220;
+
+    // distorted locked effect (inline, no CSS files)
+    const lockedFilter =
+      "grayscale(0.7) brightness(0.65) contrast(1.25) saturate(0.7)";
+    const lockedImgFilter = locked ? lockedFilter : "none";
+
+    const lockedOverlayOpacity = locked ? 0.55 : 0.0;
 
     return (
       <article
-        key={ep.id}
+        key={String(ep.title) + String(ep.id)}
+        aria-disabled={locked}
         style={{
-          borderRadius: 24,
+          borderRadius: cardRadius,
           overflow: "hidden",
-          background: "rgba(0,0,0,0.35)",
+          background:
+            ep.isMeta
+              ? "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.35))"
+              : "rgba(0,0,0,0.35)",
           border: locked
             ? "1px solid rgba(255,255,255,0.12)"
-            : "1px solid rgba(56,189,248,0.35)",
-          opacity: locked ? 0.55 : 1,
+            : "1px solid rgba(56,189,248,0.34)",
+          boxShadow: locked
+            ? "0 18px 60px rgba(0,0,0,0.65)"
+            : "0 28px 90px rgba(56,189,248,0.15)",
+          transform: locked ? "translateY(2px)" : "translateY(0)",
+          transition: "transform 240ms ease, box-shadow 240ms ease",
+          opacity: locked ? 0.7 : 1,
+          position: "relative",
         }}
       >
-        <img
-          src={ep.img}
-          style={{
-            width: "100%",
-            height: 220,
-            objectFit: "cover",
-            filter: locked
-              ? "grayscale(0.6) brightness(0.75)"
-              : "none",
-          }}
-        />
+        <div style={{ position: "relative" }}>
+          <img
+            src={ep.img}
+            alt=""
+            aria-hidden
+            style={{
+              width: "100%",
+              height: imgH,
+              objectFit: "cover",
+              filter: lockedImgFilter,
+              transform: locked ? "scale(1.02)" : "scale(1)",
+            }}
+          />
 
-        <div style={{ padding: 20 }}>
+          {/* distortion overlay */}
+          <div
+            aria-hidden
+            style={{
+              pointerEvents: "none",
+              position: "absolute",
+              inset: 0,
+              opacity: lockedOverlayOpacity,
+              background:
+                "repeating-linear-gradient(180deg, rgba(255,255,255,0.08) 0px, rgba(255,255,255,0.08) 1px, transparent 2px, transparent 6px)",
+              mixBlendMode: "overlay",
+            }}
+          />
+
+          {/* corner status badge */}
           <div
             style={{
-              display: "inline-block",
+              position: "absolute",
+              left: 12,
+              top: 12,
               padding: "4px 10px",
               borderRadius: 999,
-              background: badgeColor,
+              background: badge,
               color: "#020617",
               fontSize: 10,
               fontWeight: 900,
-              marginBottom: 8,
+              letterSpacing: 0.6,
             }}
           >
             {status}
           </div>
 
-          <h2 style={{ fontWeight: 800 }}>{ep.title}</h2>
-          <p style={{ fontSize: 12, opacity: 0.7 }}>{ep.note}</p>
+          {/* “current” pulse */}
+          {status === "CURRENT" && (
+            <div
+              aria-hidden
+              style={{
+                position: "absolute",
+                right: 12,
+                top: 12,
+                width: 10,
+                height: 10,
+                borderRadius: 999,
+                background: "rgba(250,204,21,0.95)",
+                boxShadow: "0 0 0 0 rgba(250,204,21,0.55)",
+                animation: "bbPulse 1.4s infinite",
+              }}
+            />
+          )}
+        </div>
+
+        <div style={{ padding: ep.size === "sub" ? 16 : 20 }}>
+          <h2
+            style={{
+              fontWeight: 900,
+              fontSize: ep.size === "sub" ? 14 : 16,
+              letterSpacing: 0.2,
+            }}
+          >
+            {ep.title}
+          </h2>
+
+          <p style={{ fontSize: 12, opacity: 0.72, marginTop: 6, lineHeight: 1.35 }}>
+            {ep.note}
+          </p>
 
           <button
-            disabled={locked}
+            disabled={locked || !ep.id}
             onClick={() => ep.id && setMode(ep.id)}
             style={{
-              marginTop: 14,
+              marginTop: 12,
               width: "100%",
               borderRadius: 999,
-              padding: "10px",
+              padding: ep.size === "sub" ? "9px 10px" : "10px 12px",
               fontSize: 12,
-              fontWeight: 800,
-              border: "1px solid rgba(255,255,255,0.14)",
+              fontWeight: 900,
+              border: "1px solid rgba(255,255,255,0.16)",
               background: locked
                 ? "rgba(255,255,255,0.06)"
                 : "linear-gradient(90deg, rgba(56,189,248,0.95), rgba(168,85,247,0.85))",
-              color: locked
-                ? "rgba(255,255,255,0.6)"
-                : "#020617",
-              cursor: locked ? "not-allowed" : "pointer",
+              color: locked ? "rgba(255,255,255,0.60)" : "#020617",
+              cursor: locked || !ep.id ? "not-allowed" : "pointer",
+              textTransform: "none",
+              letterSpacing: 0.2,
             }}
+            aria-label={locked ? `${ep.title} locked` : `Open ${ep.title}`}
           >
-            {locked
-              ? status
-              : ep.isBonus
-              ? "▶ Read Archive"
-              : "▶ Insert NFT Cartridge"}
+            {locked ? status : ep.cta ?? (ep.isBonus ? "▶ Read Archive" : "▶ Enter Episode")}
           </button>
+
+          {/* small helper line for gate clarity */}
+          {locked && ep.requiresNFT && (
+            <div style={{ marginTop: 8, fontSize: 11, opacity: 0.55 }}>
+              Requires Basebots NFT ownership for tokenId = FID.
+            </div>
+          )}
         </div>
       </article>
     );
   }
 
-  /* ─────────────────────────────────────────────
-   * HUB UI
-   * ───────────────────────────────────────────── */
+  /* UI sections */
+  const coreEpisodes = [
+    {
+      id: "ep1",
+      title: "Awakening Protocol",
+      unlocked: ep1Unlocked,
+      done: Boolean(progress?.ep1),
+      img: "/story/01-awakening.png",
+      note: "Initialization begins. Your first directive is recorded.",
+      requiresNFT: true,
+      size: "core" as const,
+      current: currentCore === "ep1",
+      cta: "▶ Begin",
+    },
+    {
+      id: "ep2",
+      title: "Signal Fracture",
+      unlocked: ep2Unlocked,
+      done: Boolean(progress?.ep2),
+      img: "/story/ep2.png",
+      note: "Designation binding. A name becomes a constraint.",
+      requiresNFT: true,
+      size: "core" as const,
+      current: currentCore === "ep2",
+      cta: "▶ Continue",
+    },
+    {
+      id: "ep3",
+      title: "Fault Lines",
+      unlocked: ep3Unlocked,
+      done: Boolean(progress?.ep3),
+      img: "/story/ep3.png",
+      note: "Contradictions form. You decide how the system thinks.",
+      requiresNFT: true,
+      size: "core" as const,
+      current: currentCore === "ep3",
+      cta: "▶ Continue",
+    },
+    {
+      id: "ep4",
+      title: "Threshold",
+      unlocked: ep4Unlocked,
+      done: Boolean(progress?.ep4),
+      img: "/story/ep4.png",
+      note: "A profile is derived. The city prepares its response.",
+      requiresNFT: true,
+      size: "core" as const,
+      current: currentCore === "ep4",
+      cta: "▶ Continue",
+    },
+    {
+      id: "ep5",
+      title: "Emergence",
+      unlocked: ep5Unlocked,
+      done: ep5Done,
+      img: "/story/ep5.png",
+      note: "Surface access is negotiated. Outcomes are permanent.",
+      requiresNFT: true,
+      size: "core" as const,
+      current: currentCore === "ep5",
+      cta: ep5Done ? "▶ Review" : "▶ Enter",
+    },
+  ];
+
+  const prologueAndBonuses = [
+    {
+      id: "prologue",
+      title: "Prologue: Silence in Darkness",
+      unlocked: prologueUnlocked,
+      done: prologueUnlocked, // if you treat unlock as completion for prologue
+      img: "/story/prologue.png",
+      note: "A dormant channel stirs. Something remembers you first.",
+      isBonus: true,
+      size: "sub" as const,
+      cta: "▶ Open",
+    },
+    {
+      id: "bonus",
+      title: "Echo: Residual Memory",
+      unlocked: bonus1Unlocked,
+      done: Boolean(hasB1),
+      img: "/story/b1.png",
+      note: "Unindexed fragments recovered. The archive speaks back.",
+      isBonus: true,
+      size: "sub" as const,
+      cta: "▶ Read",
+    },
+    {
+      id: "bonus2", // add component later if you have it; leave as locked if none
+      title: "Echo: Redacted Layer",
+      unlocked: bonus2Unlocked,
+      done: Boolean(hasB2),
+      img: "/story/b2.png",
+      note: "Unlocked by a fleeting key during Emergence.",
+      isBonus: true,
+      size: "sub" as const,
+      cta: bonus2Unlocked ? "▶ Decrypt" : "LOCKED",
+    },
+  ];
+
+  const metaCards = [
+    {
+      id: null,
+      title: "Global Interpretation Metrics",
+      unlocked: false,
+      done: false,
+      img: "/story/gs.png",
+      note: "Live aggregation coming soon. (Placeholder UI)",
+      isMeta: true,
+      size: "sub" as const,
+      cta: "Offline",
+    },
+  ];
+
+  // top state strip
+  const topStatus = useMemo(() => {
+    if (!address) return { title: "Connect wallet", detail: "A link is required to read the archive." };
+    if (!hasToken) return { title: "FID not found", detail: "TokenId is derived from your Farcaster FID." };
+    if (wrongChain) return { title: "Wrong network", detail: "Switch to Base to access Core Memory." };
+    if (!isOwner) return { title: "Ownership mismatch", detail: "You must own Basebots tokenId = your FID." };
+    return { title: "Link established", detail: `TokenId ${tokenId?.toString()} recognized. Core Memory available.` };
+  }, [address, hasToken, wrongChain, isOwner, tokenId]);
 
   return (
     <main
+      role="main"
+      aria-label="Basebots: Core Memory"
       style={{
         minHeight: "100vh",
         background:
-          "radial-gradient(1200px 600px at 50% -10%, rgba(56,189,248,0.08), transparent 60%), radial-gradient(900px 500px at 90% 120%, rgba(168,85,247,0.10), transparent 60%), #020617",
+          "radial-gradient(1100px 520px at 50% -10%, rgba(56,189,248,0.10), transparent 62%), radial-gradient(900px 520px at 90% 120%, rgba(168,85,247,0.12), transparent 60%), #020617",
         color: "white",
-        padding: "40px 16px",
+        padding: "40px 16px 60px",
       }}
     >
-      <header style={{ maxWidth: 1200, margin: "0 auto 32px" }}>
-        <h1 style={{ fontSize: 32, fontWeight: 900 }}>
-          BASEBOTS // STORY MODE
-        </h1>
-        <p style={{ opacity: 0.7 }}>
-          Interpretation persists beyond execution.
-        </p>
+      {/* inline keyframes */}
+      <style>{`
+        @keyframes bbPulse {
+          0% { box-shadow: 0 0 0 0 rgba(250,204,21,0.50); transform: scale(1); }
+          70% { box-shadow: 0 0 0 10px rgba(250,204,21,0.00); transform: scale(1.05); }
+          100% { box-shadow: 0 0 0 0 rgba(250,204,21,0.00); transform: scale(1); }
+        }
+      `}</style>
+
+      <header style={{ maxWidth: 1200, margin: "0 auto 22px" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "space-between",
+            gap: 16,
+            flexWrap: "wrap",
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: 11,
+                opacity: 0.6,
+                letterSpacing: 2,
+                fontWeight: 900,
+              }}
+            >
+              BASEBOTS
+            </div>
+            <h1 style={{ fontSize: 34, fontWeight: 950, marginTop: 4, letterSpacing: -0.6 }}>
+              Core Memory
+            </h1>
+            <p style={{ marginTop: 8, opacity: 0.72, maxWidth: 720, lineHeight: 1.4 }}>
+              Your choices are written to chain. The system doesn’t remember what you said — it remembers what you committed.
+            </p>
+          </div>
+
+          {/* status chip */}
+          <div
+            style={{
+              minWidth: 280,
+              flex: "0 0 auto",
+              borderRadius: 18,
+              border: "1px solid rgba(255,255,255,0.12)",
+              background: "rgba(0,0,0,0.35)",
+              padding: 14,
+              boxShadow: "0 22px 80px rgba(0,0,0,0.55)",
+            }}
+          >
+            <div style={{ fontWeight: 900, fontSize: 12, letterSpacing: 0.4 }}>
+              {topStatus.title}
+            </div>
+            <div style={{ marginTop: 6, fontSize: 12, opacity: 0.65, lineHeight: 1.35 }}>
+              {topStatus.detail}
+            </div>
+          </div>
+        </div>
+
+        {/* quick actions */}
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
+          <button
+            onClick={() => setMode(currentCore)}
+            disabled={!canPlayCore}
+            style={{
+              borderRadius: 999,
+              padding: "10px 14px",
+              fontSize: 12,
+              fontWeight: 900,
+              border: "1px solid rgba(255,255,255,0.16)",
+              background: canPlayCore
+                ? "linear-gradient(90deg, rgba(56,189,248,0.95), rgba(168,85,247,0.85))"
+                : "rgba(255,255,255,0.06)",
+              color: canPlayCore ? "#020617" : "rgba(255,255,255,0.55)",
+              cursor: canPlayCore ? "pointer" : "not-allowed",
+            }}
+          >
+            ▶ Resume Core
+          </button>
+
+          <button
+            onClick={() => setMode("prologue")}
+            disabled={!prologueUnlocked}
+            style={{
+              borderRadius: 999,
+              padding: "10px 14px",
+              fontSize: 12,
+              fontWeight: 900,
+              border: "1px solid rgba(255,255,255,0.16)",
+              background: prologueUnlocked ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.04)",
+              color: prologueUnlocked ? "white" : "rgba(255,255,255,0.55)",
+              cursor: prologueUnlocked ? "pointer" : "not-allowed",
+            }}
+          >
+            Open Prologue
+          </button>
+        </div>
       </header>
 
       {/* CORE */}
-      <section style={{ maxWidth: 1200, margin: "0 auto 40px" }}>
-        <h3 style={{ opacity: 0.8, marginBottom: 16 }}>
-          CORE SEQUENCE
-        </h3>
+      <section style={{ maxWidth: 1200, margin: "0 auto 36px" }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <h3 style={{ opacity: 0.85, marginBottom: 14, letterSpacing: 1.8, fontSize: 12, fontWeight: 900 }}>
+            CORE SEQUENCE
+          </h3>
+          <div style={{ fontSize: 11, opacity: 0.6 }}>
+            Ep2+ requires Basebots NFT ownership (tokenId = FID).
+          </div>
+        </div>
+
         <div
           style={{
             display: "grid",
@@ -279,128 +614,113 @@ export default function StoryPage() {
             gap: 24,
           }}
         >
-          {[
-            {
-              id: "prologue",
-              title: "Prologue: Silence in Darkness",
-              unlocked: prologueUnlocked,
-              done: prologueUnlocked,
-              img: "/story/prologue.png",
-              note: "An archived signal stirs.",
-            },
-            {
-              id: "ep1",
-              title: "Awakening Protocol",
-              unlocked: true,
-              done: ep1Done,
-              img: "/story/01-awakening.png",
-              note: "System initialization.",
-            },
-            {
-              id: "ep2",
-              title: "Signal Fracture",
-              unlocked: ep1Done && hasNFT,
-              done: ep2Done,
-              img: "/story/ep2.png",
-              note: "External interference detected.",
-              requiresNFT: true,
-            },
-            {
-              id: "ep3",
-              title: "Fault Lines",
-              unlocked: ep2Done,
-              done: ep3Done,
-              img: "/story/ep3.png",
-              note: "Cognition destabilizes.",
-            },
-            {
-              id: "ep4",
-              title: "Threshold",
-              unlocked: ep3Done,
-              done: ep4Done,
-              img: "/story/ep4.png",
-              note: "Alignment before emergence.",
-            },
-            {
-              id: "ep5",
-              title: "Emergence",
-              unlocked: ep4Done && hasNFT,
-              done: false,
-              img: "/story/ep5.png",
-              note: "Surface access granted.",
-              requiresNFT: true,
-            },
-          ].map(renderCard)}
+          {coreEpisodes.map((ep) => (
+            <EpisodeCard
+              key={ep.id}
+              id={ep.id}
+              title={ep.title}
+              note={ep.note}
+              img={ep.img}
+              unlocked={ep.unlocked}
+              done={ep.done}
+              requiresNFT={ep.requiresNFT}
+              size={ep.size}
+              current={ep.current}
+              cta={ep.cta}
+            />
+          ))}
         </div>
       </section>
 
-      {/* ARCHIVAL */}
-      <section style={{ maxWidth: 1200, margin: "0 auto 40px" }}>
-        <h3 style={{ opacity: 0.8, marginBottom: 16 }}>
-          ARCHIVAL ECHOES
-        </h3>
+      {/* ARCHIVE: smaller tier, visually separated */}
+      <section style={{ maxWidth: 1200, margin: "0 auto 36px" }}>
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-            gap: 24,
+            borderRadius: 22,
+            border: "1px solid rgba(255,255,255,0.10)",
+            background: "rgba(0,0,0,0.22)",
+            padding: 18,
           }}
         >
-          {[
-            {
-              id: "bonus",
-              title: "Echo: Residual Memory",
-              unlocked: prologueUnlocked,
-              done: bonusDone,
-              img: "/story/b1.png",
-              note: "Unindexed fragments recovered.",
-              isBonus: true,
-            },
-            {
-              id: null,
-              title: "Echo: Redacted Layer",
-              unlocked: false,
-              done: false,
-              img: "/story/b2.png",
-              note: "Signal present. Access incomplete.",
-              isBonus: true,
-            },
-          ].map(renderCard)}
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <h3 style={{ opacity: 0.85, marginBottom: 14, letterSpacing: 1.8, fontSize: 12, fontWeight: 900 }}>
+              ARCHIVAL ECHOES
+            </h3>
+            <div style={{ fontSize: 11, opacity: 0.6 }}>
+              Bonuses are tiered. Some only appear when acknowledged.
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+              gap: 16,
+            }}
+          >
+            {prologueAndBonuses.map((ep) => (
+              <EpisodeCard
+                key={ep.title}
+                id={ep.id}
+                title={ep.title}
+                note={ep.note}
+                img={ep.img}
+                unlocked={ep.unlocked}
+                done={ep.done}
+                isBonus
+                size="sub"
+                cta={ep.cta}
+              />
+            ))}
+          </div>
         </div>
       </section>
 
-      {/* GLOBAL */}
+      {/* META */}
       <section style={{ maxWidth: 1200, margin: "0 auto" }}>
-        <h3 style={{ opacity: 0.8, marginBottom: 16 }}>
+        <h3 style={{ opacity: 0.85, marginBottom: 14, letterSpacing: 1.8, fontSize: 12, fontWeight: 900 }}>
           META / GLOBAL
         </h3>
+
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-            gap: 24,
+            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+            gap: 16,
           }}
         >
-          {renderCard({
-            id: null,
-            title: "Global Interpretation Metrics",
-            unlocked: false,
-            done: false,
-            img: "/story/gs.png",
-            note: "Aggregated cognition patterns (offline).",
-          })}
+          {metaCards.map((m) => (
+            <EpisodeCard
+              key={m.title}
+              id={m.id}
+              title={m.title}
+              note={m.note}
+              img={m.img}
+              unlocked={m.unlocked}
+              done={m.done}
+              isMeta
+              size="sub"
+              cta={m.cta}
+            />
+          ))}
         </div>
       </section>
 
       <footer
         style={{
-          marginTop: 40,
+          marginTop: 46,
           textAlign: "center",
           fontSize: 11,
-          opacity: 0.5,
+          opacity: 0.55,
+          maxWidth: 900,
+          marginLeft: "auto",
+          marginRight: "auto",
+          lineHeight: 1.4,
         }}
       >
         Some records persist only because they were never finalized.
+        <br />
+        If a card looks distorted, it isn’t broken — it’s refusing.
       </footer>
     </main>
   );
