@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useAccount, useReadContract } from "wagmi";
+
+import useFid from "@/hooks/useFid";
 
 import EpisodeOne from "@/components/story/EpisodeOne";
 import EpisodeTwo from "@/components/story/EpisodeTwo";
@@ -11,10 +13,7 @@ import EpisodeFive from "@/components/story/EpisodeFive";
 import PrologueSilenceInDarkness from "@/components/story/PrologueSilenceInDarkness";
 import BonusEcho from "@/components/story/BonusEcho";
 
-// ✅ Basebots NFT (ERC721)
 import { BASEBOTS } from "@/lib/abi";
-
-// ✅ Season 2 state contract ABI file
 import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 
 /* ─────────────────────────────────────────────
@@ -22,8 +21,6 @@ import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
  * ───────────────────────────────────────────── */
 
 const BASE_CHAIN_ID = 8453;
-
-// bonus bits
 const BONUS1_BIT = 1;
 const BONUS2_BIT = 2;
 
@@ -62,7 +59,6 @@ function nextCoreMode(flags?: {
   if (!flags?.ep2) return "ep2";
   if (!flags?.ep3) return "ep3";
   if (!flags?.ep4) return "ep4";
-  if (!flags?.ep5) return "ep5";
   return "ep5";
 }
 
@@ -70,12 +66,12 @@ function nextCoreMode(flags?: {
  * Component
  * ───────────────────────────────────────────── */
 
-export default function StoryPage({ fid }: { fid?: number }) {
+export default function StoryPage() {
   const [mode, setMode] = useState<any>("hub");
 
-  const { address, chain } = useAccount();
+  const { chain } = useAccount();
+  const fid = useFid();
 
-  // tokenId == fid
   const tokenId = useMemo(() => {
     try {
       return typeof fid === "number" && fid > 0 ? BigInt(fid) : undefined;
@@ -86,50 +82,49 @@ export default function StoryPage({ fid }: { fid?: number }) {
 
   const wrongChain = Boolean(chain?.id) && chain?.id !== BASE_CHAIN_ID;
 
-  // ── NFT owner gate
-  const { data: ownerOfToken } = useReadContract({
-    address: BASEBOTS.address,
-    abi: BASEBOTS.abi,
-    functionName: "ownerOf",
-    args: tokenId ? [tokenId] : undefined,
-    query: { enabled: Boolean(tokenId) && Boolean(BASEBOTS?.address) },
+  /* ── 🔑 OWNERSHIP GATE (tokenURI existence) ── */
+
+  const { data: tokenUri } = useReadContract({
+    ...BASEBOTS,
+    functionName: "tokenURI",
+    args: tokenId ? ([tokenId] as unknown as [bigint]) : undefined,
+    query: { enabled: Boolean(tokenId) },
   });
 
-  const isOwner =
-    Boolean(address) &&
-    Boolean(ownerOfToken) &&
-    String(ownerOfToken).toLowerCase() === String(address).toLowerCase();
+  const hasBasebot = Boolean(
+    typeof tokenUri === "string" &&
+      tokenUri.startsWith("data:application/json;base64,"),
+  );
 
-  // ── Season2 progress flags
+  /* ── Season 2 progress flags ── */
+
   const { data: progressFlags } = useReadContract({
     address: BASEBOTS_S2.address,
     abi: BASEBOTS_S2.abi,
     functionName: "getProgressFlags",
     args: tokenId ? [tokenId] : undefined,
-    query: { enabled: Boolean(tokenId) && Boolean(BASEBOTS_S2?.address) },
+    query: { enabled: Boolean(tokenId) && hasBasebot },
   });
 
-  const progress = useMemo(() => {
-    const p = progressFlags as
-      | {
-          ep1: boolean;
-          ep2: boolean;
-          ep3: boolean;
-          ep4: boolean;
-          ep5: boolean;
-          finalized: boolean;
-        }
-      | undefined;
-    return p;
-  }, [progressFlags]);
+  const progress = progressFlags as
+    | {
+        ep1: boolean;
+        ep2: boolean;
+        ep3: boolean;
+        ep4: boolean;
+        ep5: boolean;
+        finalized: boolean;
+      }
+    | undefined;
 
-  // ── Bonus bits
+  /* ── Bonus bits ── */
+
   const { data: hasB1 } = useReadContract({
     address: BASEBOTS_S2.address,
     abi: BASEBOTS_S2.abi,
     functionName: "hasBonusBit",
     args: tokenId ? [tokenId, BONUS1_BIT] : undefined,
-    query: { enabled: Boolean(tokenId) },
+    query: { enabled: Boolean(tokenId) && hasBasebot },
   });
 
   const { data: hasB2 } = useReadContract({
@@ -137,16 +132,14 @@ export default function StoryPage({ fid }: { fid?: number }) {
     abi: BASEBOTS_S2.abi,
     functionName: "hasBonusBit",
     args: tokenId ? [tokenId, BONUS2_BIT] : undefined,
-    query: { enabled: Boolean(tokenId) },
+    query: { enabled: Boolean(tokenId) && hasBasebot },
   });
 
-  // ── Core gating
-  const hasToken = Boolean(tokenId);
-  const canPlayCore = hasToken && isOwner && !wrongChain;
+  /* ── Core gating ── */
 
-  // 🔓 CHANGE #1: Episode 1 preview enabled
+  const canPlayCore = hasBasebot && !wrongChain;
+
   const ep1Unlocked = true;
-
   const ep2Unlocked = canPlayCore && Boolean(progress?.ep1);
   const ep3Unlocked = canPlayCore && Boolean(progress?.ep2);
   const ep4Unlocked = canPlayCore && Boolean(progress?.ep3);
@@ -165,13 +158,11 @@ export default function StoryPage({ fid }: { fid?: number }) {
     const map: any = {
       prologue: <PrologueSilenceInDarkness onExit={() => setMode("hub")} />,
       ep1: <EpisodeOne onExit={() => setMode("hub")} />,
-      // 🔧 CHANGE #2: tokenId passed correctly
-      ep2: <EpisodeTwo tokenId={tokenId!} onExit={() => setMode("hub")} />,
+      ep2: tokenId ? <EpisodeTwo tokenId={tokenId} onExit={() => setMode("hub")} /> : null,
       ep3: <EpisodeThree onExit={() => setMode("hub")} />,
       ep4: <EpisodeFour onExit={() => setMode("hub")} />,
       ep5: <EpisodeFive onExit={() => setMode("hub")} />,
       bonus: <BonusEcho onExit={() => setMode("hub")} />,
-      stats: null,
     };
 
     return map[mode] ?? (
