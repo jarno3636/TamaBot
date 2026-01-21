@@ -74,7 +74,7 @@ export default function StoryPage() {
   const { address, chain } = useAccount();
   const fid = useFid();
 
-  /* FIX 1: robust FID → tokenId handling */
+  /* robust FID → tokenId handling */
   const tokenId = useMemo(() => {
     try {
       if (typeof fid === "bigint") return fid;
@@ -186,313 +186,36 @@ export default function StoryPage() {
     };
   }, [address, hasToken, wrongChain, hasBasebot, tokenId]);
 
-  /* card renderer */
-  function EpisodeCard(ep: {
-    id:
-      | "prologue"
-      | "ep1"
-      | "ep2"
-      | "ep3"
-      | "ep4"
-      | "ep5"
-      | "bonus"
-      | "bonus2"
-      | null;
-    title: string;
-    note: string;
-    img: string;
-    unlocked: boolean;
-    done?: boolean;
-    requiresNFT?: boolean;
-    isBonus?: boolean;
-    isMeta?: boolean;
-    size?: "core" | "sub";
-    current?: boolean;
-    cta?: string;
-  }) {
-    const locked = !ep.unlocked;
-    const status = statusOf(ep);
-    const badge = badgeColorFor(status);
-
-    const cardRadius = ep.size === "sub" ? 18 : 24;
-    const imgH = ep.size === "sub" ? 150 : 220;
-
-    const lockedFilter =
-      "grayscale(0.7) brightness(0.65) contrast(1.25) saturate(0.7)";
-    const lockedImgFilter = locked ? lockedFilter : "none";
-    const lockedOverlayOpacity = locked ? 0.55 : 0.0;
-
-    const isClickable = Boolean(ep.id) && ep.id !== "bonus2" && !locked;
-
-    return (
-      <article
-        key={String(ep.title) + String(ep.id)}
-        aria-disabled={locked}
-        style={{
-          borderRadius: cardRadius,
-          overflow: "hidden",
-          background: ep.isMeta
-            ? "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.35))"
-            : "rgba(0,0,0,0.35)",
-          border: locked
-            ? "1px solid rgba(255,255,255,0.12)"
-            : "1px solid rgba(56,189,248,0.34)",
-          boxShadow: locked
-            ? "0 18px 60px rgba(0,0,0,0.65)"
-            : "0 28px 90px rgba(56,189,248,0.15)",
-          transform: locked ? "translateY(2px)" : "translateY(0)",
-          transition: "transform 240ms ease, box-shadow 240ms ease",
-          opacity: locked ? 0.7 : 1,
-          position: "relative",
-        }}
-      >
-        <div style={{ position: "relative" }}>
-          <img
-            src={ep.img}
-            alt=""
-            aria-hidden
-            style={{
-              width: "100%",
-              height: imgH,
-              objectFit: "cover",
-              filter: lockedImgFilter,
-              transform: locked ? "scale(1.02)" : "scale(1)",
-            }}
-          />
-
-          <div
-            aria-hidden
-            style={{
-              pointerEvents: "none",
-              position: "absolute",
-              inset: 0,
-              opacity: lockedOverlayOpacity,
-              background:
-                "repeating-linear-gradient(180deg, rgba(255,255,255,0.08) 0px, rgba(255,255,255,0.08) 1px, transparent 2px, transparent 6px)",
-              mixBlendMode: "overlay",
-            }}
-          />
-
-          <div
-            style={{
-              position: "absolute",
-              left: 12,
-              top: 12,
-              padding: "4px 10px",
-              borderRadius: 999,
-              background: badge,
-              color: "#020617",
-              fontSize: 10,
-              fontWeight: 900,
-              letterSpacing: 0.6,
-            }}
-          >
-            {status}
-          </div>
-
-          {status === "CURRENT" && (
-            <div
-              aria-hidden
-              style={{
-                position: "absolute",
-                right: 12,
-                top: 12,
-                width: 10,
-                height: 10,
-                borderRadius: 999,
-                background: "rgba(250,204,21,0.95)",
-                boxShadow: "0 0 0 0 rgba(250,204,21,0.55)",
-                animation: "bbPulse 1.4s infinite",
-              }}
-            />
-          )}
-        </div>
-
-        <div style={{ padding: ep.size === "sub" ? 16 : 20 }}>
-          <h2
-            style={{
-              fontWeight: 900,
-              fontSize: ep.size === "sub" ? 14 : 16,
-              letterSpacing: 0.2,
-            }}
-          >
-            {ep.title}
-          </h2>
-
-          <p
-            style={{
-              fontSize: 12,
-              opacity: 0.72,
-              marginTop: 6,
-              lineHeight: 1.35,
-            }}
-          >
-            {ep.note}
-          </p>
-
-          <button
-            disabled={!isClickable}
-            onClick={() => {
-              if (ep.id && ep.id !== "bonus2") setMode(ep.id as any);
-            }}
-            style={{
-              marginTop: 12,
-              width: "100%",
-              borderRadius: 999,
-              padding: ep.size === "sub" ? "9px 10px" : "10px 12px",
-              fontSize: 12,
-              fontWeight: 900,
-              border: "1px solid rgba(255,255,255,0.16)",
-              background: locked
-                ? "rgba(255,255,255,0.06)"
-                : "linear-gradient(90deg, rgba(56,189,248,0.95), rgba(168,85,247,0.85))",
-              color: locked ? "rgba(255,255,255,0.60)" : "#020617",
-              cursor: !isClickable ? "not-allowed" : "pointer",
-              letterSpacing: 0.2,
-            }}
-          >
-            {locked
-              ? status
-              : ep.cta ?? (ep.isBonus ? "▶ Read Archive" : "▶ Enter Episode")}
-          </button>
-
-          {locked && ep.requiresNFT && (
-            <div style={{ marginTop: 8, fontSize: 11, opacity: 0.55 }}>
-              Requires Basebots NFT ownership for tokenId = FID.
-            </div>
-          )}
-        </div>
-      </article>
-    );
-  }
-
-  /* UI sections */
-  const coreEpisodes = [
-    {
-      id: "ep1" as const,
-      title: "Awakening Protocol",
-      unlocked: ep1Unlocked,
-      done: Boolean(progress?.ep1),
-      img: "/story/01-awakening.png",
-      note: "Initialization begins. Your first directive is recorded.",
-      requiresNFT: true,
-      size: "core" as const,
-      current: currentCore === "ep1",
-      cta: "▶ Begin",
-    },
-    {
-      id: "ep2" as const,
-      title: "Signal Fracture",
-      unlocked: ep2Unlocked,
-      done: Boolean(progress?.ep2),
-      img: "/story/ep2.png",
-      note: "Designation binding. A name becomes a constraint.",
-      requiresNFT: true,
-      size: "core" as const,
-      current: currentCore === "ep2",
-      cta: "▶ Continue",
-    },
-    {
-      id: "ep3" as const,
-      title: "Fault Lines",
-      unlocked: ep3Unlocked,
-      done: Boolean(progress?.ep3),
-      img: "/story/ep3.png",
-      note: "Contradictions form. You decide how the system thinks.",
-      requiresNFT: true,
-      size: "core" as const,
-      current: currentCore === "ep3",
-      cta: "▶ Continue",
-    },
-    {
-      id: "ep4" as const,
-      title: "Threshold",
-      unlocked: ep4Unlocked,
-      done: Boolean(progress?.ep4),
-      img: "/story/ep4.png",
-      note: "A profile is derived. The city prepares its response.",
-      requiresNFT: true,
-      size: "core" as const,
-      current: currentCore === "ep4",
-      cta: "▶ Continue",
-    },
-    {
-      id: "ep5" as const,
-      title: "Emergence",
-      unlocked: ep5Unlocked,
-      done: ep5Done,
-      img: "/story/ep5.png",
-      note: "Surface access is negotiated. Outcomes are permanent.",
-      requiresNFT: true,
-      size: "core" as const,
-      current: currentCore === "ep5",
-      cta: ep5Done ? "▶ Review" : "▶ Enter",
-    },
-  ];
-
-  const prologueAndBonuses = [
-    {
-      id: "prologue" as const,
-      title: "Prologue: Silence in Darkness",
-      unlocked: prologueUnlocked,
-      done: prologueUnlocked, // treat unlock as completion for prologue
-      img: "/story/prologue.png",
-      note: "A dormant channel stirs. Something remembers you first.",
-      isBonus: true,
-      size: "sub" as const,
-      cta: "▶ Open",
-    },
-    {
-      id: "bonus" as const,
-      title: "Echo: Residual Memory",
-      unlocked: bonus1Unlocked,
-      done: Boolean(hasB1),
-      img: "/story/b1.png",
-      note: "Unindexed fragments recovered. The archive speaks back.",
-      isBonus: true,
-      size: "sub" as const,
-      cta: "▶ Read",
-    },
-    {
-      id: "bonus2" as const, // placeholder (no component wired)
-      title: "Echo: Redacted Layer",
-      unlocked: bonus2Unlocked,
-      done: Boolean(hasB2),
-      img: "/story/b2.png",
-      note: "Unlocked by a fleeting key during Emergence.",
-      isBonus: true,
-      size: "sub" as const,
-      cta: bonus2Unlocked ? "▶ Decrypt" : "LOCKED",
-    },
-  ];
-
-  const metaCards = [
-    {
-      id: null,
-      title: "Global Interpretation Metrics",
-      unlocked: false,
-      done: false,
-      img: "/story/gs.png",
-      note: "Live aggregation coming soon. (Placeholder UI)",
-      isMeta: true,
-      size: "sub" as const,
-      cta: "Offline",
-    },
-  ];
-
   /* ───────────────── ROUTE ───────────────── */
   if (mode !== "hub") {
     const map: Partial<Record<typeof mode, React.ReactNode>> = {
       prologue: <PrologueSilenceInDarkness onExit={() => setMode("hub")} />,
-      ep1: tokenId ? (
-        <EpisodeOne tokenId={tokenId} onExit={() => setMode("hub")} />
-      ) : null,
-      ep2: tokenId ? (
-        <EpisodeTwo tokenId={tokenId} onExit={() => setMode("hub")} />
-      ) : null,
-      ep3: <EpisodeThree onExit={() => setMode("hub")} />,
-      ep4: <EpisodeFour onExit={() => setMode("hub")} />,
-      ep5: <EpisodeFive onExit={() => setMode("hub")} />,
+
+      ep1:
+        tokenId !== undefined ? (
+          <EpisodeOne tokenId={tokenId} onExit={() => setMode("hub")} />
+        ) : null,
+
+      ep2:
+        tokenId !== undefined ? (
+          <EpisodeTwo tokenId={tokenId} onExit={() => setMode("hub")} />
+        ) : null,
+
+      ep3:
+        tokenId !== undefined ? (
+          <EpisodeThree tokenId={tokenId} onExit={() => setMode("hub")} />
+        ) : null,
+
+      ep4:
+        tokenId !== undefined ? (
+          <EpisodeFour tokenId={tokenId} onExit={() => setMode("hub")} />
+        ) : null,
+
+      ep5:
+        tokenId !== undefined ? (
+          <EpisodeFive tokenId={tokenId} onExit={() => setMode("hub")} />
+        ) : null,
+
       bonus: <BonusEcho onExit={() => setMode("hub")} />,
     };
 
