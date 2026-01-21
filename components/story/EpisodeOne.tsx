@@ -2,12 +2,40 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useAccount, usePublicClient, useWalletClient } from "wagmi";
+
+/**
+ * Update these imports to match your project.
+ * If you already have these in a shared file, keep them there.
+ */
+import {
+  BASEBOTS_SEASON2_STATE_ADDRESS,
+  BASEBOTS_SEASON2_STATE_ABI,
+} from "@/lib/abi/basebotsSeason2State";
 
 /* ──────────────────────────────────────────────────────────────
  * Types
  * ────────────────────────────────────────────────────────────── */
 
 export type EpisodeOneChoiceId = "ACCEPT" | "STALL" | "SPOOF" | "PULL_PLUG";
+
+/**
+ * MUST match contract enum order:
+ * enum Ep1Choice { ACCEPT, STALL, SPOOF, PULL_PLUG }
+ */
+const EP1_ENUM: Record<EpisodeOneChoiceId, number> = {
+  ACCEPT: 0,
+  STALL: 1,
+  SPOOF: 2,
+  PULL_PLUG: 3,
+};
+
+const EP1_FROM_ENUM: Record<number, EpisodeOneChoiceId> = {
+  0: "ACCEPT",
+  1: "STALL",
+  2: "SPOOF",
+  3: "PULL_PLUG",
+};
 
 type SaveShape = {
   v: number;
@@ -34,21 +62,16 @@ type SaveShape = {
 
 type PollCounts = Record<EpisodeOneChoiceId, number>;
 
-const STORAGE_KEY = "basebots_story_save_v1";
+/**
+ * Cosmetic-only local persistence (NOT authority)
+ * - keeps cinematic replay + poll UI
+ */
+const STORAGE_KEY = "basebots_ep1_cinematic_v1";
 const SOUND_KEY = "basebots_ep1_sound";
 const POLL_KEY = "basebots_ep1_poll";
 
-/** ✅ episode completion flag */
-const EP1_DONE_KEY = "basebots_ep1_done";
-
-/**
- * Main page can listen for this changing to "unlock" bonus episode
- * when the user toggles sound in this episode.
- */
-const UNLOCK_KEY = "basebots_bonus_unlock";
-
 /* ──────────────────────────────────────────────────────────────
- * Persistence
+ * Persistence (cosmetic-only)
  * ────────────────────────────────────────────────────────────── */
 
 function loadSave(): SaveShape | null {
@@ -69,7 +92,9 @@ function saveGame(save: SaveShape) {
 function loadPoll(): PollCounts {
   try {
     const raw = localStorage.getItem(POLL_KEY);
-    return raw ? (JSON.parse(raw) as PollCounts) : { ACCEPT: 0, STALL: 0, SPOOF: 0, PULL_PLUG: 0 };
+    return raw
+      ? (JSON.parse(raw) as PollCounts)
+      : { ACCEPT: 0, STALL: 0, SPOOF: 0, PULL_PLUG: 0 };
   } catch {
     return { ACCEPT: 0, STALL: 0, SPOOF: 0, PULL_PLUG: 0 };
   }
@@ -202,20 +227,97 @@ function SceneImage({ src, alt }: { src: string; alt: string }) {
  * Episode Component
  * ────────────────────────────────────────────────────────────── */
 
-export default function EpisodeOne({ onExit }: { onExit: () => void }) {
+export default function EpisodeOne({
+  tokenId,
+  onExit,
+}: {
+  tokenId: bigint;
+  onExit: () => void;
+}) {
   const existing = useMemo(() => loadSave(), []);
   const [phase, setPhase] = useState<
     "intro" | "signal" | "local" | "localAfter" | "choice" | "ending" | "poll"
   >(existing ? "poll" : "intro");
 
-  // ✅ 1:30 (90s) for choice window
   const CHOICE_WINDOW_SECONDS = 90;
 
   const [secondsLeft, setSecondsLeft] = useState(CHOICE_WINDOW_SECONDS);
   const [save, setSave] = useState<SaveShape | null>(existing);
-
-  // local “doesn't matter” choice, only for flavor
   const [localPick, setLocalPick] = useState<null | "PRESS" | "LEAVE" | "BACK">(null);
+
+  /* ───────────── wagmi ───────────── */
+  const { address, chain } = useAccount();
+  const publicClient = usePublicClient();
+  const { data: walletClient } = useWalletClient();
+
+  const isBase = chain?.id === 8453;
+  const ready = !!address && !!walletClient && !!publicClient && isBase;
+
+  /* ───────────── on-chain status ───────────── */
+  const [chainChoice, setChainChoice] = useState<EpisodeOneChoiceId | null>(null);
+  const [chainLoading, setChainLoading] = useState(true);
+
+  async function fetchEp1FromChain() {
+    if (!publicClient) return;
+    setChainLoading(true);
+    try {
+      // 👇 Adjust if your read function differs.
+      // Expecting something like getBotState(tokenId) that includes episode1Choice (uint8)
+      const state: any = await publicClient.readContract({
+        address: BASEBOTS_SEASON2_STATE_ADDRESS,
+        abi: BASEBOTS_SEASON2_STATE_ABI,
+        functionName: "getBotState",
+        args: [tokenId],
+      });
+
+      // Try common shapes:
+      const raw =
+        (state?.episode1Choice ??
+          state?.ep1Choice ??
+          state?.episode1 ??
+          state?.[0]) as number | bigint | undefined;
+
+      const n =
+        typeof raw === "bigint" ? Number(raw) : typeof raw === "number" ? raw : undefined;
+
+      if (n !== undefined && n in EP1_FROM_ENUM) {
+        setChainChoice(EP1_FROM_ENUM[n]);
+      } else {
+        setChainChoice(null);
+      }
+    } catch (e) {
+      console.error("getBotState failed", e);
+      setChainChoice(null);
+    } finally {
+      setChainLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    fetchEp1FromChain();
+    // refresh when hub tells us progress changed
+    const handler = () => fetchEp1FromChain();
+    window.addEventListener("basebots-progress-updated", handler);
+    return () => window.removeEventListener("basebots-progress-updated", handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tokenId, publicClient]);
+
+  /* If chain says ep1 already chosen, push user to poll/ending */
+  useEffect(() => {
+    if (chainLoading) return;
+    if (!chainChoice) return;
+
+    // If we have a cinematic save, keep it.
+    // If not, synthesize one so the ending screen works.
+    if (!save) {
+      const synthetic = buildSave(chainChoice, soundEnabled);
+      setSave(synthetic);
+      saveGame(synthetic);
+    }
+    // go to poll by default like your original behavior
+    setPhase("poll");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chainChoice, chainLoading]);
 
   /* ───────────── Sound ───────────── */
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
@@ -228,9 +330,8 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Create the looping audio once
   useEffect(() => {
-    const a = new Audio("/audio/s1.mp3"); // public/audio/s1.mp3
+    const a = new Audio("/audio/s1.mp3");
     a.loop = true;
     a.preload = "auto";
     a.volume = 0.65;
@@ -245,7 +346,6 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
     };
   }, []);
 
-  // Keep audio state in sync with soundEnabled
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
@@ -258,7 +358,6 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
       return;
     }
 
-    // Attempt to play (may be blocked until user gesture; that's fine)
     a.play().catch(() => {});
   }, [soundEnabled]);
 
@@ -267,8 +366,6 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
       const next = !s;
       try {
         localStorage.setItem(SOUND_KEY, next ? "on" : "off");
-        // ✅ ping main page unlock (listen for this changing)
-        localStorage.setItem(UNLOCK_KEY, String(Date.now()));
       } catch {}
       return next;
     });
@@ -293,9 +390,8 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secondsLeft, phase]);
 
-  /* ───────────── Resolve real choice ───────────── */
-  function resolveChoice(choiceId: EpisodeOneChoiceId) {
-    const s: SaveShape = {
+  function buildSave(choiceId: EpisodeOneChoiceId, soundOn: boolean): SaveShape {
+    return {
       v: 1,
       episodeId: "ep1",
       choiceId,
@@ -304,56 +400,99 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
         cautious: choiceId === "STALL",
         adversarial: choiceId === "SPOOF",
         severed: choiceId === "PULL_PLUG",
-        soundOff: !soundEnabled,
+        soundOff: !soundOn,
       },
       profile: {
         archetype:
           choiceId === "ACCEPT"
             ? "Operator"
             : choiceId === "STALL"
-              ? "Ghost"
-              : choiceId === "SPOOF"
-                ? "Saboteur"
-                : "Severed",
-        trust: choiceId === "ACCEPT" ? 70 : choiceId === "STALL" ? 55 : choiceId === "SPOOF" ? 26 : 16,
-        threat: choiceId === "ACCEPT" ? 22 : choiceId === "STALL" ? 36 : choiceId === "SPOOF" ? 74 : 58,
+            ? "Ghost"
+            : choiceId === "SPOOF"
+            ? "Saboteur"
+            : "Severed",
+        trust:
+          choiceId === "ACCEPT"
+            ? 70
+            : choiceId === "STALL"
+            ? 55
+            : choiceId === "SPOOF"
+            ? 26
+            : 16,
+        threat:
+          choiceId === "ACCEPT"
+            ? 22
+            : choiceId === "STALL"
+            ? 36
+            : choiceId === "SPOOF"
+            ? 74
+            : 58,
       },
       artifact: {
         name:
           choiceId === "ACCEPT"
             ? "Compliance Record"
             : choiceId === "STALL"
-              ? "Observation Gap"
-              : choiceId === "SPOOF"
-                ? "Contradictory Authority"
-                : "Termination Evidence",
+            ? "Observation Gap"
+            : choiceId === "SPOOF"
+            ? "Contradictory Authority"
+            : "Termination Evidence",
         desc:
           choiceId === "ACCEPT"
             ? "A credentialed profile registered to your Basebot without challenge."
             : choiceId === "STALL"
-              ? "A session finalized with withheld identity — logged as non-cooperative."
-              : choiceId === "SPOOF"
-                ? "A forged credential accepted long enough to create two official records."
-                : "A hard sever logged at the transport layer with a surviving trace.",
+            ? "A session finalized with withheld identity — logged as non-cooperative."
+            : choiceId === "SPOOF"
+            ? "A forged credential accepted long enough to create two official records."
+            : "A hard sever logged at the transport layer with a surviving trace.",
       },
       createdAt: Date.now(),
     };
+  }
 
-    // ✅ mark EP1 complete for hub logic
+  /* ───────────── Resolve real choice (ON-CHAIN) ───────────── */
+  async function resolveChoice(choiceId: EpisodeOneChoiceId) {
+    // If chain already set, don't allow rewriting
+    if (chainChoice) {
+      setPhase("poll");
+      return;
+    }
+    if (!ready) {
+      alert(!isBase ? "Switch to Base (8453) first." : "Connect wallet to continue.");
+      return;
+    }
+
     try {
-      localStorage.setItem(EP1_DONE_KEY, "true");
-    } catch {}
+      const hash = await walletClient!.writeContract({
+        address: BASEBOTS_SEASON2_STATE_ADDRESS,
+        abi: BASEBOTS_SEASON2_STATE_ABI,
+        functionName: "setEpisode1",
+        args: [tokenId, EP1_ENUM[choiceId]],
+      });
 
-    saveGame(s);
-    bumpPoll(choiceId);
-    setSave(s);
-    setPhase("ending");
+      await publicClient!.waitForTransactionReceipt({ hash });
+
+      // cosmetic save + poll bump
+      const s = buildSave(choiceId, soundEnabled);
+      saveGame(s);
+      bumpPoll(choiceId);
+
+      setSave(s);
+      setChainChoice(choiceId);
+      setPhase("ending");
+
+      // tell hub to refresh
+      window.dispatchEvent(new Event("basebots-progress-updated"));
+    } catch (err) {
+      console.error(err);
+      alert("Transaction failed or was rejected.");
+    }
   }
 
   function resetEpisode() {
+    // Only resets cinematic replay locally; does NOT change chain state (cannot)
     try {
       localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem(EP1_DONE_KEY);
     } catch {}
     setSave(null);
     setLocalPick(null);
@@ -524,6 +663,8 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
    * Render
    * ────────────────────────────────────────────────────────────── */
 
+  const disableChoices = !!chainChoice; // if already set on-chain, block re-choosing
+
   return (
     <section
       className="relative overflow-hidden rounded-[28px] border p-5 md:p-7"
@@ -539,7 +680,6 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
           type="button"
           onClick={() => {
             toggleSound();
-            // also try to kick playback on user gesture if turning on
             const a = audioRef.current;
             if (a && !soundEnabled) a.play().catch(() => {});
           }}
@@ -580,6 +720,27 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
         </button>
       </div>
 
+      {/* OPTIONAL chain status line */}
+      <div className="mt-4 text-[11px] text-white/50">
+        {chainLoading && "Syncing episode state…"}
+        {!chainLoading && chainChoice && (
+          <>
+            On-chain EP1: <span className="text-white/75 font-semibold">{chainChoice}</span>
+          </>
+        )}
+        {!chainLoading && !chainChoice && (
+          <>
+            On-chain EP1: <span className="text-white/70 font-semibold">Not set</span>
+            {!ready && (
+              <>
+                {" "}
+                • <span className="text-white/60">Connect wallet on Base to commit choice</span>
+              </>
+            )}
+          </>
+        )}
+      </div>
+
       {/* INTRO */}
       {phase === "intro" && (
         <div className="mt-6 grid gap-5">
@@ -591,12 +752,14 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
             <div className="mt-3 grid gap-2 text-[13px] leading-relaxed text-white/72">
               <p>Cold boot. No startup tone. No friendly status lights.</p>
               <p>
-                Your Basebot wakes on a steel slab in a room built like a shipping container: sealed seams, vented corners, one door with
-                no handle.
+                Your Basebot wakes on a steel slab in a room built like a shipping container: sealed seams, vented corners, one door with no
+                handle.
               </p>
               <p>A single ceiling strip flickers at a steady interval—like a metronome you didn’t agree to hear.</p>
               <p>The Basebot runs an internal check and returns one usable fact:</p>
-              <p className="text-white/80 font-semibold">You’re inside a relay station… and it’s waiting for a credential it doesn’t have.</p>
+              <p className="text-white/80 font-semibold">
+                You’re inside a relay station… and it’s waiting for a credential it doesn’t have.
+              </p>
             </div>
 
             <button
@@ -661,10 +824,13 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
             <div className="mt-3 grid gap-2 text-[13px] leading-relaxed text-white/72">
               <p>You find the node inside a wall recess—older hardware, scratched metal, a physical actuator with worn edges.</p>
               <p>
-                A label plate is half-peeled, but one thing is readable: <span className="font-semibold text-white/80">MANUAL OVERRIDE</span>.
+                A label plate is half-peeled, but one thing is readable:{" "}
+                <span className="font-semibold text-white/80">MANUAL OVERRIDE</span>.
               </p>
               <p>No blinking lights. No friendly prompts. Just a cable port, an actuator, and an empty badge slot.</p>
-              <p className="text-white/80 font-semibold">Whatever this room is, it expects an “operator”—and your Basebot is currently unowned.</p>
+              <p className="text-white/80 font-semibold">
+                Whatever this room is, it expects an “operator”—and your Basebot is currently unowned.
+              </p>
             </div>
 
             <div className="mt-5 grid gap-4 md:grid-cols-3">
@@ -762,7 +928,9 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
               <p>The recess goes dead. No lights. No hum. No second chance.</p>
               <p>Then the stripped-down audit text returns—cleaner now, more direct.</p>
               <p className="font-mono text-white/80">AUDIT GATE: SUBMIT OPERATOR PROFILE OR BE CLASSIFIED</p>
-              <p className="text-white/80 font-semibold">This is the real decision: name yourself… refuse… counterfeit… or cut the line entirely.</p>
+              <p className="text-white/80 font-semibold">
+                This is the real decision: name yourself… refuse… counterfeit… or cut the line entirely.
+              </p>
             </div>
 
             <button
@@ -830,10 +998,24 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 </div>
 
                 <div className="mt-3 text-[11px] text-white/46">
-                  Auto-finalize at 0:00: <span className="text-white/70 font-semibold">Non-cooperative (STALL)</span>
+                  Auto-finalize at 0:00:{" "}
+                  <span className="text-white/70 font-semibold">Non-cooperative (STALL)</span>
                 </div>
               </div>
             </div>
+
+            {!ready && !chainChoice && (
+              <div
+                className="mt-4 rounded-2xl border p-3 text-[12px]"
+                style={{
+                  borderColor: "rgba(255,255,255,0.12)",
+                  background: "rgba(255,255,255,0.04)",
+                  color: "rgba(255,255,255,0.72)",
+                }}
+              >
+                Connect your wallet on <span className="font-semibold text-white/85">Base</span> to commit your decision on-chain.
+              </div>
+            )}
 
             <div className="mt-5 grid gap-4">
               <ChoiceCard
@@ -842,6 +1024,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 body="Register yourself as the operator and let the system route the Basebot under your name."
                 risk="Your identity becomes the key—and the leash. Future gates will recognize you."
                 payoff="Door access, clean routing, fewer alarms… for now."
+                disabled={disableChoices}
                 onClick={() => resolveChoice("ACCEPT")}
               />
 
@@ -851,6 +1034,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 body="Do not provide a credential. Demand a reason. Let the system act without your consent."
                 risk="Refusal becomes a permanent classification: uncooperative, unknown, flagged."
                 payoff="You keep your name out of its registry and learn what it does to the unnamed."
+                disabled={disableChoices}
                 onClick={() => resolveChoice("STALL")}
               />
 
@@ -861,6 +1045,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 body="Provide a plausible credential that isn’t yours—enough to pass the gate, not enough to be true."
                 risk="If audited, the mismatch escalates immediately. False credentials trigger containment."
                 payoff="You buy movement and collect how the system verifies legitimacy."
+                disabled={disableChoices}
                 onClick={() => resolveChoice("SPOOF")}
               />
 
@@ -871,6 +1056,7 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
                 body="Cut the channel before a profile is written. Let the room go silent and deal with the fallout."
                 risk="Severance is logged. Someone—or something—will investigate the gap."
                 payoff="You deny the system a clean record and avoid being routed at all."
+                disabled={disableChoices}
                 onClick={() => resolveChoice("PULL_PLUG")}
               />
             </div>
@@ -902,7 +1088,10 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
 
             <div
               className="mt-3 rounded-2xl border p-3"
-              style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.04)" }}
+              style={{
+                borderColor: "rgba(255,255,255,0.10)",
+                background: "rgba(255,255,255,0.04)",
+              }}
             >
               <div className="text-[12px] text-white/75">
                 Artifact: <span className="font-extrabold text-white/92">{save.artifact.name}</span>
@@ -1023,14 +1212,29 @@ export default function EpisodeOne({ onExit }: { onExit: () => void }) {
 
               return (
                 <div className="mt-5 grid gap-3">
-                  <PollRow choiceId="ACCEPT" value={poll.ACCEPT} total={total} highlight={save?.choiceId === "ACCEPT"} />
-                  <PollRow choiceId="STALL" value={poll.STALL} total={total} highlight={save?.choiceId === "STALL"} />
-                  <PollRow choiceId="SPOOF" value={poll.SPOOF} total={total} highlight={save?.choiceId === "SPOOF"} />
+                  <PollRow
+                    choiceId="ACCEPT"
+                    value={poll.ACCEPT}
+                    total={total}
+                    highlight={save?.choiceId === "ACCEPT" || chainChoice === "ACCEPT"}
+                  />
+                  <PollRow
+                    choiceId="STALL"
+                    value={poll.STALL}
+                    total={total}
+                    highlight={save?.choiceId === "STALL" || chainChoice === "STALL"}
+                  />
+                  <PollRow
+                    choiceId="SPOOF"
+                    value={poll.SPOOF}
+                    total={total}
+                    highlight={save?.choiceId === "SPOOF" || chainChoice === "SPOOF"}
+                  />
                   <PollRow
                     choiceId="PULL_PLUG"
                     value={poll.PULL_PLUG}
                     total={total}
-                    highlight={save?.choiceId === "PULL_PLUG"}
+                    highlight={save?.choiceId === "PULL_PLUG" || chainChoice === "PULL_PLUG"}
                   />
                 </div>
               );
