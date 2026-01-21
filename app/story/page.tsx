@@ -82,7 +82,7 @@ export default function StoryPage() {
 
   const wrongChain = Boolean(chain?.id) && chain?.id !== BASE_CHAIN_ID;
 
-  /* ── 🔑 OWNERSHIP GATE (tokenURI existence) ── */
+  /* ── Ownership gate via tokenURI ── */
 
   const { data: tokenUri } = useReadContract({
     ...BASEBOTS,
@@ -91,12 +91,11 @@ export default function StoryPage() {
     query: { enabled: Boolean(tokenId) },
   });
 
-  const hasBasebot = Boolean(
+  const hasBasebot =
     typeof tokenUri === "string" &&
-      tokenUri.startsWith("data:application/json;base64,"),
-  );
+    tokenUri.startsWith("data:application/json;base64,");
 
-  /* ── Season 2 progress flags ── */
+  /* ── Season 2 progress ── */
 
   const { data: progressFlags } = useReadContract({
     address: BASEBOTS_S2.address,
@@ -157,8 +156,14 @@ export default function StoryPage() {
   if (mode !== "hub") {
     const map: any = {
       prologue: <PrologueSilenceInDarkness onExit={() => setMode("hub")} />,
-      ep1: <EpisodeOne onExit={() => setMode("hub")} />,
-      ep2: tokenId ? <EpisodeTwo tokenId={tokenId} onExit={() => setMode("hub")} /> : null,
+      ep1:
+        tokenId ? (
+          <EpisodeOne tokenId={tokenId} onExit={() => setMode("hub")} />
+        ) : null,
+      ep2:
+        tokenId ? (
+          <EpisodeTwo tokenId={tokenId} onExit={() => setMode("hub")} />
+        ) : null,
       ep3: <EpisodeThree onExit={() => setMode("hub")} />,
       ep4: <EpisodeFour onExit={() => setMode("hub")} />,
       ep5: <EpisodeFive onExit={() => setMode("hub")} />,
