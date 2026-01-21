@@ -16,15 +16,11 @@ import BonusEcho from "@/components/story/BonusEcho";
 import { BASEBOTS } from "@/lib/abi";
 import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 
-/* ─────────────────────────────────────────────
- * Config
- * ───────────────────────────────────────────── */
+/* ───────────────────────────────────────────── */
 
 const BASE_CHAIN_ID = 8453;
 
-/* ─────────────────────────────────────────────
- * Helpers
- * ───────────────────────────────────────────── */
+/* ───────────────────────────────────────────── */
 
 function nextCoreMode(flags?: {
   ep1?: boolean;
@@ -40,9 +36,7 @@ function nextCoreMode(flags?: {
   return "ep5";
 }
 
-/* ─────────────────────────────────────────────
- * Story Page
- * ───────────────────────────────────────────── */
+/* ───────────────────────────────────────────── */
 
 export default function StoryPage() {
   const [mode, setMode] = useState<
@@ -53,14 +47,14 @@ export default function StoryPage() {
   const fid = useFid();
 
   /* SAFE bigint normalization */
-  const tokenId = useMemo<bigint | null>(() => {
+  const tokenId = useMemo<bigint | undefined>(() => {
     try {
       if (typeof fid === "bigint") return fid;
       if (typeof fid === "number") return BigInt(fid);
       if (typeof fid === "string" && /^\d+$/.test(fid)) return BigInt(fid);
-      return null;
+      return undefined;
     } catch {
-      return null;
+      return undefined;
     }
   }, [fid]);
 
@@ -100,15 +94,23 @@ export default function StoryPage() {
   const canPlayCore = Boolean(address) && hasBasebot && !wrongChain;
   const currentCore = useMemo(() => nextCoreMode(progress), [progress]);
 
-  /* ───────────────── ROUTING ───────────────── */
+  /* ───────────────── ROUTING (TYPE-SAFE) ───────────────── */
 
   if (mode !== "hub") {
+    if (!tokenId && mode !== "prologue" && mode !== "bonus") {
+      return (
+        <div style={{ padding: 40, color: "white" }}>
+          Unable to load episode. Token not detected.
+        </div>
+      );
+    }
+
     const map: Record<string, React.ReactNode> = {
-      ep1: <EpisodeOne tokenId={tokenId} onExit={() => setMode("hub")} />,
-      ep2: <EpisodeTwo tokenId={tokenId} onExit={() => setMode("hub")} />,
-      ep3: <EpisodeThree tokenId={tokenId} onExit={() => setMode("hub")} />,
-      ep4: <EpisodeFour tokenId={tokenId} onExit={() => setMode("hub")} />,
-      ep5: <EpisodeFive tokenId={tokenId} onExit={() => setMode("hub")} />,
+      ep1: <EpisodeOne tokenId={tokenId!} onExit={() => setMode("hub")} />,
+      ep2: <EpisodeTwo tokenId={tokenId!} onExit={() => setMode("hub")} />,
+      ep3: <EpisodeThree tokenId={tokenId!} onExit={() => setMode("hub")} />,
+      ep4: <EpisodeFour tokenId={tokenId!} onExit={() => setMode("hub")} />,
+      ep5: <EpisodeFive tokenId={tokenId!} onExit={() => setMode("hub")} />,
       prologue: <PrologueSilenceInDarkness onExit={() => setMode("hub")} />,
       bonus: <BonusEcho onExit={() => setMode("hub")} />,
     };
@@ -168,85 +170,53 @@ export default function StoryPage() {
       style={{
         minHeight: "100vh",
         background:
-          "radial-gradient(1200px 600px at 50% -10%, rgba(56,189,248,0.12), transparent 60%), radial-gradient(900px 520px at 90% 120%, rgba(168,85,247,0.14), transparent 60%), #020617",
+          "radial-gradient(1200px 600px at 50% -10%, rgba(56,189,248,0.14), transparent 60%), radial-gradient(900px 520px at 90% 120%, rgba(168,85,247,0.18), transparent 60%), #020617",
         color: "white",
-        padding: "48px 16px 80px",
+        padding: "56px 16px 96px",
       }}
     >
-      {/* HERO HEADER */}
+      {/* HERO */}
       <section
         style={{
           maxWidth: 1100,
-          margin: "0 auto 48px",
-          padding: "32px 28px",
-          borderRadius: 28,
+          margin: "0 auto 56px",
+          padding: "36px 32px",
+          borderRadius: 32,
           border: "1px solid rgba(255,255,255,0.12)",
           background:
-            "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.45))",
-          boxShadow: "0 40px 160px rgba(0,0,0,0.8)",
+            "linear-gradient(180deg, rgba(255,255,255,0.08), rgba(0,0,0,0.55))",
+          boxShadow: "0 50px 180px rgba(0,0,0,0.85)",
           position: "relative",
-          overflow: "hidden",
         }}
       >
-        {/* subtle scanline */}
-        <div
-          aria-hidden
-          style={{
-            position: "absolute",
-            inset: 0,
-            opacity: 0.08,
-            background:
-              "repeating-linear-gradient(180deg, rgba(255,255,255,0.08) 0px, rgba(255,255,255,0.08) 1px, transparent 2px, transparent 6px)",
-            pointerEvents: "none",
-          }}
-        />
-
-        <h1
-          style={{
-            fontSize: 32,
-            fontWeight: 900,
-            letterSpacing: 1.2,
-          }}
-        >
+        <h1 style={{ fontSize: 34, fontWeight: 900, letterSpacing: 1.4 }}>
           BaseBots: Core Memory
         </h1>
 
         <p
           style={{
-            marginTop: 10,
-            maxWidth: 720,
+            marginTop: 12,
+            maxWidth: 760,
             fontSize: 14,
-            lineHeight: 1.5,
-            color: "rgba(255,255,255,0.72)",
+            lineHeight: 1.6,
+            color: "rgba(255,255,255,0.78)",
           }}
         >
-          Every BaseBot remembers.  
+          Every BaseBot remembers.
           <br />
-          <span style={{ color: "rgba(255,255,255,0.88)" }}>
-            The system is not asking who you are — it is recording what you allow it to believe.
+          <span style={{ color: "rgba(255,255,255,0.95)" }}>
+            The system is not asking who you are — it is archiving what you permit it to conclude.
           </span>
         </p>
       </section>
 
       {/* CORE SEQUENCE */}
       <section style={{ maxWidth: 1200, margin: "0 auto" }}>
-        <h3
-          style={{
-            fontSize: 12,
-            fontWeight: 900,
-            letterSpacing: 1.8,
-            opacity: 0.85,
-            marginBottom: 18,
-          }}
-        >
-          CORE SEQUENCE
-        </h3>
-
         <div
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-            gap: 26,
+            gap: 28,
           }}
         >
           {coreEpisodes.map((ep) => (
@@ -256,53 +226,37 @@ export default function StoryPage() {
               disabled={!ep.unlocked}
               style={{
                 textAlign: "left",
-                padding: 26,
-                borderRadius: 26,
+                padding: 28,
+                borderRadius: 28,
                 border: ep.current
-                  ? "1px solid rgba(250,204,21,0.75)"
+                  ? "1px solid rgba(250,204,21,0.85)"
                   : "1px solid rgba(255,255,255,0.12)",
                 background: ep.unlocked
-                  ? "linear-gradient(180deg, rgba(255,255,255,0.08), rgba(0,0,0,0.45))"
-                  : "rgba(255,255,255,0.05)",
+                  ? "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(0,0,0,0.55))"
+                  : "rgba(255,255,255,0.04)",
                 boxShadow: ep.current
-                  ? "0 0 0 1px rgba(250,204,21,0.35), 0 30px 120px rgba(0,0,0,0.8)"
-                  : "0 26px 100px rgba(0,0,0,0.75)",
-                color: "white",
+                  ? "0 0 0 1px rgba(250,204,21,0.35), 0 36px 140px rgba(0,0,0,0.9)"
+                  : "0 32px 120px rgba(0,0,0,0.85)",
                 cursor: ep.unlocked ? "pointer" : "not-allowed",
                 transition: "transform 160ms ease, box-shadow 160ms ease",
               }}
             >
-              <h2
-                style={{
-                  fontSize: 18,
-                  fontWeight: 900,
-                }}
-              >
-                {ep.title}
-              </h2>
-
-              <p
-                style={{
-                  marginTop: 8,
-                  fontSize: 13,
-                  lineHeight: 1.4,
-                  opacity: 0.7,
-                }}
-              >
+              <h2 style={{ fontSize: 18, fontWeight: 900 }}>{ep.title}</h2>
+              <p style={{ marginTop: 10, fontSize: 13, opacity: 0.72 }}>
                 {ep.note}
               </p>
 
               {ep.current && (
                 <div
                   style={{
-                    marginTop: 14,
+                    marginTop: 16,
                     fontSize: 11,
                     fontWeight: 900,
                     letterSpacing: 1.2,
-                    color: "rgba(250,204,21,0.9)",
+                    color: "rgba(250,204,21,0.95)",
                   }}
                 >
-                  ▶ CURRENT SEQUENCE
+                  ▶ ACTIVE MEMORY PATH
                 </div>
               )}
             </button>
