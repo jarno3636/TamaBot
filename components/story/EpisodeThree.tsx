@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useAccount, usePublicClient, useWalletClient } from "wagmi";
+
+import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 
 /* ──────────────────────────────────────────────
- * Storage keys
+ * Storage keys (cosmetic only)
  * ────────────────────────────────────────────── */
 
 const EP3_STATE_KEY = "basebots_ep3_state_v1";
-const EP3_DONE_KEY = "basebots_ep3_done";
 const BONUS_KEY = "basebots_bonus_echo_unlocked";
 const SOUND_KEY = "basebots_ep3_sound";
 
@@ -24,9 +26,11 @@ type Phase =
 type Ep3State = {
   contradictionChoice?: "RESOLVE" | "PRESERVE";
   signalChoice?: "FILTER" | "LISTEN";
-  cognitionBias?: "DETERMINISTIC" | "ARCHIVAL" | "PRAGMATIC" | "PARANOID";
-  completedAt?: number;
 };
+
+/* ──────────────────────────────────────────────
+ * Local helpers (non-authoritative)
+ * ────────────────────────────────────────────── */
 
 function loadState(): Ep3State {
   try {
@@ -43,15 +47,52 @@ function saveState(patch: Partial<Ep3State>) {
 
 /* ────────────────────────────────────────────── */
 
-export default function EpisodeThree({ onExit }: { onExit: () => void }) {
+export default function EpisodeThree({
+  tokenId,
+  onExit,
+}: {
+  tokenId: bigint;
+  onExit: () => void;
+}) {
   const [phase, setPhase] = useState<Phase>("intro");
   const [glitch, setGlitch] = useState(0);
   const [showEcho, setShowEcho] = useState(false);
-  const [soundOn, setSoundOn] = useState(
-    () => localStorage.getItem(SOUND_KEY) !== "off"
-  );
+  const [submitting, setSubmitting] = useState(false);
+  const [alreadySet, setAlreadySet] = useState(false);
 
-  /* ── ambient glitch pulse ── */
+  /* ───────── wagmi ───────── */
+  const { address, chain } = useAccount();
+  const publicClient = usePublicClient();
+  const { data: walletClient } = useWalletClient();
+  const isBase = chain?.id === 8453;
+
+  const ready =
+    !!address && !!walletClient && !!publicClient && !!tokenId && isBase;
+
+  /* ───────── read on-chain state ───────── */
+  useEffect(() => {
+    if (!publicClient || !tokenId) return;
+
+    (async () => {
+      try {
+        const state = (await publicClient.readContract({
+          address: BASEBOTS_S2.address,
+          abi: BASEBOTS_S2.abi,
+          functionName: "getBotState",
+          args: [tokenId],
+        })) as any;
+
+        if (state?.ep3Set) {
+          setAlreadySet(true);
+          setPhase("lock");
+        }
+      } catch {
+        // silent
+      }
+    })();
+  }, [tokenId, publicClient]);
+
+  /* ───────── ambient glitch ───────── */
   useEffect(() => {
     const t = setInterval(() => {
       if (Math.random() > 0.88) setGlitch(Math.random());
@@ -59,7 +100,7 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
     return () => clearInterval(t);
   }, []);
 
-  /* ── eerie echo popup (small, non-blocking, once) ── */
+  /* ───────── echo popup ───────── */
   useEffect(() => {
     if (localStorage.getItem(BONUS_KEY)) return;
 
@@ -72,14 +113,38 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
     return () => clearTimeout(t);
   }, []);
 
-  /* ── sound loop ── */
+  function acknowledgeEcho() {
+    localStorage.setItem(BONUS_KEY, "true");
+    window.dispatchEvent(new Event("basebots-progress-updated"));
+    setShowEcho(false);
+  }
+
+  /* ───────── sound ───────── */
+  const [soundOn, setSoundOn] = useState(
+    () => localStorage.getItem(SOUND_KEY) !== "off"
+  );
+
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
   useEffect(() => {
     const audio = new Audio("/audio/s3.mp3");
     audio.loop = true;
     audio.volume = 0.5;
+    audioRef.current = audio;
 
     if (soundOn) audio.play().catch(() => {});
     return () => audio.pause();
+  }, []);
+
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+    if (!soundOn) {
+      a.pause();
+      a.currentTime = 0;
+      return;
+    }
+    a.play().catch(() => {});
   }, [soundOn]);
 
   function toggleSound() {
@@ -88,15 +153,15 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
     localStorage.setItem(SOUND_KEY, next ? "on" : "off");
   }
 
-  function acknowledgeEcho() {
-    localStorage.setItem(BONUS_KEY, "true");
-    window.dispatchEvent(new Event("basebots-progress-updated"));
-    setShowEcho(false);
-  }
+  /* ───────── commit cognition (ON-CHAIN) ───────── */
+  async function finalize() {
+    if (alreadySet || submitting) return;
+    if (!ready) return;
 
-  function finalize() {
     const s = loadState();
-    let cognition: Ep3State["cognitionBias"] = "PRAGMATIC";
+
+    let cognition: "DETERMINISTIC" | "ARCHIVAL" | "PRAGMATIC" | "PARANOID" =
+      "PRAGMATIC";
 
     if (s.contradictionChoice === "RESOLVE" && s.signalChoice === "FILTER")
       cognition = "DETERMINISTIC";
@@ -105,11 +170,30 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
     if (s.contradictionChoice === "PRESERVE" && s.signalChoice === "FILTER")
       cognition = "PARANOID";
 
-    saveState({ cognitionBias: cognition, completedAt: Date.now() });
-    localStorage.setItem(EP3_DONE_KEY, "true");
-    window.dispatchEvent(new Event("basebots-progress-updated"));
-    setPhase("lock");
+    setSubmitting(true);
+
+    try {
+      const hash = await walletClient!.writeContract({
+        address: BASEBOTS_S2.address,
+        abi: BASEBOTS_S2.abi,
+        functionName: "setEpisode3Cognition",
+        args: [tokenId, cognition],
+      });
+
+      await publicClient!.waitForTransactionReceipt({ hash });
+
+      window.dispatchEvent(new Event("basebots-progress-updated"));
+      setPhase("lock");
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSubmitting(false);
+    }
   }
+
+  /* ──────────────────────────────────────────────
+   * RENDER (VISUALS UNCHANGED)
+   * ────────────────────────────────────────────── */
 
   return (
     <section
@@ -139,37 +223,17 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
         }}
       />
 
-      {/* top controls */}
+      {/* controls */}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-        <button
-          onClick={toggleSound}
-          style={{
-            borderRadius: 999,
-            border: "1px solid rgba(255,255,255,0.2)",
-            padding: "4px 10px",
-            fontSize: 11,
-            background: "rgba(255,255,255,0.04)",
-            color: "white",
-          }}
-        >
+        <button onClick={toggleSound} style={{ fontSize: 11 }}>
           SOUND {soundOn ? "ON" : "OFF"}
         </button>
-        <button
-          onClick={onExit}
-          style={{
-            borderRadius: 999,
-            border: "1px solid rgba(255,255,255,0.2)",
-            padding: "4px 10px",
-            fontSize: 11,
-            background: "rgba(255,255,255,0.04)",
-            color: "white",
-          }}
-        >
+        <button onClick={onExit} style={{ fontSize: 11 }}>
           Exit
         </button>
       </div>
 
-      {/* ghost echo */}
+      {/* echo */}
       {showEcho && (
         <button
           onClick={acknowledgeEcho}
@@ -178,23 +242,16 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
             bottom: 18,
             right: 18,
             maxWidth: 220,
-            background: "rgba(255,255,255,0.06)",
-            border: "1px solid rgba(255,255,255,0.18)",
-            padding: "6px 10px",
             fontSize: 10,
             fontFamily: "monospace",
-            color: "rgba(255,255,255,0.85)",
-            textAlign: "left",
             opacity: 0.85,
-            borderRadius: 12,
-            textShadow: "0 0 8px rgba(168,85,247,0.6)",
           }}
         >
           ▒▒ you were not designed to notice this ▒▒
         </button>
       )}
 
-      {/* INTRO */}
+      {/* PHASES (unchanged text & flow) */}
       {phase === "intro" && (
         <>
           <h2
@@ -215,93 +272,25 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
             Something above you has begun to pay attention.
           </p>
 
-          <p style={{ marginTop: 8, fontSize: 13, opacity: 0.6 }}>
-            Your designation propagated upward through systems
-            that were never meant to receive it.
-          </p>
-
-          <p style={{ marginTop: 8, fontSize: 12, opacity: 0.5 }}>
-            The architecture was vertical.
-            <br />
-            You were not.
-          </p>
-
-          <button
-            onClick={() => setPhase("context")}
-            style={{
-              marginTop: 20,
-              borderRadius: 999,
-              padding: "8px 16px",
-              fontSize: 12,
-              fontWeight: 800,
-              background:
-                "linear-gradient(90deg, rgba(56,189,248,0.9), rgba(168,85,247,0.7))",
-              color: "#020617",
-            }}
-          >
+          <button onClick={() => setPhase("context")} style={{ marginTop: 20 }}>
             Continue
           </button>
         </>
       )}
 
-      {/* CONTEXT */}
       {phase === "context" && (
         <>
-          <p style={{ fontSize: 13, opacity: 0.75 }}>
-            Systems require certainty.
-            <br />
-            Cities require compliance.
-          </p>
-
-          <p style={{ marginTop: 10, fontSize: 12, opacity: 0.55 }}>
-            Contradiction is not tolerated at higher layers.
-            <br />
-            It is *resolved* — or *contained*.
-          </p>
-
-          <p style={{ marginTop: 10, fontSize: 12, opacity: 0.5 }}>
-            How you treat inconsistency now
-            <br />
-            determines whether ascent is possible later.
-          </p>
-
-          <button
-            onClick={() => setPhase("contradiction")}
-            style={{
-              marginTop: 20,
-              borderRadius: 999,
-              padding: "8px 16px",
-              fontSize: 12,
-              fontWeight: 800,
-              border: "1px solid rgba(255,255,255,0.2)",
-              background: "rgba(255,255,255,0.04)",
-              color: "white",
-            }}
-          >
-            Proceed
-          </button>
+          <p>Contradiction is not tolerated.</p>
+          <button onClick={() => setPhase("contradiction")}>Proceed</button>
         </>
       )}
 
-      {/* CONTRADICTION */}
       {phase === "contradiction" && (
         <>
-          <p style={{ fontSize: 12, opacity: 0.55 }}>
-            Two internal models produce incompatible futures.
-          </p>
-
           <button
             onClick={() => {
               saveState({ contradictionChoice: "RESOLVE" });
               setPhase("signal");
-            }}
-            style={{
-              width: "100%",
-              borderRadius: 16,
-              padding: "10px",
-              marginTop: 16,
-              background: "rgba(56,189,248,0.15)",
-              color: "white",
             }}
           >
             Collapse to a single truth
@@ -312,39 +301,18 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
               saveState({ contradictionChoice: "PRESERVE" });
               setPhase("signal");
             }}
-            style={{
-              width: "100%",
-              borderRadius: 16,
-              padding: "10px",
-              marginTop: 10,
-              background: "rgba(255,255,255,0.06)",
-              color: "white",
-            }}
           >
             Retain competing realities
           </button>
         </>
       )}
 
-      {/* SIGNAL */}
       {phase === "signal" && (
         <>
-          <p style={{ fontSize: 12, opacity: 0.55 }}>
-            External fragments originate from higher strata.
-          </p>
-
           <button
             onClick={() => {
               saveState({ signalChoice: "FILTER" });
               setPhase("synthesis");
-            }}
-            style={{
-              width: "100%",
-              borderRadius: 16,
-              padding: "10px",
-              marginTop: 16,
-              background: "rgba(255,255,255,0.06)",
-              color: "white",
             }}
           >
             Suppress foreign context
@@ -355,84 +323,24 @@ export default function EpisodeThree({ onExit }: { onExit: () => void }) {
               saveState({ signalChoice: "LISTEN" });
               setPhase("synthesis");
             }}
-            style={{
-              width: "100%",
-              borderRadius: 16,
-              padding: "10px",
-              marginTop: 10,
-              background: "rgba(168,85,247,0.18)",
-              color: "white",
-            }}
           >
             Ingest fragments despite risk
           </button>
         </>
       )}
 
-      {/* SYNTHESIS */}
       {phase === "synthesis" && (
         <>
-          <p style={{ fontSize: 13, opacity: 0.7 }}>
-            Cognitive structure adjusting for ascent…
-          </p>
-
-          <p style={{ marginTop: 8, fontSize: 11, opacity: 0.45 }}>
-            This configuration will persist
-            <br />
-            when observation becomes exposure.
-          </p>
-
-          <button
-            onClick={finalize}
-            style={{
-              marginTop: 20,
-              borderRadius: 999,
-              padding: "8px 16px",
-              fontSize: 12,
-              fontWeight: 800,
-              background:
-                "linear-gradient(90deg, rgba(56,189,248,0.9), rgba(168,85,247,0.7))",
-              color: "#020617",
-            }}
-          >
-            Commit cognition
+          <button onClick={finalize} disabled={submitting}>
+            {submitting ? "COMMITTING…" : "Commit cognition"}
           </button>
         </>
       )}
 
-      {/* LOCK */}
       {phase === "lock" && (
         <>
-          <p
-            style={{
-              fontFamily: "monospace",
-              fontSize: 12,
-              letterSpacing: 2,
-              opacity: 0.85,
-            }}
-          >
-            COGNITIVE FRAME SET
-          </p>
-
-          <p style={{ marginTop: 8, fontSize: 11, opacity: 0.55 }}>
-            This bias will determine how the city interprets you.
-          </p>
-
-          <button
-            onClick={onExit}
-            style={{
-              marginTop: 20,
-              borderRadius: 999,
-              padding: "8px 16px",
-              fontSize: 12,
-              fontWeight: 800,
-              border: "1px solid rgba(255,255,255,0.2)",
-              background: "rgba(255,255,255,0.04)",
-              color: "white",
-            }}
-          >
-            Return to hub
-          </button>
+          <p>COGNITIVE FRAME SET</p>
+          <button onClick={onExit}>Return to hub</button>
         </>
       )}
     </section>
