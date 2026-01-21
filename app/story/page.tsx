@@ -73,6 +73,30 @@ function badgeTone(status: string) {
 }
 
 /**
+ * ✅ Robustly read FID from either hook shape:
+ * - returns fid directly: number|string|null
+ * - returns object: { fid: number|string|null, ... }
+ */
+function normalizeFidFromHookResult(hookResult: unknown): number | string | null {
+  if (hookResult == null) return null;
+
+  // If it returns { fid }
+  if (typeof hookResult === "object") {
+    const maybeObj = hookResult as Record<string, unknown>;
+    if ("fid" in maybeObj) {
+      const v = maybeObj.fid;
+      if (typeof v === "number" || typeof v === "string") return v;
+      return null;
+    }
+  }
+
+  // If it returns fid directly
+  if (typeof hookResult === "number" || typeof hookResult === "string") return hookResult;
+
+  return null;
+}
+
+/**
  * getBotState returns:
  * [
  *  designation(bytes7),
@@ -94,8 +118,6 @@ function badgeTone(status: string) {
  */
 function deriveProgressFromBotState(botState: unknown): CoreProgress | undefined {
   if (!botState || !Array.isArray(botState)) return undefined;
-
-  // Defensive: make sure it has at least the flags we need
   if (botState.length < 13) return undefined;
 
   const finalized = Boolean(botState[7]);
@@ -188,7 +210,7 @@ function EpisodeCard(ep: {
         <p style={{ fontSize: 12, opacity: 0.75, marginTop: 6 }}>{ep.note}</p>
 
         <button
-          disabled={locked}
+          disabled={locked || !ep.onClick}
           onClick={ep.onClick}
           style={{
             marginTop: 14,
@@ -201,7 +223,7 @@ function EpisodeCard(ep: {
               ? "rgba(255,255,255,0.08)"
               : "linear-gradient(90deg, rgba(56,189,248,0.95), rgba(168,85,247,0.85))",
             color: locked ? "rgba(255,255,255,0.6)" : "#020617",
-            cursor: locked ? "not-allowed" : "pointer",
+            cursor: locked || !ep.onClick ? "not-allowed" : "pointer",
             border: "1px solid rgba(255,255,255,0.16)",
           }}
         >
@@ -222,21 +244,25 @@ export default function StoryPage() {
   >("hub");
 
   const { address, chain } = useAccount();
-  const { fid } = useFid();
+
+  // ✅ UseFid can be either shape; normalize it safely
+  const fidHookResult = useFid();
+  const fidValue = useMemo(() => normalizeFidFromHookResult(fidHookResult), [fidHookResult]);
 
   // Keep tokenId stable as STRING; episode components convert to bigint internally.
   const fidString = useMemo(() => {
-    if (typeof fid === "number" && fid > 0) return String(fid);
-    if (typeof fid === "string" && /^\d+$/.test(fid)) return fid;
+    const fid = fidValue;
+    if (typeof fid === "number" && Number.isInteger(fid) && fid > 0) return String(fid);
+    if (typeof fid === "string" && /^\d+$/.test(fid) && fid !== "0") return fid;
     return null;
-  }, [fid]);
+  }, [fidValue]);
 
   const hasIdentity = Boolean(fidString);
 
   /* chain-safe narrowing */
   const wrongChain = chain?.id !== undefined && chain.id !== BASE_CHAIN_ID;
 
-  /* Basebot presence */
+  /* Basebot presence (NFT gate) */
   const { data: tokenUri } = useReadContract({
     ...BASEBOTS,
     functionName: "tokenURI",
@@ -249,8 +275,7 @@ export default function StoryPage() {
     tokenUri.startsWith("data:application/json;base64,");
 
   /**
-   * ✅ FIXED: Season2State ABI does NOT have getProgressFlags.
-   * Use getBotState() and derive progress flags.
+   * ✅ FIX: if your S2 ABI doesn’t have getProgressFlags, use getBotState
    */
   const { data: botState } = useReadContract({
     address: BASEBOTS_S2.address,
@@ -266,14 +291,14 @@ export default function StoryPage() {
   );
 
   /**
-   * ✅ GATING LOGIC (unchanged intent):
-   * - Having an FID alone does NOT mean they own the NFT.
-   * - Core play requires: wallet connected + Base chain + Basebot NFT detected.
+   * ✅ Answering your earlier question:
+   * Yes, someone can have an FID and NOT have the NFT.
+   * We are STILL gating core play on NFT presence via tokenURI check.
    */
   const canPlayCore = Boolean(address && hasBasebot && !wrongChain);
   const currentCore = useMemo(() => nextCoreMode(progress), [progress]);
 
-  /* Bonus unlock rules (as you requested): EP1 unlocks prologue, EP3 unlocks bonus1, EP5 unlocks bonus2 */
+  /* Bonus unlock rules: EP1 -> prologue, EP3 -> bonus1, EP5 -> bonus2 */
   const prologueUnlocked = Boolean(progress?.ep1);
   const bonus1Unlocked = Boolean(progress?.ep3);
   const bonus2Unlocked = Boolean(progress?.ep5);
@@ -310,7 +335,7 @@ export default function StoryPage() {
             A premium narrative sequence bound to your Basebot. Choices are committed on-chain.
           </p>
 
-          {/* Optional quick status line (safe + helps debugging without "tokenId==fid" verbiage) */}
+          {/* Session status (no “tokenId==fid” wording) */}
           <div
             style={{
               marginTop: 12,
