@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useAccount, usePublicClient, useWalletClient } from "wagmi";
+
+import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 
 /* ──────────────────────────────────────────────
- * Storage keys
+ * Storage keys (cosmetic only)
  * ────────────────────────────────────────────── */
 
-const EP3_STATE_KEY = "basebots_ep3_state_v1";
-const EP4_KEY = "basebots_ep4_profile_v1";
-const EP4_DONE_KEY = "basebots_ep4_done";
 const SOUND_KEY = "basebots_ep4_sound";
 
 /* ──────────────────────────────────────────────
@@ -17,9 +17,11 @@ const SOUND_KEY = "basebots_ep4_sound";
 
 type Phase = "intro" | "analysis" | "projection" | "lock";
 
-type Ep3State = {
-  cognitionBias?: "DETERMINISTIC" | "ARCHIVAL" | "PRAGMATIC" | "PARANOID";
-};
+type CognitionBias =
+  | "DETERMINISTIC"
+  | "ARCHIVAL"
+  | "PRAGMATIC"
+  | "PARANOID";
 
 type Profile =
   | "EXECUTOR"
@@ -31,15 +33,7 @@ type Profile =
  * Helpers
  * ────────────────────────────────────────────── */
 
-function loadEp3(): Ep3State {
-  try {
-    return JSON.parse(localStorage.getItem(EP3_STATE_KEY) || "{}");
-  } catch {
-    return {};
-  }
-}
-
-function biasToProfile(bias?: Ep3State["cognitionBias"]): Profile {
+function biasToProfile(bias?: CognitionBias): Profile {
   switch (bias) {
     case "DETERMINISTIC":
       return "EXECUTOR";
@@ -71,26 +65,86 @@ function profileDescription(profile: Profile): string {
  * Component
  * ────────────────────────────────────────────── */
 
-export default function EpisodeFour({ onExit }: { onExit: () => void }) {
-  const ep3 = useMemo(() => loadEp3(), []);
+export default function EpisodeFour({
+  tokenId,
+  onExit,
+}: {
+  tokenId: bigint;
+  onExit: () => void;
+}) {
+  const [phase, setPhase] = useState<Phase>("intro");
+  const [submitting, setSubmitting] = useState(false);
+  const [alreadySet, setAlreadySet] = useState(false);
+
+  /* ───────── wagmi ───────── */
+  const { address, chain } = useAccount();
+  const publicClient = usePublicClient();
+  const { data: walletClient } = useWalletClient();
+  const isBase = chain?.id === 8453;
+
+  const ready =
+    !!address && !!walletClient && !!publicClient && !!tokenId && isBase;
+
+  /* ───────── read on-chain state ───────── */
+  const [cognitionBias, setCognitionBias] = useState<CognitionBias | undefined>();
+
+  useEffect(() => {
+    if (!publicClient || !tokenId) return;
+
+    (async () => {
+      try {
+        const state = (await publicClient.readContract({
+          address: BASEBOTS_S2.address,
+          abi: BASEBOTS_S2.abi,
+          functionName: "getBotState",
+          args: [tokenId],
+        })) as any;
+
+        if (state?.ep4Set) {
+          setAlreadySet(true);
+          setPhase("lock");
+        }
+
+        if (state?.cognitionBias) {
+          setCognitionBias(state.cognitionBias);
+        }
+      } catch {
+        // silent
+      }
+    })();
+  }, [tokenId, publicClient]);
+
   const profile = useMemo(
-    () => biasToProfile(ep3.cognitionBias),
-    [ep3.cognitionBias]
+    () => biasToProfile(cognitionBias),
+    [cognitionBias]
   );
 
-  const [phase, setPhase] = useState<Phase>("intro");
+  /* ───────── sound ───────── */
   const [soundOn, setSoundOn] = useState(
     () => localStorage.getItem(SOUND_KEY) !== "off"
   );
 
-  /* ── ambient audio ── */
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
   useEffect(() => {
     const audio = new Audio("/audio/s4.mp3");
     audio.loop = true;
     audio.volume = 0.45;
+    audioRef.current = audio;
 
     if (soundOn) audio.play().catch(() => {});
     return () => audio.pause();
+  }, []);
+
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+    if (!soundOn) {
+      a.pause();
+      a.currentTime = 0;
+      return;
+    }
+    a.play().catch(() => {});
   }, [soundOn]);
 
   function toggleSound() {
@@ -99,19 +153,30 @@ export default function EpisodeFour({ onExit }: { onExit: () => void }) {
     localStorage.setItem(SOUND_KEY, next ? "on" : "off");
   }
 
-  function finalize() {
-    localStorage.setItem(
-      EP4_KEY,
-      JSON.stringify({
-        profile,
-        derivedFrom: ep3.cognitionBias ?? "UNKNOWN",
-        assignedAt: Date.now(),
-      })
-    );
+  /* ───────── commit profile (ON-CHAIN) ───────── */
+  async function finalize() {
+    if (alreadySet || submitting) return;
+    if (!ready || !profile) return;
 
-    localStorage.setItem(EP4_DONE_KEY, "true");
-    window.dispatchEvent(new Event("basebots-progress-updated"));
-    setPhase("lock");
+    setSubmitting(true);
+
+    try {
+      const hash = await walletClient!.writeContract({
+        address: BASEBOTS_S2.address,
+        abi: BASEBOTS_S2.abi,
+        functionName: "setEpisode4Profile",
+        args: [tokenId, profile],
+      });
+
+      await publicClient!.waitForTransactionReceipt({ hash });
+
+      window.dispatchEvent(new Event("basebots-progress-updated"));
+      setPhase("lock");
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -142,32 +207,12 @@ export default function EpisodeFour({ onExit }: { onExit: () => void }) {
         }}
       />
 
-      {/* top controls */}
+      {/* controls */}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-        <button
-          onClick={toggleSound}
-          style={{
-            borderRadius: 999,
-            border: "1px solid rgba(255,255,255,0.2)",
-            padding: "4px 10px",
-            fontSize: 11,
-            background: "rgba(255,255,255,0.04)",
-            color: "white",
-          }}
-        >
+        <button onClick={toggleSound} style={{ fontSize: 11 }}>
           SOUND {soundOn ? "ON" : "OFF"}
         </button>
-        <button
-          onClick={onExit}
-          style={{
-            borderRadius: 999,
-            border: "1px solid rgba(255,255,255,0.2)",
-            padding: "4px 10px",
-            fontSize: 11,
-            background: "rgba(255,255,255,0.04)",
-            color: "white",
-          }}
-        >
+        <button onClick={onExit} style={{ fontSize: 11 }}>
           Exit
         </button>
       </div>
@@ -183,29 +228,7 @@ export default function EpisodeFour({ onExit }: { onExit: () => void }) {
             You are no longer being observed for accuracy.
           </p>
 
-          <p style={{ marginTop: 8, fontSize: 13, opacity: 0.6 }}>
-            You are being evaluated for compatibility.
-          </p>
-
-          <p style={{ marginTop: 10, fontSize: 12, opacity: 0.5 }}>
-            Higher systems cannot adapt to you.
-            <br />
-            You must adapt to them.
-          </p>
-
-          <button
-            onClick={() => setPhase("analysis")}
-            style={{
-              marginTop: 20,
-              borderRadius: 999,
-              padding: "8px 16px",
-              fontSize: 12,
-              fontWeight: 800,
-              background:
-                "linear-gradient(90deg, rgba(56,189,248,0.9), rgba(168,85,247,0.7))",
-              color: "#020617",
-            }}
-          >
+          <button onClick={() => setPhase("analysis")} style={{ marginTop: 20 }}>
             Continue
           </button>
         </>
@@ -230,30 +253,10 @@ export default function EpisodeFour({ onExit }: { onExit: () => void }) {
               border: "1px solid rgba(255,255,255,0.18)",
             }}
           >
-            {ep3.cognitionBias ?? "UNCLASSIFIED"}
+            {cognitionBias ?? "UNCLASSIFIED"}
           </div>
 
-          <p style={{ marginTop: 12, fontSize: 12, opacity: 0.55 }}>
-            This pattern is now considered stable.
-          </p>
-
-          <p style={{ marginTop: 8, fontSize: 12, opacity: 0.45 }}>
-            Stability is required for elevation.
-          </p>
-
-          <button
-            onClick={() => setPhase("projection")}
-            style={{
-              marginTop: 20,
-              borderRadius: 999,
-              padding: "8px 16px",
-              fontSize: 12,
-              fontWeight: 800,
-              border: "1px solid rgba(255,255,255,0.2)",
-              background: "rgba(255,255,255,0.04)",
-              color: "white",
-            }}
-          >
+          <button onClick={() => setPhase("projection")} style={{ marginTop: 20 }}>
             Simulate surface conditions
           </button>
         </>
@@ -277,13 +280,7 @@ export default function EpisodeFour({ onExit }: { onExit: () => void }) {
               border: "1px solid rgba(255,255,255,0.18)",
             }}
           >
-            <div
-              style={{
-                fontSize: 18,
-                fontWeight: 800,
-                letterSpacing: 3,
-              }}
-            >
+            <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: 3 }}>
               {profile}
             </div>
             <div style={{ marginTop: 6, fontSize: 12, opacity: 0.6 }}>
@@ -291,30 +288,12 @@ export default function EpisodeFour({ onExit }: { onExit: () => void }) {
             </div>
           </div>
 
-          <p style={{ marginTop: 14, fontSize: 12, opacity: 0.55 }}>
-            This role limits what you may become —
-            <br />
-            so that you may be allowed to exist.
-          </p>
-
-          <p style={{ marginTop: 8, fontSize: 12, opacity: 0.45 }}>
-            Base City does not negotiate with uncertainty.
-          </p>
-
           <button
             onClick={finalize}
-            style={{
-              marginTop: 20,
-              borderRadius: 999,
-              padding: "8px 16px",
-              fontSize: 12,
-              fontWeight: 800,
-              background:
-                "linear-gradient(90deg, rgba(168,85,247,0.85), rgba(56,189,248,0.85))",
-              color: "#020617",
-            }}
+            disabled={submitting}
+            style={{ marginTop: 20 }}
           >
-            Authorize profile
+            {submitting ? "AUTHORIZING…" : "Authorize profile"}
           </button>
         </>
       )}
@@ -322,38 +301,11 @@ export default function EpisodeFour({ onExit }: { onExit: () => void }) {
       {/* LOCK */}
       {phase === "lock" && (
         <>
-          <p
-            style={{
-              fontFamily: "monospace",
-              fontSize: 12,
-              letterSpacing: 2,
-              opacity: 0.85,
-            }}
-          >
+          <p style={{ fontFamily: "monospace", fontSize: 12, letterSpacing: 2 }}>
             SURFACE PROFILE REGISTERED
           </p>
 
-          <p style={{ marginTop: 10, fontSize: 11, opacity: 0.55 }}>
-            Your next transition will not be internal.
-          </p>
-
-          <p style={{ marginTop: 6, fontSize: 11, opacity: 0.45 }}>
-            You will be seen.
-          </p>
-
-          <button
-            onClick={onExit}
-            style={{
-              marginTop: 20,
-              borderRadius: 999,
-              padding: "8px 16px",
-              fontSize: 12,
-              fontWeight: 800,
-              border: "1px solid rgba(255,255,255,0.2)",
-              background: "rgba(255,255,255,0.04)",
-              color: "white",
-            }}
-          >
+          <button onClick={onExit} style={{ marginTop: 20 }}>
             Return to hub
           </button>
         </>
