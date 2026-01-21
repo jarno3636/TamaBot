@@ -6,7 +6,7 @@ import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 
 /* ──────────────────────────────────────────────
- * Storage keys (cosmetic only)
+ * Storage
  * ────────────────────────────────────────────── */
 
 const SOUND_KEY = "basebots_ep5_sound";
@@ -25,6 +25,19 @@ type Outcome =
 /* ──────────────────────────────────────────────
  * Helpers
  * ────────────────────────────────────────────── */
+
+function normalizeTokenId(input: string | number | bigint): bigint | null {
+  try {
+    if (typeof input === "bigint") return input;
+    if (typeof input === "number")
+      return Number.isFinite(input) ? BigInt(Math.floor(input)) : null;
+    if (typeof input === "string" && input.trim())
+      return BigInt(input.trim());
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 function deriveOutcome(
   directive?: string,
@@ -45,48 +58,81 @@ export default function EpisodeFive({
   tokenId,
   onExit,
 }: {
-  tokenId: bigint;
+  tokenId: string | number | bigint;
   onExit: () => void;
 }) {
+  /* ───────── hydration ───────── */
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
+
+  const tokenIdBig = useMemo(() => normalizeTokenId(tokenId), [tokenId]);
+
+  /* ───────── wagmi ───────── */
   const { address, chain } = useAccount();
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
   const isBase = chain?.id === 8453;
 
   const ready =
-    !!address && !!walletClient && !!publicClient && !!tokenId && isBase;
+    Boolean(address && walletClient && publicClient && isBase && tokenIdBig);
 
+  /* ───────── chain state ───────── */
+  const [directive, setDirective] = useState<string>();
+  const [profile, setProfile] = useState<string>();
   const [alreadySet, setAlreadySet] = useState(false);
+  const [chainStatus, setChainStatus] = useState("Idle");
+
+  /* ───────── residual ───────── */
   const [showResidual, setShowResidual] = useState(false);
   const lingerTimer = useRef<number | null>(null);
 
-  /* ───────── read chain state ───────── */
-  const [directive, setDirective] = useState<string>();
-  const [profile, setProfile] = useState<string>();
-
+  /* ───────── read chain ───────── */
   useEffect(() => {
-    if (!publicClient || !tokenId) return;
+    if (!publicClient || !tokenIdBig) return;
+
+    let cancelled = false;
 
     (async () => {
       try {
-        const state = (await publicClient.readContract({
+        setChainStatus("Reading chain…");
+
+        const state: any = await publicClient.readContract({
           address: BASEBOTS_S2.address,
           abi: BASEBOTS_S2.abi,
           functionName: "getBotState",
-          args: [tokenId],
-        })) as any;
+          args: [tokenIdBig],
+        });
 
-        setDirective(state?.ep1Directive);
+        if (cancelled) return;
+
+        setDirective(
+          state?.ep1Directive ??
+            state?.directive ??
+            state?.episode1Directive
+        );
+
         setProfile(state?.profile);
 
-        if (state?.ep5Set) {
+        const ep5 =
+          state?.ep5Set ??
+          state?.episode5Set ??
+          (Array.isArray(state) ? state[5] : false);
+
+        if (ep5) {
           setAlreadySet(true);
+          setChainStatus("Outcome finalized");
+        } else {
+          setChainStatus("Outcome pending");
         }
       } catch {
-        // silent
+        if (!cancelled) setChainStatus("Chain read failed");
       }
     })();
-  }, [tokenId, publicClient]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [publicClient, tokenIdBig]);
 
   const outcome = useMemo(
     () => deriveOutcome(directive, profile),
@@ -94,46 +140,79 @@ export default function EpisodeFive({
   );
 
   /* ───────── sound ───────── */
-  const [soundOn, setSoundOn] = useState(
-    () => localStorage.getItem(SOUND_KEY) !== "off"
-  );
+  const [soundOn, setSoundOn] = useState(() => {
+    try {
+      return localStorage.getItem(SOUND_KEY) !== "off";
+    } catch {
+      return true;
+    }
+  });
+
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    const audio = new Audio("/audio/s5.mp3");
-    audio.loop = true;
-    audio.volume = 0.5;
-    if (soundOn) audio.play().catch(() => {});
-    return () => audio.pause();
-  }, [soundOn]);
+    const a = new Audio("/audio/s5.mp3");
+    a.loop = true;
+    a.volume = 0.5;
+    audioRef.current = a;
+    if (soundOn) a.play().catch(() => {});
+    return () => {
+      try {
+        a.pause();
+        a.src = "";
+      } catch {}
+      audioRef.current = null;
+    };
+  }, []);
 
-  function toggleSound() {
-    const next = !soundOn;
-    setSoundOn(next);
-    localStorage.setItem(SOUND_KEY, next ? "on" : "off");
-  }
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+    if (!soundOn) {
+      a.pause();
+      a.currentTime = 0;
+    } else {
+      a.play().catch(() => {});
+    }
+    try {
+      localStorage.setItem(SOUND_KEY, soundOn ? "on" : "off");
+    } catch {}
+  }, [soundOn]);
 
   /* ───────── finalize once (ON-CHAIN) ───────── */
   useEffect(() => {
     if (!ready || alreadySet) return;
 
+    let cancelled = false;
+
     (async () => {
       try {
+        setChainStatus("Finalizing outcome…");
+
         const hash = await walletClient!.writeContract({
           address: BASEBOTS_S2.address,
           abi: BASEBOTS_S2.abi,
           functionName: "setEpisode5Outcome",
-          args: [tokenId, outcome],
+          args: [tokenIdBig!, outcome],
         });
 
         await publicClient!.waitForTransactionReceipt({ hash });
-        window.dispatchEvent(new Event("basebots-progress-updated"));
+
+        if (!cancelled) {
+          setChainStatus("Outcome committed");
+          window.dispatchEvent(new Event("basebots-progress-updated"));
+        }
       } catch {
-        // silent
+        if (!cancelled) setChainStatus("Finalization failed");
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [ready, alreadySet, outcome]);
 
-  /* ───────── bonus residual (ON-CHAIN BIT) ───────── */
+  /* ───────── residual unlock ───────── */
   useEffect(() => {
     if (alreadySet) return;
 
@@ -159,7 +238,7 @@ export default function EpisodeFive({
         address: BASEBOTS_S2.address,
         abi: BASEBOTS_S2.abi,
         functionName: "setBonusBit",
-        args: [tokenId, 2], // BONUS2_BIT
+        args: [tokenIdBig!, 2],
       });
 
       await publicClient!.waitForTransactionReceipt({ hash });
@@ -170,8 +249,7 @@ export default function EpisodeFive({
     }
   }
 
-  /* ────────────────────────────────────────────── */
-
+  /* ───────── ending text ───────── */
   function renderEnding() {
     switch (outcome) {
       case "FLAGGED":
@@ -212,12 +290,23 @@ export default function EpisodeFive({
     }
   }
 
+  /* ────────────────────────────────────────────── */
+
   return (
     <section style={container}>
       <div aria-hidden style={scanlines} />
 
+      {/* boot console */}
+      <div style={{ fontSize: 11, opacity: 0.75 }}>
+        Boot: {hydrated ? "hydrated" : "hydrating"} • tokenId:{" "}
+        <b>{tokenIdBig ? tokenIdBig.toString() : "INVALID"}</b> • chain:{" "}
+        <b>{isBase ? "Base" : chain?.id ?? "none"}</b> • status:{" "}
+        <b>{chainStatus}</b>
+      </div>
+
+      {/* controls */}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-        <button onClick={toggleSound} style={controlBtn}>
+        <button onClick={() => setSoundOn((s) => !s)} style={controlBtn}>
           SOUND {soundOn ? "ON" : "OFF"}
         </button>
         <button onClick={onExit} style={controlBtn}>
@@ -225,11 +314,11 @@ export default function EpisodeFive({
         </button>
       </div>
 
-      <h2 style={{ marginTop: 16, fontSize: 20, fontWeight: 800 }}>
+      <h2 style={{ marginTop: 18, fontSize: 20, fontWeight: 900 }}>
         BASE CITY
       </h2>
 
-      <div style={{ marginTop: 18, fontSize: 14, opacity: 0.85 }}>
+      <div style={{ marginTop: 18, fontSize: 14, opacity: 0.88 }}>
         {renderEnding()}
       </div>
 
@@ -258,7 +347,7 @@ const container = {
   padding: 26,
   color: "white",
   background:
-    "radial-gradient(1200px 480px at 50% -10%, rgba(52,211,153,0.10), transparent 60%), linear-gradient(180deg, rgba(2,6,23,0.98), rgba(2,6,23,0.78))",
+    "radial-gradient(1200px 480px at 50% -10%, rgba(52,211,153,0.12), transparent 60%), linear-gradient(180deg, rgba(2,6,23,0.98), rgba(2,6,23,0.78))",
   boxShadow: "0 70px 260px rgba(0,0,0,0.95)",
 };
 
@@ -282,10 +371,10 @@ const controlBtn = {
 };
 
 const outcomeBox = {
-  marginTop: 20,
+  marginTop: 22,
   borderRadius: 18,
   padding: "14px",
-  fontFamily: "monospace",
+  fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
   fontSize: 13,
   letterSpacing: 2,
   background: "rgba(0,0,0,0.45)",
@@ -314,7 +403,7 @@ const residualBtn = {
 };
 
 const exitBtn = {
-  marginTop: 22,
+  marginTop: 24,
   borderRadius: 999,
   padding: "8px 18px",
   fontSize: 12,
