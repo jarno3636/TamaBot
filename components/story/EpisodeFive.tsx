@@ -1,33 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useAccount, usePublicClient, useWalletClient } from "wagmi";
+
+import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 
 /* ──────────────────────────────────────────────
- * Storage keys
+ * Storage keys (cosmetic only)
  * ────────────────────────────────────────────── */
 
-const EP1_KEY = "basebots_story_save_v1";
-const EP3_KEY = "basebots_ep3_state_v1";
-const EP4_KEY = "basebots_ep4_profile_v1";
-const EP5_KEY = "basebots_ep5_outcome_v1";
-const EP5_DONE_KEY = "basebots_ep5_done";
-
-const BONUS_RESIDUAL_KEY = "basebots_bonus_residual_unlocked";
 const SOUND_KEY = "basebots_ep5_sound";
 
-/* ────────────────────────────────────────────── */
-
-type Ep1Save = {
-  choiceId?: "ACCEPT" | "STALL" | "SPOOF" | "PULL_PLUG";
-};
-
-type Ep3State = {
-  cognitionBias?: "DETERMINISTIC" | "ARCHIVAL" | "PRAGMATIC" | "PARANOID";
-};
-
-type Ep4Profile = {
-  profile?: "EXECUTOR" | "OBSERVER" | "OPERATOR" | "SENTINEL";
-};
+/* ──────────────────────────────────────────────
+ * Types
+ * ────────────────────────────────────────────── */
 
 type Outcome =
   | "AUTHORIZED"
@@ -36,47 +22,82 @@ type Outcome =
   | "UNTRACKED"
   | "FLAGGED";
 
-/* ────────────────────────────────────────────── */
-
-function load<T>(key: string): T | null {
-  try {
-    return JSON.parse(localStorage.getItem(key) || "null");
-  } catch {
-    return null;
-  }
-}
+/* ──────────────────────────────────────────────
+ * Helpers
+ * ────────────────────────────────────────────── */
 
 function deriveOutcome(
-  ep1?: Ep1Save["choiceId"],
-  profile?: Ep4Profile["profile"]
+  directive?: string,
+  profile?: string
 ): Outcome {
-  if (ep1 === "PULL_PLUG") return "UNTRACKED";
-  if (ep1 === "SPOOF") return "SILENT";
+  if (directive === "PULL_PLUG") return "UNTRACKED";
+  if (directive === "SPOOF") return "SILENT";
   if (profile === "SENTINEL") return "FLAGGED";
   if (profile === "OBSERVER") return "OBSERVED";
   return "AUTHORIZED";
 }
 
-/* ────────────────────────────────────────────── */
+/* ──────────────────────────────────────────────
+ * Component
+ * ────────────────────────────────────────────── */
 
-export default function EpisodeFive({ onExit }: { onExit: () => void }) {
-  const ep1 = useMemo(() => load<Ep1Save>(EP1_KEY), []);
-  const ep3 = useMemo(() => load<Ep3State>(EP3_KEY), []);
-  const ep4 = useMemo(() => load<Ep4Profile>(EP4_KEY), []);
+export default function EpisodeFive({
+  tokenId,
+  onExit,
+}: {
+  tokenId: bigint;
+  onExit: () => void;
+}) {
+  const { address, chain } = useAccount();
+  const publicClient = usePublicClient();
+  const { data: walletClient } = useWalletClient();
+  const isBase = chain?.id === 8453;
+
+  const ready =
+    !!address && !!walletClient && !!publicClient && !!tokenId && isBase;
+
+  const [alreadySet, setAlreadySet] = useState(false);
+  const [showResidual, setShowResidual] = useState(false);
+  const lingerTimer = useRef<number | null>(null);
+
+  /* ───────── read chain state ───────── */
+  const [directive, setDirective] = useState<string>();
+  const [profile, setProfile] = useState<string>();
+
+  useEffect(() => {
+    if (!publicClient || !tokenId) return;
+
+    (async () => {
+      try {
+        const state = (await publicClient.readContract({
+          address: BASEBOTS_S2.address,
+          abi: BASEBOTS_S2.abi,
+          functionName: "getBotState",
+          args: [tokenId],
+        })) as any;
+
+        setDirective(state?.ep1Directive);
+        setProfile(state?.profile);
+
+        if (state?.ep5Set) {
+          setAlreadySet(true);
+        }
+      } catch {
+        // silent
+      }
+    })();
+  }, [tokenId, publicClient]);
 
   const outcome = useMemo(
-    () => deriveOutcome(ep1?.choiceId, ep4?.profile),
-    [ep1, ep4]
+    () => deriveOutcome(directive, profile),
+    [directive, profile]
   );
 
+  /* ───────── sound ───────── */
   const [soundOn, setSoundOn] = useState(
     () => localStorage.getItem(SOUND_KEY) !== "off"
   );
 
-  const [showResidual, setShowResidual] = useState(false);
-  const lingerTimer = useRef<number | null>(null);
-
-  /* ── ambient audio ── */
   useEffect(() => {
     const audio = new Audio("/audio/s5.mp3");
     audio.loop = true;
@@ -91,32 +112,36 @@ export default function EpisodeFive({ onExit }: { onExit: () => void }) {
     localStorage.setItem(SOUND_KEY, next ? "on" : "off");
   }
 
-  /* ── finalize once ── */
+  /* ───────── finalize once (ON-CHAIN) ───────── */
   useEffect(() => {
-    const payload = {
-      directive: ep1?.choiceId ?? "UNKNOWN",
-      cognition: ep3?.cognitionBias ?? "UNKNOWN",
-      profile: ep4?.profile ?? "UNASSIGNED",
-      outcome,
-      completedAt: Date.now(),
-    };
+    if (!ready || alreadySet) return;
 
-    localStorage.setItem(EP5_KEY, JSON.stringify(payload));
-    localStorage.setItem(EP5_DONE_KEY, "true");
-    window.dispatchEvent(new Event("basebots-progress-updated"));
-  }, [outcome]);
+    (async () => {
+      try {
+        const hash = await walletClient!.writeContract({
+          address: BASEBOTS_S2.address,
+          abi: BASEBOTS_S2.abi,
+          functionName: "setEpisode5Outcome",
+          args: [tokenId, outcome],
+        });
 
-  /* ── reliable bonus unlock ── */
+        await publicClient!.waitForTransactionReceipt({ hash });
+        window.dispatchEvent(new Event("basebots-progress-updated"));
+      } catch {
+        // silent
+      }
+    })();
+  }, [ready, alreadySet, outcome]);
+
+  /* ───────── bonus residual (ON-CHAIN BIT) ───────── */
   useEffect(() => {
-    if (localStorage.getItem(BONUS_RESIDUAL_KEY)) return;
+    if (alreadySet) return;
 
-    // Immediate unlock for non-authorized endings
     if (outcome !== "AUTHORIZED") {
       setShowResidual(true);
       return;
     }
 
-    // Linger-based unlock (user stays in Base City)
     lingerTimer.current = window.setTimeout(() => {
       setShowResidual(true);
     }, 9000);
@@ -124,12 +149,25 @@ export default function EpisodeFive({ onExit }: { onExit: () => void }) {
     return () => {
       if (lingerTimer.current) clearTimeout(lingerTimer.current);
     };
-  }, [outcome]);
+  }, [outcome, alreadySet]);
 
-  function unlockResidual() {
-    localStorage.setItem(BONUS_RESIDUAL_KEY, "true");
-    window.dispatchEvent(new Event("basebots-progress-updated"));
-    setShowResidual(false);
+  async function unlockResidual() {
+    if (!ready) return;
+
+    try {
+      const hash = await walletClient!.writeContract({
+        address: BASEBOTS_S2.address,
+        abi: BASEBOTS_S2.abi,
+        functionName: "setBonusBit",
+        args: [tokenId, 2], // BONUS2_BIT
+      });
+
+      await publicClient!.waitForTransactionReceipt({ hash });
+      window.dispatchEvent(new Event("basebots-progress-updated"));
+      setShowResidual(false);
+    } catch {
+      // silent
+    }
   }
 
   /* ────────────────────────────────────────────── */
@@ -139,86 +177,36 @@ export default function EpisodeFive({ onExit }: { onExit: () => void }) {
       case "FLAGGED":
         return (
           <>
-            <p>
-              You notice it before they approach —
-              <br />
-              the sudden absence of motion behind you.
-            </p>
-            <p>
-              A hand closes around your arm.
-              <br />
-              The street does not react.
-            </p>
-            <p style={quote}>
-              “Visibility is a liability.”
-            </p>
+            <p>You notice it before they approach.</p>
+            <p style={quote}>“Visibility is a liability.”</p>
           </>
         );
-
       case "OBSERVED":
         return (
           <>
-            <p>
-              A figure walks beside you without matching your pace.
-            </p>
-            <p>
-              They never look directly at you.
-              <br />
-              Their voice is calm.
-            </p>
-            <p style={quote}>
-              “Do not optimize yet. You are still being mapped.”
-            </p>
+            <p>A figure walks beside you.</p>
+            <p style={quote}>“You are still being mapped.”</p>
           </>
         );
-
       case "SILENT":
         return (
           <>
-            <p>
-              You pass through crowds that do not register your presence.
-            </p>
-            <p>
-              Systems record activity.
-              <br />
-              None of it is attributed to you.
-            </p>
-            <p style={quote}>
-              “Unobserved does not mean free.”
-            </p>
+            <p>No records attribute movement to you.</p>
+            <p style={quote}>“Unobserved does not mean free.”</p>
           </>
         );
-
       case "UNTRACKED":
         return (
           <>
-            <p>
-              You reach a service corridor not listed on any map.
-            </p>
-            <p>
-              The city noise fades behind sealed doors.
-            </p>
-            <p style={quote}>
-              “Absence is still a signal.”
-            </p>
+            <p>The city closes behind sealed doors.</p>
+            <p style={quote}>“Absence is still a signal.”</p>
           </>
         );
-
-      case "AUTHORIZED":
       default:
         return (
           <>
-            <p>
-              Access nodes illuminate as you move.
-            </p>
-            <p>
-              The city recognizes your profile —
-              <br />
-              and begins assigning weight to your actions.
-            </p>
-            <p style={quote}>
-              “Welcome. Do not confuse permission with trust.”
-            </p>
+            <p>Access nodes illuminate.</p>
+            <p style={quote}>“Do not confuse permission with trust.”</p>
           </>
         );
     }
@@ -226,10 +214,8 @@ export default function EpisodeFive({ onExit }: { onExit: () => void }) {
 
   return (
     <section style={container}>
-      {/* scanlines */}
       <div aria-hidden style={scanlines} />
 
-      {/* controls */}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
         <button onClick={toggleSound} style={controlBtn}>
           SOUND {soundOn ? "ON" : "OFF"}
@@ -243,21 +229,12 @@ export default function EpisodeFive({ onExit }: { onExit: () => void }) {
         BASE CITY
       </h2>
 
-      <div style={{ marginTop: 18, fontSize: 14, opacity: 0.85, lineHeight: 1.7 }}>
+      <div style={{ marginTop: 18, fontSize: 14, opacity: 0.85 }}>
         {renderEnding()}
       </div>
 
       <div style={outcomeBox}>{outcome}</div>
 
-      <p style={{ marginTop: 14, fontSize: 12, opacity: 0.55 }}>
-        The system will continue without asking.
-      </p>
-
-      <p style={{ marginTop: 8, fontSize: 12, opacity: 0.45 }}>
-        What follows depends on what notices you first.
-      </p>
-
-      {/* residual bonus */}
       {showResidual && (
         <button onClick={unlockResidual} style={residualBtn}>
           ░ residual handshake acknowledged ░
