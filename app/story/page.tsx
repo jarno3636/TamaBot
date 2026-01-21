@@ -67,7 +67,9 @@ function nextCoreMode(flags?: {
  * ───────────────────────────────────────────── */
 
 export default function StoryPage() {
-  const [mode, setMode] = useState<any>("hub");
+  const [mode, setMode] = useState<
+    "hub" | "prologue" | "ep1" | "ep2" | "ep3" | "ep4" | "ep5" | "bonus"
+  >("hub");
 
   const { address, chain } = useAccount();
   const fid = useFid();
@@ -88,6 +90,7 @@ export default function StoryPage() {
   const { data: tokenUri } = useReadContract({
     ...BASEBOTS,
     functionName: "tokenURI",
+    // wagmi requires args present when enabled; keep undefined when not ready
     args: tokenId ? ([tokenId] as unknown as [bigint]) : undefined,
     query: { enabled: hasToken },
   });
@@ -137,7 +140,7 @@ export default function StoryPage() {
 
   /* ── Core gating ── */
 
-  const canPlayCore = hasBasebot && !wrongChain;
+  const canPlayCore = Boolean(address) && hasBasebot && !wrongChain;
 
   const ep1Unlocked = true;
   const ep2Unlocked = canPlayCore && Boolean(progress?.ep1);
@@ -152,38 +155,37 @@ export default function StoryPage() {
 
   const currentCore = useMemo(() => nextCoreMode(progress), [progress]);
 
-  /* ───────────────── ROUTE ───────────────── */
-
-  if (mode !== "hub") {
-    const map: any = {
-      prologue: <PrologueSilenceInDarkness onExit={() => setMode("hub")} />,
-      ep1: tokenId ? <EpisodeOne tokenId={tokenId} onExit={() => setMode("hub")} /> : null,
-      ep2: tokenId ? <EpisodeTwo tokenId={tokenId} onExit={() => setMode("hub")} /> : null,
-      ep3: <EpisodeThree onExit={() => setMode("hub")} />,
-      ep4: <EpisodeFour onExit={() => setMode("hub")} />,
-      ep5: <EpisodeFive onExit={() => setMode("hub")} />,
-      bonus: <BonusEcho onExit={() => setMode("hub")} />,
-    };
-
-    return map[mode] ?? null;
-  }
-
   /* ── Top status strip ── */
-
   const topStatus = useMemo(() => {
-    if (!address) return { title: "Connect wallet", detail: "A link is required to read the archive." };
-    if (!hasToken) return { title: "FID not found", detail: "TokenId is derived from your Farcaster FID." };
-    if (wrongChain) return { title: "Wrong network", detail: "Switch to Base to access Core Memory." };
-    if (!hasBasebot) return { title: "No Basebot detected", detail: "Mint a Basebot to unlock Core Memory." };
+    if (!address)
+      return {
+        title: "Connect wallet",
+        detail: "A link is required to read the archive.",
+      };
+    if (!hasToken)
+      return {
+        title: "FID not found",
+        detail: "TokenId is derived from your Farcaster FID.",
+      };
+    if (wrongChain)
+      return {
+        title: "Wrong network",
+        detail: "Switch to Base to access Core Memory.",
+      };
+    if (!hasBasebot)
+      return {
+        title: "No Basebot detected",
+        detail: "Mint a Basebot to unlock Core Memory.",
+      };
     return {
       title: "Link established",
       detail: `Basebot #${tokenId?.toString()} recognized. Core Memory available.`,
     };
-  }, [address, hasToken, wrongChain, hasBasebot, tokenId])
+  }, [address, hasToken, wrongChain, hasBasebot, tokenId]);
 
   /* card renderer (supports “distorted locked” + size tiers) */
   function EpisodeCard(ep: {
-    id: any;
+    id: "prologue" | "ep1" | "ep2" | "ep3" | "ep4" | "ep5" | "bonus" | "bonus2" | null;
     title: string;
     note: string;
     img: string;
@@ -207,8 +209,10 @@ export default function StoryPage() {
     const lockedFilter =
       "grayscale(0.7) brightness(0.65) contrast(1.25) saturate(0.7)";
     const lockedImgFilter = locked ? lockedFilter : "none";
-
     const lockedOverlayOpacity = locked ? 0.55 : 0.0;
+
+    // disable click for placeholder ids like "bonus2"
+    const isClickable = Boolean(ep.id) && ep.id !== "bonus2" && !locked;
 
     return (
       <article
@@ -217,10 +221,9 @@ export default function StoryPage() {
         style={{
           borderRadius: cardRadius,
           overflow: "hidden",
-          background:
-            ep.isMeta
-              ? "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.35))"
-              : "rgba(0,0,0,0.35)",
+          background: ep.isMeta
+            ? "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.35))"
+            : "rgba(0,0,0,0.35)",
           border: locked
             ? "1px solid rgba(255,255,255,0.12)"
             : "1px solid rgba(56,189,248,0.34)",
@@ -309,13 +312,22 @@ export default function StoryPage() {
             {ep.title}
           </h2>
 
-          <p style={{ fontSize: 12, opacity: 0.72, marginTop: 6, lineHeight: 1.35 }}>
+          <p
+            style={{
+              fontSize: 12,
+              opacity: 0.72,
+              marginTop: 6,
+              lineHeight: 1.35,
+            }}
+          >
             {ep.note}
           </p>
 
           <button
-            disabled={locked || !ep.id}
-            onClick={() => ep.id && setMode(ep.id)}
+            disabled={!isClickable}
+            onClick={() => {
+              if (ep.id && ep.id !== "bonus2") setMode(ep.id as any);
+            }}
             style={{
               marginTop: 12,
               width: "100%",
@@ -328,13 +340,15 @@ export default function StoryPage() {
                 ? "rgba(255,255,255,0.06)"
                 : "linear-gradient(90deg, rgba(56,189,248,0.95), rgba(168,85,247,0.85))",
               color: locked ? "rgba(255,255,255,0.60)" : "#020617",
-              cursor: locked || !ep.id ? "not-allowed" : "pointer",
+              cursor: !isClickable ? "not-allowed" : "pointer",
               textTransform: "none",
               letterSpacing: 0.2,
             }}
             aria-label={locked ? `${ep.title} locked` : `Open ${ep.title}`}
           >
-            {locked ? status : ep.cta ?? (ep.isBonus ? "▶ Read Archive" : "▶ Enter Episode")}
+            {locked
+              ? status
+              : ep.cta ?? (ep.isBonus ? "▶ Read Archive" : "▶ Enter Episode")}
           </button>
 
           {/* small helper line for gate clarity */}
@@ -351,7 +365,7 @@ export default function StoryPage() {
   /* UI sections */
   const coreEpisodes = [
     {
-      id: "ep1",
+      id: "ep1" as const,
       title: "Awakening Protocol",
       unlocked: ep1Unlocked,
       done: Boolean(progress?.ep1),
@@ -363,7 +377,7 @@ export default function StoryPage() {
       cta: "▶ Begin",
     },
     {
-      id: "ep2",
+      id: "ep2" as const,
       title: "Signal Fracture",
       unlocked: ep2Unlocked,
       done: Boolean(progress?.ep2),
@@ -375,7 +389,7 @@ export default function StoryPage() {
       cta: "▶ Continue",
     },
     {
-      id: "ep3",
+      id: "ep3" as const,
       title: "Fault Lines",
       unlocked: ep3Unlocked,
       done: Boolean(progress?.ep3),
@@ -387,7 +401,7 @@ export default function StoryPage() {
       cta: "▶ Continue",
     },
     {
-      id: "ep4",
+      id: "ep4" as const,
       title: "Threshold",
       unlocked: ep4Unlocked,
       done: Boolean(progress?.ep4),
@@ -399,7 +413,7 @@ export default function StoryPage() {
       cta: "▶ Continue",
     },
     {
-      id: "ep5",
+      id: "ep5" as const,
       title: "Emergence",
       unlocked: ep5Unlocked,
       done: ep5Done,
@@ -414,10 +428,10 @@ export default function StoryPage() {
 
   const prologueAndBonuses = [
     {
-      id: "prologue",
+      id: "prologue" as const,
       title: "Prologue: Silence in Darkness",
       unlocked: prologueUnlocked,
-      done: prologueUnlocked, // if you treat unlock as completion for prologue
+      done: prologueUnlocked, // treat unlock as completion for prologue
       img: "/story/prologue.png",
       note: "A dormant channel stirs. Something remembers you first.",
       isBonus: true,
@@ -425,7 +439,7 @@ export default function StoryPage() {
       cta: "▶ Open",
     },
     {
-      id: "bonus",
+      id: "bonus" as const,
       title: "Echo: Residual Memory",
       unlocked: bonus1Unlocked,
       done: Boolean(hasB1),
@@ -436,7 +450,7 @@ export default function StoryPage() {
       cta: "▶ Read",
     },
     {
-      id: "bonus2", // add component later if you have it; leave as locked if none
+      id: "bonus2" as const, // placeholder (no component wired)
       title: "Echo: Redacted Layer",
       unlocked: bonus2Unlocked,
       done: Boolean(hasB2),
@@ -462,14 +476,55 @@ export default function StoryPage() {
     },
   ];
 
-  // top state strip
-  const topStatus = useMemo(() => {
-    if (!address) return { title: "Connect wallet", detail: "A link is required to read the archive." };
-    if (!hasToken) return { title: "FID not found", detail: "TokenId is derived from your Farcaster FID." };
-    if (wrongChain) return { title: "Wrong network", detail: "Switch to Base to access Core Memory." };
-    if (!isOwner) return { title: "Ownership mismatch", detail: "You must own Basebots tokenId = your FID." };
-    return { title: "Link established", detail: `TokenId ${tokenId?.toString()} recognized. Core Memory available.` };
-  }, [address, hasToken, wrongChain, isOwner, tokenId]);
+  /* ───────────────── ROUTE ───────────────── */
+  if (mode !== "hub") {
+    const map: Partial<Record<typeof mode, React.ReactNode>> = {
+      prologue: <PrologueSilenceInDarkness onExit={() => setMode("hub")} />,
+      ep1: tokenId ? (
+        <EpisodeOne tokenId={tokenId} onExit={() => setMode("hub")} />
+      ) : null,
+      ep2: tokenId ? (
+        <EpisodeTwo tokenId={tokenId} onExit={() => setMode("hub")} />
+      ) : null,
+      ep3: <EpisodeThree onExit={() => setMode("hub")} />,
+      ep4: <EpisodeFour onExit={() => setMode("hub")} />,
+      ep5: <EpisodeFive onExit={() => setMode("hub")} />,
+      bonus: <BonusEcho onExit={() => setMode("hub")} />,
+    };
+
+    return (
+      map[mode] ?? (
+        <main
+          style={{
+            minHeight: "100vh",
+            background: "#020617",
+            color: "white",
+            padding: 24,
+          }}
+        >
+          <div style={{ maxWidth: 900, margin: "0 auto" }}>
+            <div style={{ fontWeight: 900, fontSize: 18 }}>UNKNOWN ROUTE</div>
+            <button
+              onClick={() => setMode("hub")}
+              style={{
+                marginTop: 14,
+                borderRadius: 999,
+                padding: "10px 14px",
+                border: "1px solid rgba(255,255,255,0.18)",
+                background: "rgba(255,255,255,0.06)",
+                color: "white",
+                cursor: "pointer",
+                fontWeight: 800,
+                fontSize: 12,
+              }}
+            >
+              Return to hub
+            </button>
+          </div>
+        </main>
+      )
+    );
+  }
 
   return (
     <main
@@ -513,11 +568,26 @@ export default function StoryPage() {
             >
               BASEBOTS
             </div>
-            <h1 style={{ fontSize: 34, fontWeight: 950, marginTop: 4, letterSpacing: -0.6 }}>
+            <h1
+              style={{
+                fontSize: 34,
+                fontWeight: 950,
+                marginTop: 4,
+                letterSpacing: -0.6,
+              }}
+            >
               Core Memory
             </h1>
-            <p style={{ marginTop: 8, opacity: 0.72, maxWidth: 720, lineHeight: 1.4 }}>
-              Your choices are written to chain. The system doesn’t remember what you said — it remembers what you committed.
+            <p
+              style={{
+                marginTop: 8,
+                opacity: 0.72,
+                maxWidth: 720,
+                lineHeight: 1.4,
+              }}
+            >
+              Your choices are written to chain. The system doesn’t remember what
+              you said — it remembers what you committed.
             </p>
           </div>
 
@@ -536,7 +606,14 @@ export default function StoryPage() {
             <div style={{ fontWeight: 900, fontSize: 12, letterSpacing: 0.4 }}>
               {topStatus.title}
             </div>
-            <div style={{ marginTop: 6, fontSize: 12, opacity: 0.65, lineHeight: 1.35 }}>
+            <div
+              style={{
+                marginTop: 6,
+                fontSize: 12,
+                opacity: 0.65,
+                lineHeight: 1.35,
+              }}
+            >
               {topStatus.detail}
             </div>
           </div>
@@ -545,7 +622,7 @@ export default function StoryPage() {
         {/* quick actions */}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
           <button
-            onClick={() => setMode(currentCore)}
+            onClick={() => setMode(currentCore as any)}
             disabled={!canPlayCore}
             style={{
               borderRadius: 999,
@@ -572,7 +649,9 @@ export default function StoryPage() {
               fontSize: 12,
               fontWeight: 900,
               border: "1px solid rgba(255,255,255,0.16)",
-              background: prologueUnlocked ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.04)",
+              background: prologueUnlocked
+                ? "rgba(255,255,255,0.06)"
+                : "rgba(255,255,255,0.04)",
               color: prologueUnlocked ? "white" : "rgba(255,255,255,0.55)",
               cursor: prologueUnlocked ? "pointer" : "not-allowed",
             }}
@@ -584,8 +663,24 @@ export default function StoryPage() {
 
       {/* CORE */}
       <section style={{ maxWidth: 1200, margin: "0 auto 36px" }}>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-          <h3 style={{ opacity: 0.85, marginBottom: 14, letterSpacing: 1.8, fontSize: 12, fontWeight: 900 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "baseline",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <h3
+            style={{
+              opacity: 0.85,
+              marginBottom: 14,
+              letterSpacing: 1.8,
+              fontSize: 12,
+              fontWeight: 900,
+            }}
+          >
             CORE SEQUENCE
           </h3>
           <div style={{ fontSize: 11, opacity: 0.6 }}>
@@ -628,8 +723,24 @@ export default function StoryPage() {
             padding: 18,
           }}
         >
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-            <h3 style={{ opacity: 0.85, marginBottom: 14, letterSpacing: 1.8, fontSize: 12, fontWeight: 900 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <h3
+              style={{
+                opacity: 0.85,
+                marginBottom: 14,
+                letterSpacing: 1.8,
+                fontSize: 12,
+                fontWeight: 900,
+              }}
+            >
               ARCHIVAL ECHOES
             </h3>
             <div style={{ fontSize: 11, opacity: 0.6 }}>
@@ -664,7 +775,15 @@ export default function StoryPage() {
 
       {/* META */}
       <section style={{ maxWidth: 1200, margin: "0 auto" }}>
-        <h3 style={{ opacity: 0.85, marginBottom: 14, letterSpacing: 1.8, fontSize: 12, fontWeight: 900 }}>
+        <h3
+          style={{
+            opacity: 0.85,
+            marginBottom: 14,
+            letterSpacing: 1.8,
+            fontSize: 12,
+            fontWeight: 900,
+          }}
+        >
           META / GLOBAL
         </h3>
 
