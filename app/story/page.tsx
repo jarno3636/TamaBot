@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { useAccount, useReadContract } from "wagmi";
 
-import useFid from "@/hooks/useFid";
+import { useIdentity } from "@/lib/useIdentity";
 
 import EpisodeOne from "@/components/story/EpisodeOne";
 import EpisodeTwo from "@/components/story/EpisodeTwo";
@@ -25,7 +25,7 @@ import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 const BASE_CHAIN_ID = 8453;
 
 /* ─────────────────────────────────────────────
- * Helpers
+ * Types / Helpers
  * ───────────────────────────────────────────── */
 
 type CoreProgress = {
@@ -45,7 +45,12 @@ function nextCoreMode(flags?: Partial<CoreProgress>) {
   return "ep5";
 }
 
-function statusOf(opts: { unlocked: boolean; done?: boolean; current?: boolean; requiresNFT?: boolean }) {
+function statusOf(opts: {
+  unlocked: boolean;
+  done?: boolean;
+  current?: boolean;
+  requiresNFT?: boolean;
+}) {
   if (opts.done) return "COMPLETE";
   if (!opts.unlocked) return opts.requiresNFT ? "NFT REQUIRED" : "LOCKED";
   if (opts.current) return "IN PROGRESS";
@@ -68,11 +73,10 @@ function badgeTone(status: string) {
 }
 
 /* ─────────────────────────────────────────────
- * Episode Card (supports distortion)
+ * Episode Card
  * ───────────────────────────────────────────── */
 
 function EpisodeCard(ep: {
-  id: string | null;
   title: string;
   note: string;
   img: string;
@@ -98,7 +102,6 @@ function EpisodeCard(ep: {
         background: "rgba(0,0,0,0.35)",
         opacity: locked ? 0.76 : 1,
         boxShadow: locked ? "0 16px 54px rgba(0,0,0,0.62)" : "0 26px 84px rgba(56,189,248,0.12)",
-        transform: "translateZ(0)",
       }}
     >
       <div style={{ position: "relative" }}>
@@ -110,12 +113,10 @@ function EpisodeCard(ep: {
             width: "100%",
             height: 200,
             objectFit: "cover",
-            display: "block",
             filter: locked ? "grayscale(0.85) brightness(0.56) contrast(1.15)" : "none",
           }}
         />
 
-        {/* vignette */}
         <div
           aria-hidden
           style={{
@@ -125,7 +126,6 @@ function EpisodeCard(ep: {
           }}
         />
 
-        {/* distortion overlay */}
         {ep.distorted && (
           <div
             aria-hidden
@@ -135,12 +135,10 @@ function EpisodeCard(ep: {
               background:
                 "repeating-linear-gradient(180deg, rgba(255,255,255,0.10) 0px, rgba(255,255,255,0.10) 1px, transparent 3px, transparent 7px)",
               mixBlendMode: "overlay",
-              opacity: 0.85,
             }}
           />
         )}
 
-        {/* badge */}
         <div
           style={{
             position: "absolute",
@@ -153,7 +151,6 @@ function EpisodeCard(ep: {
             fontSize: 10,
             fontWeight: 950,
             letterSpacing: 0.7,
-            textTransform: "uppercase",
             boxShadow: ep.current ? `0 0 0 6px ${tone.ring}` : "none",
           }}
         >
@@ -162,11 +159,10 @@ function EpisodeCard(ep: {
       </div>
 
       <div style={{ padding: 18 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 950, margin: 0 }}>{ep.title}</h2>
-        <p style={{ fontSize: 12, opacity: 0.76, marginTop: 8, marginBottom: 0, lineHeight: 1.45 }}>{ep.note}</p>
+        <h2 style={{ fontSize: 16, fontWeight: 950 }}>{ep.title}</h2>
+        <p style={{ fontSize: 12, opacity: 0.76, marginTop: 8 }}>{ep.note}</p>
 
         <button
-          type="button"
           disabled={locked || !ep.onClick}
           onClick={ep.onClick}
           style={{
@@ -180,20 +176,12 @@ function EpisodeCard(ep: {
               ? "rgba(255,255,255,0.08)"
               : "linear-gradient(90deg, rgba(56,189,248,0.95), rgba(168,85,247,0.85))",
             color: locked ? "rgba(255,255,255,0.6)" : "#020617",
-            cursor: locked || !ep.onClick ? "not-allowed" : "pointer",
             border: "1px solid rgba(255,255,255,0.16)",
+            cursor: locked ? "not-allowed" : "pointer",
           }}
         >
           {locked ? status : ep.cta ?? "▶ Enter"}
         </button>
-
-        {locked && (
-          <div style={{ marginTop: 10, fontSize: 11, opacity: 0.6, lineHeight: 1.35 }}>
-            {status === "NFT REQUIRED"
-              ? "Connect wallet on Base + own a Basebot NFT to unlock."
-              : "Complete prior episodes to unlock."}
-          </div>
-        )}
       </div>
     </article>
   );
@@ -209,24 +197,12 @@ export default function StoryPage() {
   >("hub");
 
   const { address, chain } = useAccount();
+  const { fid: fidString, hasIdentity } = useIdentity();
 
-  // ✅ Robust: supports BOTH `useFid()` returning `{ fid }` or returning the fid directly
-  const fidHook = useFid() as any;
-  const fid = fidHook?.fid ?? fidHook;
+  const wrongChain = chain?.id !== undefined && chain.id !== BASE_CHAIN_ID;
 
-  const fidString = useMemo(() => {
-    if (typeof fid === "number" && Number.isFinite(fid) && fid > 0) return String(Math.floor(fid));
-    if (typeof fid === "string" && /^\d+$/.test(fid)) return fid;
-    return null;
-  }, [fid]);
-
-  const hasIdentity = Boolean(fidString);
-  const chainId = chain?.id;
-  const wrongChain = chainId !== undefined && chainId !== BASE_CHAIN_ID;
-
-  // ✅ Key point you asked: YES, we still gate on NFT
-  // FID presence ≠ NFT ownership. We only unlock core progression if tokenURI looks like a real Basebot token.
-  const { data: tokenUri, isLoading: tokenUriLoading, isError: tokenUriError } = useReadContract({
+  /* NFT check (FID ≠ NFT) */
+  const { data: tokenUri } = useReadContract({
     ...BASEBOTS,
     functionName: "tokenURI",
     args: fidString ? ([BigInt(fidString)] as [bigint]) : undefined,
@@ -234,7 +210,8 @@ export default function StoryPage() {
   });
 
   const hasBasebot =
-    typeof tokenUri === "string" && tokenUri.startsWith("data:application/json;base64,");
+    typeof tokenUri === "string" &&
+    tokenUri.startsWith("data:application/json;base64,");
 
   const { data: progressFlags } = useReadContract({
     address: BASEBOTS_S2.address,
@@ -246,286 +223,134 @@ export default function StoryPage() {
 
   const progress = progressFlags as CoreProgress | undefined;
 
-  const canPlayCore = Boolean(address) && hasBasebot && !wrongChain;
+  const canPlayCore = Boolean(address && hasBasebot && !wrongChain);
   const currentCore = useMemo(() => nextCoreMode(progress), [progress]);
 
-  // Bonus unlocks (your rule: 1,3,5)
   const prologueUnlocked = Boolean(progress?.ep1);
   const bonus1Unlocked = Boolean(progress?.ep3);
   const bonus2Unlocked = Boolean(progress?.ep5);
 
-  /* ROUTING (avoid returning booleans in map) */
+  /* ROUTING */
   if (mode !== "hub") {
     const exit = () => setMode("hub");
-    const tokenId = fidString ?? ""; // never bigint, never boolean
-
-    if (!fidString && (mode === "ep1" || mode === "ep2" || mode === "ep3" || mode === "ep4" || mode === "ep5")) {
-      return (
-        <main style={{ minHeight: "100vh", background: "#020617", color: "white", padding: 24 }}>
-          <div style={{ maxWidth: 900, margin: "0 auto" }}>
-            <div style={{ fontWeight: 950, fontSize: 18 }}>Identity not detected</div>
-            <div style={{ opacity: 0.75, marginTop: 10, lineHeight: 1.45 }}>
-              We couldn’t resolve an FID for this session yet. Open the menu and confirm Farcaster context is available.
-            </div>
-            <button
-              onClick={exit}
-              style={{
-                marginTop: 18,
-                borderRadius: 999,
-                padding: "10px 14px",
-                fontWeight: 900,
-                border: "1px solid rgba(255,255,255,0.18)",
-                background: "rgba(255,255,255,0.06)",
-                color: "white",
-              }}
-            >
-              Return to hub
-            </button>
-          </div>
-        </main>
-      );
-    }
+    const tokenId = fidString ?? "";
 
     switch (mode) {
-      case "ep1":
-        return <EpisodeOne tokenId={tokenId} onExit={exit} />;
-      case "ep2":
-        return <EpisodeTwo tokenId={tokenId} onExit={exit} />;
-      case "ep3":
-        return <EpisodeThree tokenId={tokenId} onExit={exit} />;
-      case "ep4":
-        return <EpisodeFour tokenId={tokenId} onExit={exit} />;
-      case "ep5":
-        return <EpisodeFive tokenId={tokenId} onExit={exit} />;
-      case "prologue":
-        return <PrologueSilenceInDarkness onExit={exit} />;
-      case "bonus1":
-        return <BonusEcho onExit={exit} />;
-      case "bonus2":
-        return <BonusEchoArchive onExit={exit} />;
-      default:
-        return null;
+      case "ep1": return <EpisodeOne tokenId={tokenId} onExit={exit} />;
+      case "ep2": return <EpisodeTwo tokenId={tokenId} onExit={exit} />;
+      case "ep3": return <EpisodeThree tokenId={tokenId} onExit={exit} />;
+      case "ep4": return <EpisodeFour tokenId={tokenId} onExit={exit} />;
+      case "ep5": return <EpisodeFive tokenId={tokenId} onExit={exit} />;
+      case "prologue": return <PrologueSilenceInDarkness onExit={exit} />;
+      case "bonus1": return <BonusEcho onExit={exit} />;
+      case "bonus2": return <BonusEchoArchive onExit={exit} />;
+      default: return null;
     }
   }
 
-  const showGateNotice = !hasIdentity || !address || wrongChain || !hasBasebot;
-
+  /* HUB */
   return (
     <main
       style={{
         minHeight: "100vh",
         padding: "40px 16px 64px",
         background:
-          "radial-gradient(1100px 520px at 50% -10%, rgba(56,189,248,0.12), transparent 62%), radial-gradient(900px 520px at 90% 120%, rgba(168,85,247,0.14), transparent 60%), #020617",
+          "radial-gradient(1100px 520px at 50% -10%, rgba(56,189,248,0.12), transparent 62%), #020617",
         color: "white",
       }}
     >
       <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-        {/* Header */}
-        <header style={{ marginBottom: 22 }}>
-          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
-            <div>
-              <div style={{ fontSize: 28, fontWeight: 950, letterSpacing: 0.2, lineHeight: 1.1 }}>
-                BASEBOTS // STORY
-              </div>
-              <div style={{ marginTop: 6, fontSize: 13, color: "rgba(255,255,255,0.70)", maxWidth: 760 }}>
-                Choices are committed on-chain and unlock the corridor ahead.
-              </div>
-            </div>
-
-            {/* Session Status */}
-            <div
-              style={{
-                borderRadius: 18,
-                border: "1px solid rgba(255,255,255,0.12)",
-                background:
-                  "radial-gradient(900px 240px at 15% 0%, rgba(56,189,248,0.10), transparent 60%), rgba(0,0,0,0.30)",
-                padding: 14,
-                minWidth: 320,
-              }}
-              aria-label="Session status"
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                <div style={{ fontSize: 11, fontWeight: 950, letterSpacing: 1.4, opacity: 0.84 }}>
-                  SESSION STATUS
-                </div>
-                <div style={{ fontSize: 11, opacity: 0.72 }}>
-                  {tokenUriLoading ? "Syncing…" : tokenUriError ? "Degraded" : "Ready"}
-                </div>
-              </div>
-
-              <div style={{ marginTop: 10, fontSize: 12, lineHeight: 1.45, color: "rgba(255,255,255,0.78)" }}>
-                <div>
-                  Identity:{" "}
-                  <span style={{ fontWeight: 900, color: hasIdentity ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.62)" }}>
-                    {hasIdentity ? `FID ${fidString}` : "Not detected"}
-                  </span>
-                </div>
-                <div>
-                  Wallet:{" "}
-                  <span style={{ fontWeight: 900, color: address ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.62)" }}>
-                    {address ? "Connected" : "Not connected"}
-                  </span>
-                </div>
-                <div>
-                  Network:{" "}
-                  <span style={{ fontWeight: 900, color: wrongChain ? "#fb7185" : "rgba(255,255,255,0.92)" }}>
-                    {wrongChain ? `Wrong (switch to Base)` : "Base"}
-                  </span>
-                </div>
-                <div>
-                  Basebot NFT:{" "}
-                  <span style={{ fontWeight: 900, color: hasBasebot ? "#22c55e" : "rgba(255,255,255,0.62)" }}>
-                    {hasBasebot ? "Detected" : "Not detected"}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {showGateNotice && (
-            <div
-              role="status"
-              aria-live="polite"
-              style={{
-                marginTop: 14,
-                borderRadius: 18,
-                border: "1px solid rgba(255,255,255,0.12)",
-                background: "rgba(255,255,255,0.04)",
-                padding: 14,
-                fontSize: 12,
-                color: "rgba(255,255,255,0.78)",
-                lineHeight: 1.45,
-              }}
-            >
-              <div style={{ fontWeight: 950, letterSpacing: 1.2, fontSize: 11, opacity: 0.9 }}>
-                ACCESS REQUIREMENTS
-              </div>
-              <div style={{ marginTop: 6 }}>
-                {!hasIdentity && "• Waiting for Farcaster identity (FID) to resolve."}
-                {hasIdentity && !address && "• Connect a wallet to play core episodes."}
-                {hasIdentity && address && wrongChain && "• Switch to Base mainnet (Chain ID 8453)."}
-                {hasIdentity && address && !wrongChain && !hasBasebot && "• Basebot NFT not detected for this identity."}
-              </div>
-              <div style={{ marginTop: 8, opacity: 0.72 }}>
-                FID alone does not imply NFT ownership — core progression remains gated by Basebot NFT presence.
-              </div>
-            </div>
-          )}
-        </header>
-
         {/* CORE */}
-        <section aria-label="Core episodes">
-          <h3 style={{ opacity: 0.88, letterSpacing: 1.8, fontSize: 12, fontWeight: 950, marginBottom: 12 }}>
+        <section>
+          <h3 style={{ fontSize: 12, fontWeight: 950, letterSpacing: 1.8, marginBottom: 12 }}>
             CORE SEQUENCE
           </h3>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 24 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 24 }}>
             <EpisodeCard
-              id="ep1"
               title="Awakening Protocol"
-              note="Initialization begins. Your first directive is recorded."
+              note="Initialization begins."
               img="/story/01-awakening.png"
-              unlocked={true}
-              done={Boolean(progress?.ep1)}
+              unlocked
               current={currentCore === "ep1"}
-              cta="▶ Begin"
               onClick={() => setMode("ep1")}
             />
             <EpisodeCard
-              id="ep2"
               title="Signal Fracture"
-              note="Designation binding. A name becomes a constraint."
+              note="Designation binding."
               img="/story/ep2.png"
               unlocked={canPlayCore && Boolean(progress?.ep1)}
-              done={Boolean(progress?.ep2)}
               requiresNFT
               current={currentCore === "ep2"}
-              cta="▶ Continue"
               onClick={() => setMode("ep2")}
             />
             <EpisodeCard
-              id="ep3"
               title="Fault Lines"
-              note="Contradictions form. You decide how the system thinks."
+              note="Contradictions form."
               img="/story/ep3.png"
               unlocked={canPlayCore && Boolean(progress?.ep2)}
-              done={Boolean(progress?.ep3)}
               requiresNFT
               current={currentCore === "ep3"}
-              cta="▶ Continue"
               onClick={() => setMode("ep3")}
             />
             <EpisodeCard
-              id="ep4"
               title="Threshold"
-              note="A profile is derived. The city prepares its response."
+              note="A profile is derived."
               img="/story/ep4.png"
               unlocked={canPlayCore && Boolean(progress?.ep3)}
-              done={Boolean(progress?.ep4)}
               requiresNFT
               current={currentCore === "ep4"}
-              cta="▶ Continue"
               onClick={() => setMode("ep4")}
             />
             <EpisodeCard
-              id="ep5"
               title="Emergence"
-              note="Surface access is negotiated. Outcomes are permanent."
+              note="Outcomes are permanent."
               img="/story/ep5.png"
               unlocked={canPlayCore && Boolean(progress?.ep4)}
-              done={Boolean(progress?.ep5)}
               requiresNFT
               current={currentCore === "ep5"}
-              cta={Boolean(progress?.ep5) ? "▶ Review" : "▶ Enter"}
               onClick={() => setMode("ep5")}
             />
           </div>
         </section>
 
-        {/* ARCHIVAL / BONUSES */}
-        <section style={{ marginTop: 36 }} aria-label="Archival echoes">
-          <h3 style={{ opacity: 0.88, letterSpacing: 1.8, fontSize: 12, fontWeight: 950, marginBottom: 12 }}>
+        {/* ARCHIVAL */}
+        <section style={{ marginTop: 36 }}>
+          <h3 style={{ fontSize: 12, fontWeight: 950, letterSpacing: 1.8, marginBottom: 12 }}>
             ARCHIVAL ECHOES
           </h3>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 20 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 20 }}>
             <EpisodeCard
-              id="prologue"
               title="Prologue: Silence in Darkness"
-              note="Unlocked by a special interaction in Episode 1."
+              note="Unlocked by Episode 1."
               img="/story/prologue.png"
               unlocked={canPlayCore && prologueUnlocked}
               distorted={!prologueUnlocked}
-              cta={prologueUnlocked ? "▶ Open" : "LOCKED"}
               onClick={prologueUnlocked ? () => setMode("prologue") : undefined}
             />
             <EpisodeCard
-              id="bonus1"
               title="Echo: Residual Memory"
-              note="Unlocked by a special interaction in Episode 3."
+              note="Unlocked by Episode 3."
               img="/story/b1.png"
               unlocked={canPlayCore && bonus1Unlocked}
               distorted={!bonus1Unlocked}
-              cta={bonus1Unlocked ? "▶ Decrypt" : "LOCKED"}
               onClick={bonus1Unlocked ? () => setMode("bonus1") : undefined}
             />
             <EpisodeCard
-              id="bonus2"
               title="Echo: Redacted Layer"
-              note="Unlocked by a special interaction in Episode 5."
+              note="Unlocked by Episode 5."
               img="/story/b2.png"
               unlocked={canPlayCore && bonus2Unlocked}
               distorted={!bonus2Unlocked}
-              cta={bonus2Unlocked ? "▶ Decrypt" : "LOCKED"}
               onClick={bonus2Unlocked ? () => setMode("bonus2") : undefined}
             />
           </div>
         </section>
 
         {/* GLOBAL STATS */}
-        <section style={{ marginTop: 40 }} aria-label="Global interpretation metrics">
-          <h3 style={{ opacity: 0.88, letterSpacing: 1.8, fontSize: 12, fontWeight: 950, marginBottom: 12 }}>
+        <section style={{ marginTop: 40 }}>
+          <h3 style={{ fontSize: 12, fontWeight: 950, letterSpacing: 1.8, marginBottom: 12 }}>
             GLOBAL INTERPRETATION METRICS
           </h3>
           <GlobalStatsPanel />
