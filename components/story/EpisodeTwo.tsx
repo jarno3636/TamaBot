@@ -1,14 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useAccount, usePublicClient, useWalletClient } from "wagmi";
+import {
+  BASEBOTS_SEASON2_STATE_ADDRESS,
+  BASEBOTS_SEASON2_STATE_ABI,
+} from "@/lib/abi/basebotsSeason2State";
 
 /* ──────────────────────────────────────────────
- * Storage keys
+ * Storage keys (cosmetic only)
  * ────────────────────────────────────────────── */
 
 const EP1_KEY = "basebots_story_save_v1";
-const EP2_KEY = "basebots_ep2_designation_v1";
-const EP2_DONE_KEY = "basebots_ep2_done";
 const SOUND_KEY = "basebots_ep2_sound";
 
 /* ──────────────────────────────────────────────
@@ -18,11 +21,6 @@ const SOUND_KEY = "basebots_ep2_sound";
 type Ep1Save = {
   choiceId: "ACCEPT" | "STALL" | "SPOOF" | "PULL_PLUG";
   profile: { archetype: string };
-};
-
-type Ep2Save = {
-  designation: string;
-  lockedAt: number;
 };
 
 type Phase = "descent" | "input" | "binding" | "approach";
@@ -50,12 +48,53 @@ function validate(v: string) {
  * Component
  * ────────────────────────────────────────────── */
 
-export default function EpisodeTwo({ onExit }: { onExit: () => void }) {
+export default function EpisodeTwo({
+  tokenId,
+  onExit,
+}: {
+  tokenId: bigint;
+  onExit: () => void;
+}) {
   const ep1 = useMemo(() => loadEp1(), []);
   const [phase, setPhase] = useState<Phase>("descent");
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [glitchTick, setGlitchTick] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+
+  /* ───────────── wagmi ───────────── */
+  const { address, chain } = useAccount();
+  const publicClient = usePublicClient();
+  const { data: walletClient } = useWalletClient();
+  const isBase = chain?.id === 8453;
+
+  const ready =
+    !!address && !!walletClient && !!publicClient && isBase;
+
+  /* ───────────── Check chain state ───────────── */
+  const [alreadySet, setAlreadySet] = useState(false);
+
+  useEffect(() => {
+    if (!publicClient) return;
+
+    (async () => {
+      try {
+        const state: any = await publicClient.readContract({
+          address: BASEBOTS_SEASON2_STATE_ADDRESS,
+          abi: BASEBOTS_SEASON2_STATE_ABI,
+          functionName: "getBotState",
+          args: [tokenId],
+        });
+
+        if (state?.ep2Set) {
+          setAlreadySet(true);
+          setPhase("approach");
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  }, [tokenId, publicClient]);
 
   /* ───────────── Ambient glitch tick ───────────── */
   useEffect(() => {
@@ -104,29 +143,49 @@ export default function EpisodeTwo({ onExit }: { onExit: () => void }) {
     });
   }
 
-  /* ───────────── Commit designation ───────────── */
-  function commit() {
+  /* ───────────── Commit designation (ON-CHAIN) ───────────── */
+  async function commit() {
+    if (alreadySet) return;
+
     const err = validate(value);
     if (err) {
       setError(err);
       return;
     }
 
-    const save: Ep2Save = {
-      designation: value,
-      lockedAt: Date.now(),
-    };
+    if (!ready) {
+      setError("CONNECT WALLET ON BASE");
+      return;
+    }
 
-    localStorage.setItem(EP2_KEY, JSON.stringify(save));
-    localStorage.setItem(EP2_DONE_KEY, "true");
+    setSubmitting(true);
+    setError(null);
 
-    window.dispatchEvent(new Event("basebots-progress-updated"));
+    try {
+      const hash = await walletClient!.writeContract({
+        address: BASEBOTS_SEASON2_STATE_ADDRESS,
+        abi: BASEBOTS_SEASON2_STATE_ABI,
+        functionName: "setEpisode2Designation",
+        args: [tokenId, value as `0x${string}` | string],
+      });
 
-    setPhase("binding");
-    setTimeout(() => setPhase("approach"), 1600);
+      await publicClient!.waitForTransactionReceipt({ hash });
+
+      window.dispatchEvent(new Event("basebots-progress-updated"));
+
+      setPhase("binding");
+      setTimeout(() => setPhase("approach"), 1600);
+    } catch (e) {
+      console.error(e);
+      setError("TRANSACTION FAILED");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
-  /* ────────────────────────────────────────────── */
+  /* ──────────────────────────────────────────────
+   * RENDER (unchanged visuals)
+   * ────────────────────────────────────────────── */
 
   return (
     <section
@@ -161,36 +220,10 @@ export default function EpisodeTwo({ onExit }: { onExit: () => void }) {
 
       {/* Controls */}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-        <button
-          onClick={toggleSound}
-          aria-label="Toggle sound"
-          style={{
-            borderRadius: 999,
-            padding: "6px 14px",
-            fontSize: 11,
-            fontWeight: 800,
-            border: "1px solid rgba(255,255,255,0.18)",
-            background: "rgba(255,255,255,0.06)",
-            color: "rgba(255,255,255,0.85)",
-            cursor: "pointer",
-          }}
-        >
+        <button onClick={toggleSound} style={{ borderRadius: 999, padding: "6px 14px", fontSize: 11, fontWeight: 800 }}>
           SOUND: {soundEnabled ? "ON" : "OFF"}
         </button>
-
-        <button
-          onClick={onExit}
-          style={{
-            borderRadius: 999,
-            padding: "6px 14px",
-            fontSize: 11,
-            fontWeight: 800,
-            border: "1px solid rgba(255,255,255,0.18)",
-            background: "rgba(255,255,255,0.04)",
-            color: "rgba(255,255,255,0.7)",
-            cursor: "pointer",
-          }}
-        >
+        <button onClick={onExit} style={{ borderRadius: 999, padding: "6px 14px", fontSize: 11, fontWeight: 800 }}>
           EXIT
         </button>
       </div>
@@ -223,21 +256,7 @@ export default function EpisodeTwo({ onExit }: { onExit: () => void }) {
             Upper systems demand a stable designation before arrival.
           </p>
 
-          <button
-            onClick={() => setPhase("input")}
-            style={{
-              marginTop: 24,
-              borderRadius: 999,
-              padding: "10px 18px",
-              fontSize: 12,
-              fontWeight: 900,
-              border: "1px solid rgba(255,255,255,0.16)",
-              background:
-                "linear-gradient(90deg, rgba(56,189,248,0.9), rgba(168,85,247,0.7))",
-              color: "#020617",
-              cursor: "pointer",
-            }}
-          >
+          <button onClick={() => setPhase("input")} style={{ marginTop: 24 }}>
             CONTINUE
           </button>
         </div>
@@ -250,10 +269,6 @@ export default function EpisodeTwo({ onExit }: { onExit: () => void }) {
             ASSIGN DESIGNATION
           </h2>
 
-          <p style={{ marginTop: 8, fontSize: 12, opacity: 0.65 }}>
-            Seven characters. Alphanumeric. Immutable once confirmed.
-          </p>
-
           <input
             value={value}
             onChange={(e) => {
@@ -261,21 +276,7 @@ export default function EpisodeTwo({ onExit }: { onExit: () => void }) {
               setValue(e.target.value.toUpperCase());
             }}
             maxLength={7}
-            aria-label="Designation input"
-            style={{
-              marginTop: 18,
-              width: "100%",
-              borderRadius: 14,
-              padding: "14px",
-              fontFamily: "monospace",
-              fontSize: 18,
-              letterSpacing: 4,
-              textAlign: "center",
-              color: "white",
-              background: "rgba(0,0,0,0.45)",
-              border: "1px solid rgba(255,255,255,0.18)",
-              outline: "none",
-            }}
+            style={{ marginTop: 18, width: "100%", textAlign: "center" }}
           />
 
           {error && (
@@ -285,68 +286,27 @@ export default function EpisodeTwo({ onExit }: { onExit: () => void }) {
           )}
 
           <button
+            disabled={submitting || alreadySet}
             onClick={commit}
-            style={{
-              marginTop: 22,
-              borderRadius: 999,
-              padding: "10px 18px",
-              fontSize: 12,
-              fontWeight: 900,
-              border: "1px solid rgba(255,255,255,0.16)",
-              background:
-                "linear-gradient(90deg, rgba(56,189,248,0.85), rgba(168,85,247,0.65))",
-              color: "#020617",
-              cursor: "pointer",
-            }}
+            style={{ marginTop: 22 }}
           >
-            CONFIRM DESIGNATION
+            {submitting ? "CONFIRMING…" : "CONFIRM DESIGNATION"}
           </button>
         </div>
       )}
 
       {/* BINDING */}
       {phase === "binding" && (
-        <div
-          style={{
-            marginTop: 60,
-            textAlign: "center",
-            fontFamily: "monospace",
-            letterSpacing: 6,
-            opacity: 0.85,
-          }}
-        >
+        <div style={{ marginTop: 60, textAlign: "center", fontFamily: "monospace" }}>
           IDENTITY LOCKED
         </div>
       )}
 
-      {/* APPROACH (UPDATED STORY) */}
+      {/* APPROACH */}
       {phase === "approach" && (
         <div style={{ marginTop: 28 }}>
-          <p style={{ fontSize: 13, opacity: 0.75 }}>
-            Designation accepted.
-          </p>
-          <p style={{ marginTop: 8, fontSize: 13, opacity: 0.6 }}>
-            Parallel systems reject consensus.  
-            Your identifier appears in conflicting registries.
-          </p>
-          <p style={{ marginTop: 8, fontSize: 13, opacity: 0.55 }}>
-            You are being allowed through — not cleared.
-          </p>
-
-          <button
-            onClick={onExit}
-            style={{
-              marginTop: 24,
-              borderRadius: 999,
-              padding: "10px 18px",
-              fontSize: 12,
-              fontWeight: 900,
-              border: "1px solid rgba(255,255,255,0.16)",
-              background: "rgba(255,255,255,0.06)",
-              color: "rgba(255,255,255,0.85)",
-              cursor: "pointer",
-            }}
-          >
+          <p>Designation accepted.</p>
+          <button onClick={onExit} style={{ marginTop: 24 }}>
             RETURN TO HUB
           </button>
         </div>
