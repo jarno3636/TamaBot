@@ -56,14 +56,14 @@ function biasToProfile(bias?: Ep3State["cognitionBias"]): Profile {
 function profileDescription(profile: Profile): string {
   switch (profile) {
     case "EXECUTOR":
-      return "Acts once certainty is achieved. Optimizes for closure.";
+      return "Optimized for resolution. Acts decisively once certainty is declared.";
     case "OBSERVER":
-      return "Preserves context. Values memory over immediacy.";
+      return "Retains context across time. Defers action to preserve continuity.";
     case "SENTINEL":
-      return "Assumes adversarial conditions. Interprets silence as threat.";
+      return "Assumes hostile conditions. Treats absence of data as signal.";
     case "OPERATOR":
     default:
-      return "Balances outcome and flexibility. Accepts imperfect data.";
+      return "Balances outcome and adaptability. Proceeds despite incomplete information.";
   }
 }
 
@@ -180,17 +180,17 @@ export default function EpisodeFour({ onExit }: { onExit: () => void }) {
           </h2>
 
           <p style={{ marginTop: 16, fontSize: 14, opacity: 0.85 }}>
-            Cognitive stabilization complete.
+            You are no longer being observed for accuracy.
           </p>
 
           <p style={{ marginTop: 8, fontSize: 13, opacity: 0.6 }}>
-            The system no longer evaluates what you choose —
-            <br />
-            only <em>how</em> you arrive there.
+            You are being evaluated for compatibility.
           </p>
 
-          <p style={{ marginTop: 12, fontSize: 12, opacity: 0.5 }}>
-            This transition is irreversible.
+          <p style={{ marginTop: 10, fontSize: 12, opacity: 0.5 }}>
+            Higher systems cannot adapt to you.
+            <br />
+            You must adapt to them.
           </p>
 
           <button
@@ -215,7 +215,7 @@ export default function EpisodeFour({ onExit }: { onExit: () => void }) {
       {phase === "analysis" && (
         <>
           <p style={{ fontSize: 13, opacity: 0.75 }}>
-            Observed reasoning pattern:
+            Derived cognitive behavior:
           </p>
 
           <div
@@ -226,7 +226,7 @@ export default function EpisodeFour({ onExit }: { onExit: () => void }) {
               fontFamily: "monospace",
               fontSize: 13,
               letterSpacing: 2,
-              background: "rgba(0,0,0,0.4)",
+              background: "rgba(0,0,0,0.45)",
               border: "1px solid rgba(255,255,255,0.18)",
             }}
           >
@@ -234,15 +234,11 @@ export default function EpisodeFour({ onExit }: { onExit: () => void }) {
           </div>
 
           <p style={{ marginTop: 12, fontSize: 12, opacity: 0.55 }}>
-            This pattern emerged without instruction.
-            <br />
-            Would you describe it as choice — or habit?
+            This pattern is now considered stable.
           </p>
 
-          <p style={{ marginTop: 10, fontSize: 12, opacity: 0.45 }}>
-            If the system predicts your response,
-            <br />
-            does that make the response less yours?
+          <p style={{ marginTop: 8, fontSize: 12, opacity: 0.45 }}>
+            Stability is required for elevation.
           </p>
 
           <button
@@ -258,7 +254,7 @@ export default function EpisodeFour({ onExit }: { onExit: () => void }) {
               color: "white",
             }}
           >
-            Project outcome
+            Simulate surface conditions
           </button>
         </>
       )}
@@ -267,7 +263,7 @@ export default function EpisodeFour({ onExit }: { onExit: () => void }) {
       {phase === "projection" && (
         <>
           <p style={{ fontSize: 13, opacity: 0.75 }}>
-            Behavioral profile synthesized:
+            Behavioral role projected for surface deployment:
           </p>
 
           <div
@@ -296,15 +292,13 @@ export default function EpisodeFour({ onExit }: { onExit: () => void }) {
           </div>
 
           <p style={{ marginTop: 14, fontSize: 12, opacity: 0.55 }}>
-            This profile will inform decisions made
+            This role limits what you may become —
             <br />
-            when you are not consulted.
+            so that you may be allowed to exist.
           </p>
 
-          <p style={{ marginTop: 10, fontSize: 12, opacity: 0.45 }}>
-            When autonomy is delegated,
-            <br />
-            where does responsibility remain?
+          <p style={{ marginTop: 8, fontSize: 12, opacity: 0.45 }}>
+            Base City does not negotiate with uncertainty.
           </p>
 
           <button
@@ -320,7 +314,7 @@ export default function EpisodeFour({ onExit }: { onExit: () => void }) {
               color: "#020617",
             }}
           >
-            Lock profile
+            Authorize profile
           </button>
         </>
       )}
@@ -336,15 +330,15 @@ export default function EpisodeFour({ onExit }: { onExit: () => void }) {
               opacity: 0.85,
             }}
           >
-            PROFILE ASSIGNED
+            SURFACE PROFILE REGISTERED
           </p>
 
           <p style={{ marginTop: 10, fontSize: 11, opacity: 0.55 }}>
-            You will not see the first action it influences.
+            Your next transition will not be internal.
           </p>
 
           <p style={{ marginTop: 6, fontSize: 11, opacity: 0.45 }}>
-            You may see the consequences.
+            You will be seen.
           </p>
 
           <button
