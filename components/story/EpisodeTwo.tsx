@@ -6,7 +6,7 @@ import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 
 /* ──────────────────────────────────────────────
- * Storage keys (cosmetic only)
+ * Storage keys
  * ────────────────────────────────────────────── */
 
 const EP1_KEY = "basebots_story_save_v1";
@@ -18,7 +18,7 @@ const SOUND_KEY = "basebots_ep2_sound";
 
 type Ep1Save = {
   choiceId: "ACCEPT" | "STALL" | "SPOOF" | "PULL_PLUG";
-  profile: { archetype: string };
+  profile?: { archetype?: string };
 };
 
 type Phase = "descent" | "input" | "binding" | "approach";
@@ -29,6 +29,7 @@ type Phase = "descent" | "input" | "binding" | "approach";
 
 function loadEp1(): Ep1Save | null {
   try {
+    if (typeof window === "undefined") return null;
     const raw = localStorage.getItem(EP1_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch {
@@ -36,10 +37,24 @@ function loadEp1(): Ep1Save | null {
   }
 }
 
-function validate(v: string) {
-  if (!/^[A-Z0-9]*$/.test(v)) return "FORMAT ERROR";
-  if (v.length !== 7) return "DESIGNATION MUST BE 7 CHARACTERS";
+function validateDesignation(v: string) {
+  if (!/^[A-Z0-9]*$/.test(v)) return "ONLY A–Z AND 0–9 ALLOWED";
+  if (v.length !== 7) return "DESIGNATION MUST BE EXACTLY 7 CHARACTERS";
   return null;
+}
+
+function normalizeTokenId(input: string | number | bigint): bigint | null {
+  try {
+    if (typeof input === "bigint") return input;
+    if (typeof input === "number") {
+      if (!Number.isFinite(input) || input < 0) return null;
+      return BigInt(Math.floor(input));
+    }
+    if (typeof input === "string" && input.trim()) return BigInt(input.trim());
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /* ──────────────────────────────────────────────
@@ -50,56 +65,79 @@ export default function EpisodeTwo({
   tokenId,
   onExit,
 }: {
-  tokenId: bigint;
+  tokenId: string | number | bigint;
   onExit: () => void;
 }) {
+  /* ───────── hydration safety ───────── */
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
+
+  const tokenIdBig = useMemo(() => normalizeTokenId(tokenId), [tokenId]);
+
+  /* ───────── episode state ───────── */
   const ep1 = useMemo(() => loadEp1(), []);
   const [phase, setPhase] = useState<Phase>("descent");
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [glitchTick, setGlitchTick] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [alreadySet, setAlreadySet] = useState(false);
+  const [chainStatus, setChainStatus] = useState("Idle");
 
-  /* ───────────── wagmi ───────────── */
+  /* ───────── wagmi ───────── */
   const { address, chain } = useAccount();
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
   const isBase = chain?.id === 8453;
 
   const ready =
-    !!address && !!walletClient && !!publicClient && isBase && !!tokenId;
+    Boolean(address && walletClient && publicClient && isBase && tokenIdBig);
 
-  /* ───────────── Read chain state once ───────────── */
+  /* ───────── chain read (EP2) ───────── */
   useEffect(() => {
-    if (!publicClient || !tokenId) return;
+    if (!publicClient || !tokenIdBig) return;
+
+    let cancelled = false;
 
     (async () => {
       try {
-        const state = (await publicClient.readContract({
+        setChainStatus("Reading chain…");
+        const state: any = await publicClient.readContract({
           address: BASEBOTS_S2.address,
           abi: BASEBOTS_S2.abi,
           functionName: "getBotState",
-          args: [tokenId],
-        })) as any;
+          args: [tokenIdBig],
+        });
 
-        if (state?.ep2Set) {
+        const ep2Set =
+          state?.ep2Set ??
+          state?.episode2Set ??
+          (Array.isArray(state) ? state[2] : false);
+
+        if (!cancelled && ep2Set) {
           setAlreadySet(true);
           setPhase("approach");
+          setChainStatus("Designation already set");
+        } else if (!cancelled) {
+          setChainStatus("Awaiting designation");
         }
       } catch {
-        // silent fail (UI already gated)
+        if (!cancelled) setChainStatus("Chain read failed");
       }
     })();
-  }, [tokenId, publicClient]);
 
-  /* ───────────── Ambient glitch tick ───────────── */
+    return () => {
+      cancelled = true;
+    };
+  }, [publicClient, tokenIdBig]);
+
+  /* ───────── ambient glitch ───────── */
+  const [glitchTick, setGlitchTick] = useState(0);
   useEffect(() => {
     const t = setInterval(() => setGlitchTick((n) => n + 1), 1200);
     return () => clearInterval(t);
   }, []);
 
-  /* ───────────── Sound ───────────── */
+  /* ───────── sound ───────── */
   const [soundEnabled, setSoundEnabled] = useState(() => {
     try {
       return localStorage.getItem(SOUND_KEY) !== "off";
@@ -115,8 +153,12 @@ export default function EpisodeTwo({
     a.loop = true;
     a.volume = 0.6;
     audioRef.current = a;
+    if (soundEnabled) a.play().catch(() => {});
     return () => {
-      a.pause();
+      try {
+        a.pause();
+        a.src = "";
+      } catch {}
       audioRef.current = null;
     };
   }, []);
@@ -125,26 +167,23 @@ export default function EpisodeTwo({
     const a = audioRef.current;
     if (!a) return;
     if (!soundEnabled) {
-      a.pause();
-      a.currentTime = 0;
-      return;
+      try {
+        a.pause();
+        a.currentTime = 0;
+      } catch {}
+    } else {
+      a.play().catch(() => {});
     }
-    a.play().catch(() => {});
+    try {
+      localStorage.setItem(SOUND_KEY, soundEnabled ? "on" : "off");
+    } catch {}
   }, [soundEnabled]);
 
-  function toggleSound() {
-    setSoundEnabled((s) => {
-      const next = !s;
-      localStorage.setItem(SOUND_KEY, next ? "on" : "off");
-      return next;
-    });
-  }
-
-  /* ───────────── Commit designation (ON-CHAIN) ───────────── */
+  /* ───────── commit designation ───────── */
   async function commit() {
     if (alreadySet || submitting) return;
 
-    const err = validate(value);
+    const err = validateDesignation(value);
     if (err) {
       setError(err);
       return;
@@ -157,31 +196,33 @@ export default function EpisodeTwo({
 
     setSubmitting(true);
     setError(null);
+    setChainStatus("Submitting…");
 
     try {
       const hash = await walletClient!.writeContract({
         address: BASEBOTS_S2.address,
         abi: BASEBOTS_S2.abi,
         functionName: "setEpisode2Designation",
-        args: [tokenId, value],
+        args: [tokenIdBig!, value],
       });
 
       await publicClient!.waitForTransactionReceipt({ hash });
 
       window.dispatchEvent(new Event("basebots-progress-updated"));
 
+      setChainStatus("Designation committed");
       setPhase("binding");
-      setTimeout(() => setPhase("approach"), 1600);
-    } catch (e) {
-      console.error(e);
+      setTimeout(() => setPhase("approach"), 1400);
+    } catch {
       setError("TRANSACTION FAILED");
+      setChainStatus("Tx failed");
     } finally {
       setSubmitting(false);
     }
   }
 
   /* ──────────────────────────────────────────────
-   * RENDER (visuals unchanged)
+   * Render
    * ────────────────────────────────────────────── */
 
   return (
@@ -189,56 +230,34 @@ export default function EpisodeTwo({
       role="region"
       aria-label="Episode Two: Designation"
       style={{
-        position: "relative",
-        overflow: "hidden",
         borderRadius: 28,
-        padding: "24px",
+        padding: 22,
         color: "white",
         border: "1px solid rgba(255,255,255,0.12)",
-        background:
-          "linear-gradient(180deg, rgba(2,6,23,0.96), rgba(2,6,23,0.72))",
+        background: "linear-gradient(180deg, rgba(2,6,23,0.96), rgba(2,6,23,0.72))",
         boxShadow: "0 40px 160px rgba(0,0,0,0.85)",
       }}
     >
-      {/* Scanline overlay */}
-      <div
-        aria-hidden
-        style={{
-          pointerEvents: "none",
-          position: "absolute",
-          inset: 0,
-          background:
-            "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px)",
-          backgroundSize: "100% 3px",
-          opacity: 0.12,
-          mixBlendMode: "overlay",
-        }}
-      />
-
-      {/* Controls */}
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-        <button
-          onClick={toggleSound}
-          style={{ borderRadius: 999, padding: "6px 14px", fontSize: 11, fontWeight: 800 }}
-        >
-          SOUND: {soundEnabled ? "ON" : "OFF"}
-        </button>
-        <button
-          onClick={onExit}
-          style={{ borderRadius: 999, padding: "6px 14px", fontSize: 11, fontWeight: 800 }}
-        >
-          EXIT
-        </button>
+      {/* Boot console */}
+      <div style={{ fontSize: 11, opacity: 0.78, marginBottom: 12 }}>
+        Boot: {hydrated ? "hydrated" : "hydrating"} • tokenId:{" "}
+        <b>{tokenIdBig ? tokenIdBig.toString() : "INVALID"}</b> • chain:{" "}
+        <b>{isBase ? "Base" : chain?.id ?? "none"}</b> • status: <b>{chainStatus}</b>
       </div>
 
+      {!tokenIdBig && (
+        <div style={{ fontSize: 13, color: "#f87171" }}>
+          Invalid tokenId. Pass tokenId as a string or number from the hub.
+        </div>
+      )}
+
       {/* DESCENT */}
-      {phase === "descent" && (
-        <div style={{ marginTop: 28 }}>
+      {phase === "descent" && tokenIdBig && (
+        <div>
           <h2
             style={{
               fontSize: 20,
               fontWeight: 900,
-              letterSpacing: 0.5,
               textShadow:
                 glitchTick % 2
                   ? "1px 0 rgba(56,189,248,0.6)"
@@ -249,12 +268,12 @@ export default function EpisodeTwo({
           </h2>
 
           <p style={{ marginTop: 12, fontSize: 13, opacity: 0.75 }}>
-            The lift ascends through obsolete strata. Your prior classification —{" "}
-            <strong>{ep1?.profile?.archetype ?? "UNKNOWN"}</strong> — propagates ahead of you.
+            Your prior classification —{" "}
+            <strong>{ep1?.profile?.archetype ?? "UNRESOLVED"}</strong> — propagates ahead.
           </p>
 
           <p style={{ marginTop: 10, fontSize: 13, opacity: 0.6 }}>
-            Upper systems demand a stable designation before arrival.
+            Upper systems require a stable designation.
           </p>
 
           <button onClick={() => setPhase("input")} style={{ marginTop: 24 }}>
@@ -265,10 +284,8 @@ export default function EpisodeTwo({
 
       {/* INPUT */}
       {phase === "input" && (
-        <div style={{ marginTop: 28 }}>
-          <h2 style={{ fontSize: 20, fontWeight: 900 }}>
-            ASSIGN DESIGNATION
-          </h2>
+        <div>
+          <h2 style={{ fontSize: 20, fontWeight: 900 }}>ASSIGN DESIGNATION</h2>
 
           <input
             value={value}
@@ -277,7 +294,13 @@ export default function EpisodeTwo({
               setValue(e.target.value.toUpperCase());
             }}
             maxLength={7}
-            style={{ marginTop: 18, width: "100%", textAlign: "center" }}
+            style={{
+              marginTop: 18,
+              width: "100%",
+              textAlign: "center",
+              fontSize: 18,
+              letterSpacing: 3,
+            }}
           />
 
           {error && (
@@ -298,14 +321,22 @@ export default function EpisodeTwo({
 
       {/* BINDING */}
       {phase === "binding" && (
-        <div style={{ marginTop: 60, textAlign: "center", fontFamily: "monospace" }}>
+        <div
+          style={{
+            marginTop: 60,
+            textAlign: "center",
+            fontFamily: "monospace",
+            fontSize: 14,
+            letterSpacing: 1.5,
+          }}
+        >
           IDENTITY LOCKED
         </div>
       )}
 
       {/* APPROACH */}
       {phase === "approach" && (
-        <div style={{ marginTop: 28 }}>
+        <div>
           <p>Designation accepted.</p>
           <button onClick={onExit} style={{ marginTop: 24 }}>
             RETURN TO HUB
