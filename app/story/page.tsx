@@ -74,9 +74,13 @@ export default function StoryPage() {
   const { address, chain } = useAccount();
   const fid = useFid();
 
+  /* FIX 1: robust FID → tokenId handling */
   const tokenId = useMemo(() => {
     try {
-      return typeof fid === "number" && fid > 0 ? BigInt(fid) : undefined;
+      if (typeof fid === "bigint") return fid;
+      if (typeof fid === "number" && fid > 0) return BigInt(fid);
+      if (typeof fid === "string" && /^\d+$/.test(fid)) return BigInt(fid);
+      return undefined;
     } catch {
       return undefined;
     }
@@ -90,8 +94,7 @@ export default function StoryPage() {
   const { data: tokenUri } = useReadContract({
     ...BASEBOTS,
     functionName: "tokenURI",
-    // wagmi requires args present when enabled; keep undefined when not ready
-    args: tokenId ? ([tokenId] as unknown as [bigint]) : undefined,
+    args: tokenId ? [tokenId] : undefined,
     query: { enabled: hasToken },
   });
 
@@ -183,9 +186,18 @@ export default function StoryPage() {
     };
   }, [address, hasToken, wrongChain, hasBasebot, tokenId]);
 
-  /* card renderer (supports “distorted locked” + size tiers) */
+  /* card renderer */
   function EpisodeCard(ep: {
-    id: "prologue" | "ep1" | "ep2" | "ep3" | "ep4" | "ep5" | "bonus" | "bonus2" | null;
+    id:
+      | "prologue"
+      | "ep1"
+      | "ep2"
+      | "ep3"
+      | "ep4"
+      | "ep5"
+      | "bonus"
+      | "bonus2"
+      | null;
     title: string;
     note: string;
     img: string;
@@ -205,13 +217,11 @@ export default function StoryPage() {
     const cardRadius = ep.size === "sub" ? 18 : 24;
     const imgH = ep.size === "sub" ? 150 : 220;
 
-    // distorted locked effect (inline, no CSS files)
     const lockedFilter =
       "grayscale(0.7) brightness(0.65) contrast(1.25) saturate(0.7)";
     const lockedImgFilter = locked ? lockedFilter : "none";
     const lockedOverlayOpacity = locked ? 0.55 : 0.0;
 
-    // disable click for placeholder ids like "bonus2"
     const isClickable = Boolean(ep.id) && ep.id !== "bonus2" && !locked;
 
     return (
@@ -250,7 +260,6 @@ export default function StoryPage() {
             }}
           />
 
-          {/* distortion overlay */}
           <div
             aria-hidden
             style={{
@@ -264,7 +273,6 @@ export default function StoryPage() {
             }}
           />
 
-          {/* corner status badge */}
           <div
             style={{
               position: "absolute",
@@ -282,7 +290,6 @@ export default function StoryPage() {
             {status}
           </div>
 
-          {/* “current” pulse */}
           {status === "CURRENT" && (
             <div
               aria-hidden
@@ -341,17 +348,14 @@ export default function StoryPage() {
                 : "linear-gradient(90deg, rgba(56,189,248,0.95), rgba(168,85,247,0.85))",
               color: locked ? "rgba(255,255,255,0.60)" : "#020617",
               cursor: !isClickable ? "not-allowed" : "pointer",
-              textTransform: "none",
               letterSpacing: 0.2,
             }}
-            aria-label={locked ? `${ep.title} locked` : `Open ${ep.title}`}
           >
             {locked
               ? status
               : ep.cta ?? (ep.isBonus ? "▶ Read Archive" : "▶ Enter Episode")}
           </button>
 
-          {/* small helper line for gate clarity */}
           {locked && ep.requiresNFT && (
             <div style={{ marginTop: 8, fontSize: 11, opacity: 0.55 }}>
               Requires Basebots NFT ownership for tokenId = FID.
