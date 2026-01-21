@@ -6,14 +6,16 @@ import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 
 /* ──────────────────────────────────────────────
- * Storage keys (cosmetic only)
+ * Storage
  * ────────────────────────────────────────────── */
 
 const EP3_STATE_KEY = "basebots_ep3_state_v1";
 const BONUS_KEY = "basebots_bonus_echo_unlocked";
 const SOUND_KEY = "basebots_ep3_sound";
 
-/* ────────────────────────────────────────────── */
+/* ──────────────────────────────────────────────
+ * Types
+ * ────────────────────────────────────────────── */
 
 type Phase =
   | "intro"
@@ -29,8 +31,19 @@ type Ep3State = {
 };
 
 /* ──────────────────────────────────────────────
- * Local helpers (non-authoritative)
+ * Helpers
  * ────────────────────────────────────────────── */
+
+function normalizeTokenId(input: string | number | bigint): bigint | null {
+  try {
+    if (typeof input === "bigint") return input;
+    if (typeof input === "number") return Number.isFinite(input) ? BigInt(Math.floor(input)) : null;
+    if (typeof input === "string" && input.trim()) return BigInt(input.trim());
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 function loadState(): Ep3State {
   try {
@@ -45,20 +58,30 @@ function saveState(patch: Partial<Ep3State>) {
   localStorage.setItem(EP3_STATE_KEY, JSON.stringify({ ...cur, ...patch }));
 }
 
-/* ────────────────────────────────────────────── */
+/* ──────────────────────────────────────────────
+ * Component
+ * ────────────────────────────────────────────── */
 
 export default function EpisodeThree({
   tokenId,
   onExit,
 }: {
-  tokenId: bigint;
+  tokenId: string | number | bigint;
   onExit: () => void;
 }) {
+  /* ───────── hydration safety ───────── */
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
+
+  const tokenIdBig = useMemo(() => normalizeTokenId(tokenId), [tokenId]);
+
+  /* ───────── state ───────── */
   const [phase, setPhase] = useState<Phase>("intro");
   const [glitch, setGlitch] = useState(0);
   const [showEcho, setShowEcho] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [alreadySet, setAlreadySet] = useState(false);
+  const [chainStatus, setChainStatus] = useState("Idle");
 
   /* ───────── wagmi ───────── */
   const { address, chain } = useAccount();
@@ -67,40 +90,55 @@ export default function EpisodeThree({
   const isBase = chain?.id === 8453;
 
   const ready =
-    !!address && !!walletClient && !!publicClient && !!tokenId && isBase;
+    Boolean(address && walletClient && publicClient && isBase && tokenIdBig);
 
-  /* ───────── read on-chain state ───────── */
+  /* ───────── read chain state ───────── */
   useEffect(() => {
-    if (!publicClient || !tokenId) return;
+    if (!publicClient || !tokenIdBig) return;
+
+    let cancelled = false;
 
     (async () => {
       try {
-        const state = (await publicClient.readContract({
+        setChainStatus("Reading chain…");
+        const state: any = await publicClient.readContract({
           address: BASEBOTS_S2.address,
           abi: BASEBOTS_S2.abi,
           functionName: "getBotState",
-          args: [tokenId],
-        })) as any;
+          args: [tokenIdBig],
+        });
 
-        if (state?.ep3Set) {
+        const ep3Set =
+          state?.ep3Set ??
+          state?.episode3Set ??
+          (Array.isArray(state) ? state[3] : false);
+
+        if (!cancelled && ep3Set) {
           setAlreadySet(true);
           setPhase("lock");
+          setChainStatus("Cognition already set");
+        } else if (!cancelled) {
+          setChainStatus("Awaiting cognition");
         }
       } catch {
-        // silent
+        if (!cancelled) setChainStatus("Chain read failed");
       }
     })();
-  }, [tokenId, publicClient]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [publicClient, tokenIdBig]);
 
   /* ───────── ambient glitch ───────── */
   useEffect(() => {
     const t = setInterval(() => {
-      if (Math.random() > 0.88) setGlitch(Math.random());
-    }, 700);
+      if (Math.random() > 0.86) setGlitch(Math.random());
+    }, 800);
     return () => clearInterval(t);
   }, []);
 
-  /* ───────── echo popup ───────── */
+  /* ───────── echo bonus ───────── */
   useEffect(() => {
     if (localStorage.getItem(BONUS_KEY)) return;
 
@@ -120,20 +158,29 @@ export default function EpisodeThree({
   }
 
   /* ───────── sound ───────── */
-  const [soundOn, setSoundOn] = useState(
-    () => localStorage.getItem(SOUND_KEY) !== "off"
-  );
+  const [soundOn, setSoundOn] = useState(() => {
+    try {
+      return localStorage.getItem(SOUND_KEY) !== "off";
+    } catch {
+      return true;
+    }
+  });
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    const audio = new Audio("/audio/s3.mp3");
-    audio.loop = true;
-    audio.volume = 0.5;
-    audioRef.current = audio;
-
-    if (soundOn) audio.play().catch(() => {});
-    return () => audio.pause();
+    const a = new Audio("/audio/s3.mp3");
+    a.loop = true;
+    a.volume = 0.5;
+    audioRef.current = a;
+    if (soundOn) a.play().catch(() => {});
+    return () => {
+      try {
+        a.pause();
+        a.src = "";
+      } catch {}
+      audioRef.current = null;
+    };
   }, []);
 
   useEffect(() => {
@@ -142,18 +189,15 @@ export default function EpisodeThree({
     if (!soundOn) {
       a.pause();
       a.currentTime = 0;
-      return;
+    } else {
+      a.play().catch(() => {});
     }
-    a.play().catch(() => {});
+    try {
+      localStorage.setItem(SOUND_KEY, soundOn ? "on" : "off");
+    } catch {}
   }, [soundOn]);
 
-  function toggleSound() {
-    const next = !soundOn;
-    setSoundOn(next);
-    localStorage.setItem(SOUND_KEY, next ? "on" : "off");
-  }
-
-  /* ───────── commit cognition (ON-CHAIN) ───────── */
+  /* ───────── commit cognition ───────── */
   async function finalize() {
     if (alreadySet || submitting) return;
     if (!ready) return;
@@ -171,28 +215,30 @@ export default function EpisodeThree({
       cognition = "PARANOID";
 
     setSubmitting(true);
+    setChainStatus("Committing cognition…");
 
     try {
       const hash = await walletClient!.writeContract({
         address: BASEBOTS_S2.address,
         abi: BASEBOTS_S2.abi,
         functionName: "setEpisode3Cognition",
-        args: [tokenId, cognition],
+        args: [tokenIdBig!, cognition],
       });
 
       await publicClient!.waitForTransactionReceipt({ hash });
 
       window.dispatchEvent(new Event("basebots-progress-updated"));
+      setChainStatus("Cognition locked");
       setPhase("lock");
-    } catch (e) {
-      console.error(e);
+    } catch {
+      setChainStatus("Transaction failed");
     } finally {
       setSubmitting(false);
     }
   }
 
   /* ──────────────────────────────────────────────
-   * RENDER (VISUALS UNCHANGED)
+   * Render
    * ────────────────────────────────────────────── */
 
   return (
@@ -205,32 +251,15 @@ export default function EpisodeThree({
         padding: 24,
         color: "white",
         background:
-          "radial-gradient(900px 400px at 50% -10%, rgba(168,85,247,0.08), transparent 60%), linear-gradient(180deg, rgba(2,6,23,0.98), rgba(2,6,23,0.82))",
+          "radial-gradient(900px 400px at 50% -10%, rgba(168,85,247,0.10), transparent 60%), linear-gradient(180deg, rgba(2,6,23,0.98), rgba(2,6,23,0.82))",
         boxShadow: "0 60px 200px rgba(0,0,0,0.9)",
       }}
     >
-      {/* scanlines */}
-      <div
-        aria-hidden
-        style={{
-          position: "absolute",
-          inset: 0,
-          pointerEvents: "none",
-          background:
-            "linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px)",
-          backgroundSize: "100% 3px",
-          opacity: 0.08,
-        }}
-      />
-
-      {/* controls */}
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-        <button onClick={toggleSound} style={{ fontSize: 11 }}>
-          SOUND {soundOn ? "ON" : "OFF"}
-        </button>
-        <button onClick={onExit} style={{ fontSize: 11 }}>
-          Exit
-        </button>
+      {/* boot console */}
+      <div style={{ fontSize: 11, opacity: 0.78, marginBottom: 14 }}>
+        Boot: {hydrated ? "hydrated" : "hydrating"} • tokenId:{" "}
+        <b>{tokenIdBig ? tokenIdBig.toString() : "INVALID"}</b> • chain:{" "}
+        <b>{isBase ? "Base" : chain?.id ?? "none"}</b> • status: <b>{chainStatus}</b>
       </div>
 
       {/* echo */}
@@ -241,7 +270,7 @@ export default function EpisodeThree({
             position: "absolute",
             bottom: 18,
             right: 18,
-            maxWidth: 220,
+            maxWidth: 240,
             fontSize: 10,
             fontFamily: "monospace",
             opacity: 0.85,
@@ -251,13 +280,14 @@ export default function EpisodeThree({
         </button>
       )}
 
-      {/* PHASES (unchanged text & flow) */}
+      {/* PHASES */}
+
       {phase === "intro" && (
         <>
           <h2
             style={{
               fontSize: 20,
-              fontWeight: 800,
+              fontWeight: 900,
               letterSpacing: 1,
               textShadow:
                 glitch > 0
@@ -269,10 +299,10 @@ export default function EpisodeThree({
           </h2>
 
           <p style={{ marginTop: 16, fontSize: 14, opacity: 0.85 }}>
-            Something above you has begun to pay attention.
+            Your internal models no longer agree. The system has noticed.
           </p>
 
-          <button onClick={() => setPhase("context")} style={{ marginTop: 20 }}>
+          <button onClick={() => setPhase("context")} style={{ marginTop: 22 }}>
             Continue
           </button>
         </>
@@ -280,8 +310,13 @@ export default function EpisodeThree({
 
       {phase === "context" && (
         <>
-          <p>Contradiction is not tolerated.</p>
-          <button onClick={() => setPhase("contradiction")}>Proceed</button>
+          <p>
+            Contradiction creates ambiguity. Ambiguity creates risk.
+            Upper layers require a cognitive stance.
+          </p>
+          <button onClick={() => setPhase("contradiction")}>
+            Assess contradiction
+          </button>
         </>
       )}
 
@@ -302,7 +337,7 @@ export default function EpisodeThree({
               setPhase("signal");
             }}
           >
-            Retain competing realities
+            Preserve competing interpretations
           </button>
         </>
       )}
@@ -315,7 +350,7 @@ export default function EpisodeThree({
               setPhase("synthesis");
             }}
           >
-            Suppress foreign context
+            Filter external noise
           </button>
 
           <button
@@ -331,6 +366,9 @@ export default function EpisodeThree({
 
       {phase === "synthesis" && (
         <>
+          <p>
+            This cognition will define how uncertainty is handled going forward.
+          </p>
           <button onClick={finalize} disabled={submitting}>
             {submitting ? "COMMITTING…" : "Commit cognition"}
           </button>
@@ -339,7 +377,7 @@ export default function EpisodeThree({
 
       {phase === "lock" && (
         <>
-          <p>COGNITIVE FRAME SET</p>
+          <p style={{ fontWeight: 800 }}>COGNITIVE FRAME LOCKED</p>
           <button onClick={onExit}>Return to hub</button>
         </>
       )}
