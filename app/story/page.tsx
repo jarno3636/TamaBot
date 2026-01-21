@@ -25,8 +25,9 @@ import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 const BASE_CHAIN_ID = 8453;
 
 /* ─────────────────────────────────────────────
- * Types
+ * Helpers
  * ───────────────────────────────────────────── */
+
 type CoreProgress = {
   ep1: boolean;
   ep2: boolean;
@@ -35,21 +36,6 @@ type CoreProgress = {
   ep5: boolean;
   finalized: boolean;
 };
-
-type Mode =
-  | "hub"
-  | "ep1"
-  | "ep2"
-  | "ep3"
-  | "ep4"
-  | "ep5"
-  | "prologue"
-  | "bonus1"
-  | "bonus2";
-
-/* ─────────────────────────────────────────────
- * Helpers
- * ───────────────────────────────────────────── */
 
 function nextCoreMode(flags?: Partial<CoreProgress>) {
   if (!flags?.ep1) return "ep1";
@@ -74,23 +60,24 @@ function statusOf(opts: {
 function badgeTone(status: string) {
   switch (status) {
     case "COMPLETE":
-      return { bg: "rgba(34,197,94,0.9)", fg: "#02110a" };
+      return { bg: "rgba(34,197,94,0.92)", fg: "#02110a" };
     case "IN PROGRESS":
-      return { bg: "rgba(250,204,21,0.9)", fg: "#1a1201" };
+      return { bg: "rgba(250,204,21,0.92)", fg: "#1a1201" };
     case "AVAILABLE":
-      return { bg: "rgba(56,189,248,0.9)", fg: "#020617" };
+      return { bg: "rgba(56,189,248,0.92)", fg: "#020617" };
     case "NFT REQUIRED":
-      return { bg: "rgba(168,85,247,0.9)", fg: "#08010f" };
+      return { bg: "rgba(168,85,247,0.92)", fg: "#08010f" };
     default:
-      return { bg: "rgba(255,255,255,0.18)", fg: "#fff" };
+      return { bg: "rgba(255,255,255,0.22)", fg: "rgba(255,255,255,0.92)" };
   }
 }
 
 /* ─────────────────────────────────────────────
- * Episode Card (supports distortion)
+ * Episode Card (with distortion support)
  * ───────────────────────────────────────────── */
 
 function EpisodeCard(ep: {
+  id: string | null;
   title: string;
   note: string;
   img: string;
@@ -112,9 +99,9 @@ function EpisodeCard(ep: {
         borderRadius: 22,
         overflow: "hidden",
         border: "1px solid rgba(255,255,255,0.12)",
-        background: "rgba(0,0,0,0.4)",
-        opacity: locked ? 0.7 : 1,
-        filter: ep.distorted ? "blur(0.6px) contrast(1.2)" : "none",
+        background: "rgba(0,0,0,0.35)",
+        opacity: locked ? 0.75 : 1,
+        filter: ep.distorted ? "blur(0.6px) contrast(1.15)" : "none",
       }}
     >
       <div style={{ position: "relative" }}>
@@ -126,7 +113,7 @@ function EpisodeCard(ep: {
             width: "100%",
             height: 200,
             objectFit: "cover",
-            filter: locked ? "grayscale(0.9) brightness(0.5)" : "none",
+            filter: locked ? "grayscale(0.8) brightness(0.55)" : "none",
           }}
         />
 
@@ -139,7 +126,6 @@ function EpisodeCard(ep: {
               background:
                 "repeating-linear-gradient(180deg, rgba(255,255,255,0.08) 0px, rgba(255,255,255,0.08) 1px, transparent 3px, transparent 6px)",
               mixBlendMode: "overlay",
-              pointerEvents: "none",
             }}
           />
         )}
@@ -177,10 +163,10 @@ function EpisodeCard(ep: {
             fontWeight: 900,
             background: locked
               ? "rgba(255,255,255,0.08)"
-              : "linear-gradient(90deg,#38bdf8,#a855f7)",
+              : "linear-gradient(90deg, rgba(56,189,248,0.95), rgba(168,85,247,0.85))",
             color: locked ? "rgba(255,255,255,0.6)" : "#020617",
             cursor: locked ? "not-allowed" : "pointer",
-            border: "1px solid rgba(255,255,255,0.18)",
+            border: "1px solid rgba(255,255,255,0.16)",
           }}
         >
           {locked ? status : "▶ Enter"}
@@ -195,7 +181,9 @@ function EpisodeCard(ep: {
  * ───────────────────────────────────────────── */
 
 export default function StoryPage() {
-  const [mode, setMode] = useState<Mode>("hub");
+  const [mode, setMode] = useState<
+    "hub" | "ep1" | "ep2" | "ep3" | "ep4" | "ep5" | "prologue" | "bonus1" | "bonus2"
+  >("hub");
 
   const { address, chain } = useAccount();
   const { fid } = useFid();
@@ -207,9 +195,9 @@ export default function StoryPage() {
   }, [fid]);
 
   const hasIdentity = Boolean(fidString);
-  const wrongChain = Boolean(chain?.id && chain.id !== BASE_CHAIN_ID);
+  const wrongChain = Boolean(chain?.id) && chain.id !== BASE_CHAIN_ID;
 
-  /* Basebot ownership */
+  /* Basebot presence */
   const { data: tokenUri } = useReadContract({
     ...BASEBOTS,
     functionName: "tokenURI",
@@ -233,10 +221,14 @@ export default function StoryPage() {
   const canPlayCore = Boolean(address && hasBasebot && !wrongChain);
   const currentCore = useMemo(() => nextCoreMode(progress), [progress]);
 
-  /* Routing */
+  /* Bonus unlocks */
+  const prologueUnlocked = Boolean(progress?.ep1);
+  const bonus1Unlocked = Boolean(progress?.ep3);
+  const bonus2Unlocked = Boolean(progress?.ep5);
+
+  /* ROUTING */
   if (mode !== "hub") {
-    const map: Record<Mode, React.ReactNode> = {
-      hub: null,
+    const map: Record<string, React.ReactNode> = {
       ep1: fidString && <EpisodeOne tokenId={fidString} onExit={() => setMode("hub")} />,
       ep2: fidString && <EpisodeTwo tokenId={fidString} onExit={() => setMode("hub")} />,
       ep3: fidString && <EpisodeThree tokenId={fidString} onExit={() => setMode("hub")} />,
@@ -249,27 +241,21 @@ export default function StoryPage() {
     return <>{map[mode]}</>;
   }
 
-  /* Bonus unlock logic */
-  const prologueUnlocked = Boolean(progress?.ep1);
-  const bonus1Unlocked = Boolean(progress?.ep3);
-  const bonus2Unlocked = Boolean(progress?.ep5);
-
   return (
     <main
       style={{
         minHeight: "100vh",
         padding: "40px 16px",
         background:
-          "radial-gradient(1100px 520px at 50% -10%, rgba(56,189,248,0.12), transparent 60%), #020617",
+          "radial-gradient(1000px 520px at 50% -10%, rgba(56,189,248,0.12), transparent 60%), #020617",
         color: "white",
       }}
     >
       <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-        <header style={{ marginBottom: 28 }}>
+        <header style={{ marginBottom: 24 }}>
           <h1 style={{ fontSize: 28, fontWeight: 950 }}>BASEBOTS // STORY</h1>
-          <p style={{ fontSize: 13, opacity: 0.75, maxWidth: 760 }}>
-            A premium narrative sequence bound to your Basebot. Identity is detected via Farcaster;
-            progression requires on-chain ownership.
+          <p style={{ fontSize: 13, opacity: 0.75 }}>
+            A premium narrative sequence bound to your Basebot. Choices are committed on-chain.
           </p>
         </header>
 
@@ -281,6 +267,7 @@ export default function StoryPage() {
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 24 }}>
             <EpisodeCard
+              id="ep1"
               title="Awakening Protocol"
               note="Initialization begins."
               img="/story/01-awakening.png"
@@ -289,45 +276,49 @@ export default function StoryPage() {
               onClick={() => setMode("ep1")}
             />
             <EpisodeCard
+              id="ep2"
               title="Signal Fracture"
               note="Designation binding."
               img="/story/ep2.png"
               unlocked={canPlayCore && Boolean(progress?.ep1)}
-              current={currentCore === "ep2"}
               requiresNFT
+              current={currentCore === "ep2"}
               onClick={() => setMode("ep2")}
             />
             <EpisodeCard
+              id="ep3"
               title="Fault Lines"
               note="Contradictions form."
               img="/story/ep3.png"
               unlocked={canPlayCore && Boolean(progress?.ep2)}
-              current={currentCore === "ep3"}
               requiresNFT
+              current={currentCore === "ep3"}
               onClick={() => setMode("ep3")}
             />
             <EpisodeCard
+              id="ep4"
               title="Threshold"
               note="A profile is derived."
               img="/story/ep4.png"
               unlocked={canPlayCore && Boolean(progress?.ep3)}
-              current={currentCore === "ep4"}
               requiresNFT
+              current={currentCore === "ep4"}
               onClick={() => setMode("ep4")}
             />
             <EpisodeCard
+              id="ep5"
               title="Emergence"
               note="Outcomes are permanent."
               img="/story/ep5.png"
               unlocked={canPlayCore && Boolean(progress?.ep4)}
-              current={currentCore === "ep5"}
               requiresNFT
+              current={currentCore === "ep5"}
               onClick={() => setMode("ep5")}
             />
           </div>
         </section>
 
-        {/* ARCHIVAL */}
+        {/* ARCHIVAL / BONUSES */}
         <section style={{ marginTop: 36 }}>
           <h3 style={{ fontSize: 12, letterSpacing: 1.8, fontWeight: 900, marginBottom: 12 }}>
             ARCHIVAL ECHOES
@@ -335,6 +326,7 @@ export default function StoryPage() {
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 20 }}>
             <EpisodeCard
+              id="prologue"
               title="Prologue: Silence in Darkness"
               note="Something remembers you first."
               img="/story/prologue.png"
@@ -343,6 +335,7 @@ export default function StoryPage() {
               onClick={() => setMode("prologue")}
             />
             <EpisodeCard
+              id="bonus1"
               title="Echo: Residual Memory"
               note="Fragments recovered."
               img="/story/b1.png"
@@ -351,6 +344,7 @@ export default function StoryPage() {
               onClick={() => setMode("bonus1")}
             />
             <EpisodeCard
+              id="bonus2"
               title="Echo: Redacted Layer"
               note="Unlocked during Emergence."
               img="/story/b2.png"
@@ -361,7 +355,7 @@ export default function StoryPage() {
           </div>
         </section>
 
-        {/* META */}
+        {/* GLOBAL STATS */}
         <section style={{ marginTop: 40 }}>
           <h3 style={{ fontSize: 12, letterSpacing: 1.8, fontWeight: 900, marginBottom: 12 }}>
             GLOBAL INTERPRETATION METRICS
