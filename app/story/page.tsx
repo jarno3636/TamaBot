@@ -14,8 +14,7 @@ import BonusEcho from "@/components/story/BonusEcho";
 // ✅ Basebots NFT (ERC721)
 import { BASEBOTS } from "@/lib/abi";
 
-// ✅ Season 2 state contract ABI file you mentioned
-// Ensure this exports: export const BASEBOTS_S2 = { address: "0x738f...", abi: [...] as const }
+// ✅ Season 2 state contract ABI file
 import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 
 /* ─────────────────────────────────────────────
@@ -24,12 +23,12 @@ import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 
 const BASE_CHAIN_ID = 8453;
 
-// bonus bits (choose the indices you actually use in contract)
-const BONUS1_BIT = 1; // b1
-const BONUS2_BIT = 2; // b2 (unlocked by Ep5 secret key on-chain)
+// bonus bits
+const BONUS1_BIT = 1;
+const BONUS2_BIT = 2;
 
 /* ─────────────────────────────────────────────
- * Helpers (no localStorage gating)
+ * Helpers
  * ───────────────────────────────────────────── */
 
 function statusOf(opts: {
@@ -71,18 +70,12 @@ function nextCoreMode(flags?: {
  * Component
  * ───────────────────────────────────────────── */
 
-export default function StoryPage({
-  // Optional: if you already have fid in a nav/store, pass it in.
-  // If not passed, we fall back to 0 and disable gated items.
-  fid,
-}: {
-  fid?: number;
-}) {
+export default function StoryPage({ fid }: { fid?: number }) {
   const [mode, setMode] = useState<any>("hub");
 
   const { address, chain } = useAccount();
 
-  // tokenId == fid (your design)
+  // tokenId == fid
   const tokenId = useMemo(() => {
     try {
       return typeof fid === "number" && fid > 0 ? BigInt(fid) : undefined;
@@ -93,7 +86,7 @@ export default function StoryPage({
 
   const wrongChain = Boolean(chain?.id) && chain?.id !== BASE_CHAIN_ID;
 
-  // ── NFT owner gate (strongest gate)
+  // ── NFT owner gate
   const { data: ownerOfToken } = useReadContract({
     address: BASEBOTS.address,
     abi: BASEBOTS.abi,
@@ -107,7 +100,7 @@ export default function StoryPage({
     Boolean(ownerOfToken) &&
     String(ownerOfToken).toLowerCase() === String(address).toLowerCase();
 
-  // ── Season2 progress flags (on-chain truth)
+  // ── Season2 progress flags
   const { data: progressFlags } = useReadContract({
     address: BASEBOTS_S2.address,
     abi: BASEBOTS_S2.abi,
@@ -118,12 +111,19 @@ export default function StoryPage({
 
   const progress = useMemo(() => {
     const p = progressFlags as
-      | { ep1: boolean; ep2: boolean; ep3: boolean; ep4: boolean; ep5: boolean; finalized: boolean }
+      | {
+          ep1: boolean;
+          ep2: boolean;
+          ep3: boolean;
+          ep4: boolean;
+          ep5: boolean;
+          finalized: boolean;
+        }
       | undefined;
     return p;
   }, [progressFlags]);
 
-  // ── Bonus bits (on-chain, so Ep5 secret unlock works reliably)
+  // ── Bonus bits
   const { data: hasB1 } = useReadContract({
     address: BASEBOTS_S2.address,
     abi: BASEBOTS_S2.abi,
@@ -142,34 +142,38 @@ export default function StoryPage({
 
   // ── Core gating
   const hasToken = Boolean(tokenId);
-  const canPlayCore = hasToken && isOwner && !wrongChain; // you can loosen this for ep1 if you want
-  const ep1Unlocked = canPlayCore; // ep1 writes state on-chain, so require ownership
+  const canPlayCore = hasToken && isOwner && !wrongChain;
+
+  // 🔓 CHANGE #1: Episode 1 preview enabled
+  const ep1Unlocked = true;
+
   const ep2Unlocked = canPlayCore && Boolean(progress?.ep1);
   const ep3Unlocked = canPlayCore && Boolean(progress?.ep2);
   const ep4Unlocked = canPlayCore && Boolean(progress?.ep3);
   const ep5Unlocked = canPlayCore && Boolean(progress?.ep4);
   const ep5Done = Boolean(progress?.ep5);
 
-  // Prologue / bonuses tiering
-  const prologueUnlocked = canPlayCore && Boolean(hasB1); // or choose a different unlock rule
+  const prologueUnlocked = canPlayCore && Boolean(hasB1);
   const bonus1Unlocked = canPlayCore && Boolean(hasB1);
   const bonus2Unlocked = canPlayCore && Boolean(hasB2);
 
   const currentCore = useMemo(() => nextCoreMode(progress), [progress]);
 
-  /* route */
+  /* ───────────────── ROUTE ───────────────── */
+
   if (mode !== "hub") {
     const map: any = {
       prologue: <PrologueSilenceInDarkness onExit={() => setMode("hub")} />,
       ep1: <EpisodeOne onExit={() => setMode("hub")} />,
-      ep2: <EpisodeTwo onExit={() => setMode("hub")} />,
+      // 🔧 CHANGE #2: tokenId passed correctly
+      ep2: <EpisodeTwo tokenId={tokenId!} onExit={() => setMode("hub")} />,
       ep3: <EpisodeThree onExit={() => setMode("hub")} />,
       ep4: <EpisodeFour onExit={() => setMode("hub")} />,
       ep5: <EpisodeFive onExit={() => setMode("hub")} />,
       bonus: <BonusEcho onExit={() => setMode("hub")} />,
-      // bonus2: <BonusRedacted onExit={() => setMode("hub")} /> // if/when you add component
       stats: null,
     };
+
     return map[mode] ?? (
       <main style={{ minHeight: "100vh", background: "#020617", color: "white", padding: 24 }}>
         <div style={{ maxWidth: 900, margin: "0 auto" }}>
