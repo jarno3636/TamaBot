@@ -1,4 +1,4 @@
-// src/lib/abi/basebotsSeason2State.ts
+// lib/abi/basebotsSeason2State.ts
 
 export const BASEBOTS_SEASON2_STATE_ADDRESS =
   "0x738f3febff6dacee3b4b9dfb339128f6e94f0e8d" as const;
@@ -105,33 +105,58 @@ export const BASEBOTS_SEASON2_STATE_ABI = [
 
   /* ─────────────── WRITES ─────────────── */
   {
-    "inputs": [{ "internalType": "uint256", "name": "tokenId", "type": "uint256" }, { "internalType": "uint8", "name": "choice", "type": "uint8" }],
+    "inputs": [
+      { "internalType": "uint256", "name": "tokenId", "type": "uint256" },
+      { "internalType": "uint8", "name": "choice", "type": "uint8" }
+    ],
     "name": "setEpisode1",
     "stateMutability": "nonpayable",
     "type": "function"
   },
   {
-    "inputs": [{ "internalType": "uint256", "name": "tokenId", "type": "uint256" }, { "internalType": "bytes7", "name": "designation", "type": "bytes7" }],
+    "inputs": [
+      { "internalType": "uint256", "name": "tokenId", "type": "uint256" },
+      { "internalType": "bytes7", "name": "designation", "type": "bytes7" }
+    ],
     "name": "setEpisode2Designation",
     "stateMutability": "nonpayable",
     "type": "function"
   },
   {
-    "inputs": [{ "internalType": "uint256", "name": "tokenId", "type": "uint256" }, { "internalType": "uint8", "name": "bias", "type": "uint8" }],
+    "inputs": [
+      { "internalType": "uint256", "name": "tokenId", "type": "uint256" },
+      { "internalType": "uint8", "name": "bias", "type": "uint8" }
+    ],
     "name": "setEpisode3",
     "stateMutability": "nonpayable",
     "type": "function"
   },
   {
-    "inputs": [{ "internalType": "uint256", "name": "tokenId", "type": "uint256" }, { "internalType": "uint8", "name": "profile", "type": "uint8" }],
+    "inputs": [
+      { "internalType": "uint256", "name": "tokenId", "type": "uint256" },
+      { "internalType": "uint8", "name": "profile", "type": "uint8" }
+    ],
     "name": "setEpisode4Profile",
     "stateMutability": "nonpayable",
     "type": "function"
   },
   {
-    "inputs": [{ "internalType": "uint256", "name": "tokenId", "type": "uint256" }, { "internalType": "uint8", "name": "outcome", "type": "uint8" }, { "internalType": "uint16", "name": "bonusFlags", "type": "uint16" }],
+    "inputs": [
+      { "internalType": "uint256", "name": "tokenId", "type": "uint256" },
+      { "internalType": "uint8", "name": "outcome", "type": "uint8" },
+      { "internalType": "uint16", "name": "bonusFlags", "type": "uint16" }
+    ],
     "name": "finalizeAndLock",
     "stateMutability": "nonpayable",
     "type": "function"
   }
 ] as const;
+
+/* ─────────────────────────────────────────────
+ * Wagmi-friendly wrapper (THIS is what you import)
+ * ───────────────────────────────────────────── */
+
+export const BASEBOTS_S2 = {
+  address: BASEBOTS_SEASON2_STATE_ADDRESS,
+  abi: BASEBOTS_SEASON2_STATE_ABI,
+} as const;
