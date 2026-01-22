@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { useAccount, useReadContract } from "wagmi";
 
-import { useIdentity } from "@/lib/useIdentity";
+import useFid from "@/hooks/useFid";
 
 import EpisodeOne from "@/components/story/EpisodeOne";
 import EpisodeTwo from "@/components/story/EpisodeTwo";
@@ -14,7 +14,6 @@ import EpisodeFive from "@/components/story/EpisodeFive";
 import PrologueSilenceInDarkness from "@/components/story/PrologueSilenceInDarkness";
 import BonusEcho from "@/components/story/BonusEcho";
 import BonusEchoArchive from "@/components/story/BonusEchoArchive";
-import GlobalStatsPanel from "@/components/story/GlobalStatsPanel";
 
 import { BASEBOTS } from "@/lib/abi";
 import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
@@ -25,7 +24,7 @@ import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 const BASE_CHAIN_ID = 8453;
 
 /* ─────────────────────────────────────────────
- * Types / Helpers
+ * Helpers
  * ───────────────────────────────────────────── */
 
 type CoreProgress = {
@@ -197,11 +196,19 @@ export default function StoryPage() {
   >("hub");
 
   const { address, chain } = useAccount();
-  const { fid: fidString, hasIdentity } = useIdentity();
 
+  const fidHook = useFid() as any;
+  const fid = fidHook?.fid ?? fidHook;
+
+  const fidString = useMemo(() => {
+    if (typeof fid === "number" && fid > 0) return String(fid);
+    if (typeof fid === "string" && /^\d+$/.test(fid)) return fid;
+    return null;
+  }, [fid]);
+
+  const hasIdentity = Boolean(fidString);
   const wrongChain = chain?.id !== undefined && chain.id !== BASE_CHAIN_ID;
 
-  /* NFT check (FID ≠ NFT) */
   const { data: tokenUri } = useReadContract({
     ...BASEBOTS,
     functionName: "tokenURI",
@@ -230,7 +237,6 @@ export default function StoryPage() {
   const bonus1Unlocked = Boolean(progress?.ep3);
   const bonus2Unlocked = Boolean(progress?.ep5);
 
-  /* ROUTING */
   if (mode !== "hub") {
     const exit = () => setMode("hub");
     const tokenId = fidString ?? "";
@@ -248,7 +254,6 @@ export default function StoryPage() {
     }
   }
 
-  /* HUB */
   return (
     <main
       style={{
@@ -346,14 +351,6 @@ export default function StoryPage() {
               onClick={bonus2Unlocked ? () => setMode("bonus2") : undefined}
             />
           </div>
-        </section>
-
-        {/* GLOBAL STATS */}
-        <section style={{ marginTop: 40 }}>
-          <h3 style={{ fontSize: 12, fontWeight: 950, letterSpacing: 1.8, marginBottom: 12 }}>
-            GLOBAL INTERPRETATION METRICS
-          </h3>
-          <GlobalStatsPanel />
         </section>
       </div>
     </main>
