@@ -119,7 +119,36 @@ export default function StoryPage() {
         finalized: boolean;
       }
     | undefined;
+/* ───────────────── ROUTING ───────────────── */
 
+  if (mode !== "hub") {
+    const routes: Partial<Record<typeof mode, React.ReactNode>> = {
+      prologue: <PrologueSilenceInDarkness onExit={() => setMode("hub")} />,
+
+      ep1: tokenId ? (
+        <EpisodeOne tokenId={tokenId} onExit={() => setMode("hub")} />
+      ) : null,
+
+      ep2: tokenId ? (
+        <EpisodeTwo tokenId={tokenId} onExit={() => setMode("hub")} />
+      ) : null,
+
+      ep3: tokenId ? (
+        <EpisodeThree tokenId={tokenId} onExit={() => setMode("hub")} />
+      ) : null,
+
+      ep4: tokenId ? (
+        <EpisodeFour tokenId={tokenId} onExit={() => setMode("hub")} />
+      ) : null,
+
+      ep5: tokenId ? (
+        <EpisodeFive tokenId={tokenId} onExit={() => setMode("hub")} />
+      ) : null,
+
+      bonus: <BonusEcho onExit={() => setMode("hub")} />,
+    };
+
+    return routes[mode] ?? null;
   /* ── Bonus bits ── */
 
   const { data: hasB1 } = useReadContract({
