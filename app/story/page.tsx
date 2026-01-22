@@ -1,9 +1,7 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
-import { useAccount, useReadContract } from "wagmi";
-
-import useFid from "@/hooks/useFid";
+import React, { useMemo, useState } from "react";
+import { useAccount } from "wagmi";
 
 import EpisodeOne from "@/components/story/EpisodeOne";
 import EpisodeTwo from "@/components/story/EpisodeTwo";
@@ -16,109 +14,46 @@ import BonusEcho from "@/components/story/BonusEcho";
 import BonusEchoArchive from "@/components/story/BonusEchoArchive";
 import GlobalStatsPanel from "@/components/story/GlobalStatsPanel";
 
-import { BASEBOTS } from "@/lib/abi";
-import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
-
-/* ───────────────────────────────────────────── */
 const BASE_CHAIN_ID = 8453;
-/* ───────────────────────────────────────────── */
 
-type CoreProgress = {
-  ep1: boolean;
-  ep2: boolean;
-  ep3: boolean;
-  ep4: boolean;
-  ep5: boolean;
-  finalized: boolean;
-};
-
-function nextCoreMode(flags?: Partial<CoreProgress>) {
-  if (!flags?.ep1) return "ep1";
-  if (!flags?.ep2) return "ep2";
-  if (!flags?.ep3) return "ep3";
-  if (!flags?.ep4) return "ep4";
-  return "ep5";
-}
-
-/* ───────────────────────────────────────────── */
+type Mode =
+  | "hub"
+  | "ep1"
+  | "ep2"
+  | "ep3"
+  | "ep4"
+  | "ep5"
+  | "prologue"
+  | "bonus1"
+  | "bonus2";
 
 export default function StoryPage() {
-  const [mode, setMode] = useState<
-    "hub" | "ep1" | "ep2" | "ep3" | "ep4" | "ep5" | "prologue" | "bonus1" | "bonus2"
-  >("hub");
-
+  const [mode, setMode] = useState<Mode>("hub");
   const { address, chain } = useAccount();
 
-  /* ✅ SAFE FID RESOLUTION (no crash) */
-  const fidResult = useFid();
-  const fid =
-    typeof fidResult === "number"
-      ? fidResult
-      : typeof fidResult === "object"
-      ? fidResult?.fid
-      : null;
-
-  const fidString =
-    typeof fid === "number" && fid > 0 ? String(fid) : null;
-
-  const hasIdentity = Boolean(fidString);
   const wrongChain =
     chain?.id !== undefined && chain.id !== BASE_CHAIN_ID;
 
-  /* ───────── NFT presence (FID == tokenId) ───────── */
+  const canEnterStory = Boolean(address) && !wrongChain;
 
-  const { data: tokenUri } = useReadContract({
-    ...BASEBOTS,
-    functionName: "tokenURI",
-    args: fidString ? ([BigInt(fidString)] as [bigint]) : undefined,
-    query: { enabled: hasIdentity },
-  });
+  const exit = () => setMode("hub");
 
-  const hasBasebot =
-    typeof tokenUri === "string" &&
-    tokenUri.startsWith("data:application/json;base64,");
-
-  /* ───────── Progress flags ───────── */
-
-  const { data: progressFlags } = useReadContract({
-    address: BASEBOTS_S2.address,
-    abi: BASEBOTS_S2.abi,
-    functionName: "getProgressFlags",
-    args: fidString ? ([BigInt(fidString)] as [bigint]) : undefined,
-    query: { enabled: hasIdentity && hasBasebot },
-  });
-
-  const progress = progressFlags as CoreProgress | undefined;
-
-  const canPlayCore =
-    Boolean(address) && hasBasebot && !wrongChain;
-
-  const currentCore = useMemo(
-    () => nextCoreMode(progress),
-    [progress],
-  );
-
-  const prologueUnlocked = Boolean(progress?.ep1);
-  const bonus1Unlocked = Boolean(progress?.ep3);
-  const bonus2Unlocked = Boolean(progress?.ep5);
-
-  /* ───────── Routing ───────── */
+  /* ─────────────────────────────────────────────
+   * ROUTING
+   * ───────────────────────────────────────────── */
 
   if (mode !== "hub") {
-    const exit = () => setMode("hub");
-    const tokenId = fidString ?? "";
-
     switch (mode) {
       case "ep1":
-        return <EpisodeOne tokenId={tokenId} onExit={exit} />;
+        return <EpisodeOne onExit={exit} />;
       case "ep2":
-        return <EpisodeTwo tokenId={tokenId} onExit={exit} />;
+        return <EpisodeTwo onExit={exit} />;
       case "ep3":
-        return <EpisodeThree tokenId={tokenId} onExit={exit} />;
+        return <EpisodeThree onExit={exit} />;
       case "ep4":
-        return <EpisodeFour tokenId={tokenId} onExit={exit} />;
+        return <EpisodeFour onExit={exit} />;
       case "ep5":
-        return <EpisodeFive tokenId={tokenId} onExit={exit} />;
+        return <EpisodeFive onExit={exit} />;
       case "prologue":
         return <PrologueSilenceInDarkness onExit={exit} />;
       case "bonus1":
@@ -130,70 +65,212 @@ export default function StoryPage() {
     }
   }
 
-  /* ───────── Hub UI ───────── */
+  /* ─────────────────────────────────────────────
+   * HUB
+   * ───────────────────────────────────────────── */
 
   return (
     <main
       style={{
         minHeight: "100vh",
-        padding: "40px 16px 64px",
+        padding: "48px 16px 80px",
         background:
-          "radial-gradient(1100px 520px at 50% -10%, rgba(56,189,248,0.12), transparent 62%), #020617",
+          "radial-gradient(1200px 520px at 50% -10%, rgba(56,189,248,0.14), transparent 60%), radial-gradient(900px 520px at 90% 120%, rgba(168,85,247,0.16), transparent 60%), #020617",
         color: "white",
       }}
     >
       <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-        <header style={{ marginBottom: 24 }}>
-          <h1 style={{ fontSize: 28, fontWeight: 950 }}>
-            BASEBOTS // STORY
+        {/* HEADER */}
+        <header style={{ marginBottom: 28 }}>
+          <h1
+            style={{
+              fontSize: 32,
+              fontWeight: 950,
+              letterSpacing: 0.3,
+            }}
+          >
+            Basebots: Core Memory
           </h1>
-          <p style={{ fontSize: 13, opacity: 0.75 }}>
-            Choices are committed on-chain. Identity is bound to your FID.
+          <p
+            style={{
+              marginTop: 8,
+              fontSize: 14,
+              opacity: 0.75,
+              maxWidth: 760,
+            }}
+          >
+            Choices are committed on-chain. Memory persists beyond the session.
           </p>
         </header>
 
-        {!hasIdentity && (
-          <div style={{ opacity: 0.7, marginBottom: 20 }}>
-            Waiting for Farcaster identity…
+        {/* GATE NOTICE */}
+        {!canEnterStory && (
+          <div
+            style={{
+              borderRadius: 18,
+              border: "1px solid rgba(255,255,255,0.14)",
+              background: "rgba(255,255,255,0.05)",
+              padding: 16,
+              marginBottom: 28,
+              fontSize: 13,
+            }}
+          >
+            {!address && "Connect a wallet to begin the Core Memory."}
+            {address && wrongChain && "Switch to Base network to continue."}
           </div>
         )}
 
-        {hasIdentity && !hasBasebot && (
-          <div style={{ opacity: 0.7, marginBottom: 20 }}>
-            No Basebot NFT detected for this FID.
-          </div>
-        )}
-
-        {wrongChain && (
-          <div style={{ color: "#fb7185", marginBottom: 20 }}>
-            Switch to Base network.
-          </div>
-        )}
-
-        {/* CORE */}
+        {/* CORE STORY CARDS */}
         <section>
-          <h3 style={{ fontSize: 12, letterSpacing: 1.8, fontWeight: 900 }}>
+          <h3
+            style={{
+              fontSize: 12,
+              fontWeight: 950,
+              letterSpacing: 2,
+              opacity: 0.85,
+              marginBottom: 14,
+            }}
+          >
             CORE SEQUENCE
           </h3>
 
-          <div style={{ marginTop: 16 }}>
-            <button
-              disabled={!canPlayCore}
-              onClick={() => setMode(currentCore)}
-            >
-              Enter Story
-            </button>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+              gap: 24,
+            }}
+          >
+            <StoryCard
+              title="Awakening Protocol"
+              img="/story/01-awakening.png"
+              note="Initialization begins."
+              onClick={() => setMode("ep1")}
+              enabled={canEnterStory}
+            />
+
+            <StoryCard
+              title="Signal Fracture"
+              img="/story/ep2.png"
+              note="Designation binding."
+              locked
+            />
+
+            <StoryCard
+              title="Fault Lines"
+              img="/story/ep3.png"
+              note="Contradictions form."
+              locked
+              distorted
+            />
+
+            <StoryCard
+              title="Threshold"
+              img="/story/ep4.png"
+              note="The city responds."
+              locked
+              distorted
+            />
+
+            <StoryCard
+              title="Emergence"
+              img="/story/ep5.png"
+              note="Outcomes are permanent."
+              locked
+              distorted
+            />
           </div>
         </section>
 
-        {/* GLOBAL STATS (restored safely) */}
+        {/* GLOBAL STATS */}
         <section style={{ marginTop: 48 }}>
-          <h3 style={{ fontSize: 12, letterSpacing: 1.8, fontWeight: 900 }}>
+          <h3
+            style={{
+              fontSize: 12,
+              fontWeight: 950,
+              letterSpacing: 2,
+              opacity: 0.85,
+              marginBottom: 14,
+            }}
+          >
             GLOBAL INTERPRETATION METRICS
           </h3>
+
           <GlobalStatsPanel />
         </section>
       </div>
     </main>
+  );
+}
+
+/* ─────────────────────────────────────────────
+ * STORY CARD
+ * ───────────────────────────────────────────── */
+
+function StoryCard({
+  title,
+  note,
+  img,
+  locked,
+  distorted,
+  enabled = true,
+  onClick,
+}: {
+  title: string;
+  note: string;
+  img: string;
+  locked?: boolean;
+  distorted?: boolean;
+  enabled?: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <article
+      aria-disabled={locked}
+      style={{
+        borderRadius: 22,
+        overflow: "hidden",
+        border: "1px solid rgba(255,255,255,0.14)",
+        background: "rgba(0,0,0,0.35)",
+        opacity: locked ? 0.65 : 1,
+        cursor: locked ? "not-allowed" : "pointer",
+        boxShadow: "0 30px 90px rgba(0,0,0,0.6)",
+      }}
+      onClick={!locked && enabled ? onClick : undefined}
+    >
+      <div style={{ position: "relative" }}>
+        <img
+          src={img}
+          alt=""
+          style={{
+            width: "100%",
+            height: 200,
+            objectFit: "cover",
+            filter: locked
+              ? "grayscale(0.9) brightness(0.55)"
+              : "none",
+          }}
+        />
+
+        {distorted && (
+          <div
+            aria-hidden
+            style={{
+              position: "absolute",
+              inset: 0,
+              background:
+                "repeating-linear-gradient(180deg, rgba(255,255,255,0.1) 0px, rgba(255,255,255,0.1) 1px, transparent 4px, transparent 7px)",
+              mixBlendMode: "overlay",
+              opacity: 0.8,
+            }}
+          />
+        )}
+      </div>
+
+      <div style={{ padding: 18 }}>
+        <h2 style={{ fontSize: 16, fontWeight: 950 }}>{title}</h2>
+        <p style={{ fontSize: 12, opacity: 0.7 }}>{note}</p>
+      </div>
+    </article>
   );
 }
