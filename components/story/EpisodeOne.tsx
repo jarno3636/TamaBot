@@ -68,7 +68,8 @@ export default function EpisodeOne({
   const [chainChoice, setChainChoice] =
     useState<EpisodeOneChoiceId | null>(null);
 
-  const [status, setStatus] = useState("Idle");
+  const [status, setStatus] = useState("Booting…");
+  const [chainChecked, setChainChecked] = useState(false);
 
   /* ───────── Ambient audio ───────── */
 
@@ -88,10 +89,13 @@ export default function EpisodeOne({
     };
   }, []);
 
-  /* ───────── Read chain on mount / event ───────── */
+  /* ───────── Chain read (SAFE) ───────── */
 
   async function readChain() {
-    if (!publicClient || !tokenIdBig) return;
+    if (!publicClient || !tokenIdBig) {
+      setChainChecked(true);
+      return;
+    }
 
     try {
       setStatus("Reading chain…");
@@ -102,21 +106,21 @@ export default function EpisodeOne({
         args: [tokenIdBig],
       });
 
-      const raw = state?.ep1Choice;
-      const n =
-        typeof raw === "bigint" ? Number(raw) : Number(raw);
-
-      if (state?.ep1Set && n in EP1_FROM_ENUM) {
-        setChainChoice(EP1_FROM_ENUM[n]);
-        setPhase("ending");
-        setStatus(`Chain EP1: ${EP1_FROM_ENUM[n]}`);
+      if (state?.ep1Set) {
+        const raw = state.ep1Choice;
+        const n = typeof raw === "bigint" ? Number(raw) : Number(raw);
+        if (n in EP1_FROM_ENUM) {
+          setChainChoice(EP1_FROM_ENUM[n]);
+          setPhase("ending");
+          setStatus(`Recovered from chain`);
+        }
       } else {
-        setPhase("intro");
-        setStatus("EP1 not set");
+        setStatus("Awaiting designation");
       }
     } catch {
-      setStatus("Chain read failed");
-      setPhase("intro");
+      setStatus("Chain unavailable");
+    } finally {
+      setChainChecked(true);
     }
   }
 
@@ -148,7 +152,7 @@ export default function EpisodeOne({
       await publicClient!.waitForTransactionReceipt({ hash });
       setChainChoice(choice);
       setPhase("ending");
-      setStatus(`Committed: ${choice}`);
+      setStatus("Committed on-chain");
 
       window.dispatchEvent(new Event("basebots-progress-updated"));
     } catch {
@@ -169,7 +173,7 @@ export default function EpisodeOne({
           "radial-gradient(1100px 520px at 50% -10%, rgba(56,189,248,0.10), transparent 62%), #020617",
       }}
     >
-      {/* BOOT CONSOLE */}
+      {/* BOOT CONSOLE (ALWAYS) */}
       <div
         style={{
           borderRadius: 22,
@@ -183,30 +187,30 @@ export default function EpisodeOne({
         {isBase ? "Base" : "Wrong chain"} • {status}
       </div>
 
-      {/* INTRO */}
-      {phase === "intro" && (
+      {/* WAIT FOR CHAIN CHECK */}
+      {!chainChecked && (
+        <p style={{ marginTop: 24, opacity: 0.6 }}>
+          Initializing memory substrate…
+        </p>
+      )}
+
+      {chainChecked && phase === "intro" && (
         <div style={{ marginTop: 28 }}>
           <h1 style={{ fontSize: 30, fontWeight: 900 }}>AWAKENING</h1>
           <p style={{ marginTop: 12, opacity: 0.75 }}>
-            Cold boot. No owner. No credentials.  
-            The system expects a profile that does not exist.
+            Cold boot. No owner. No credentials.
           </p>
-          <button
-            onClick={() => setPhase("signal")}
-            style={primary()}
-          >
+          <button onClick={() => setPhase("signal")} style={primary()}>
             Continue
           </button>
         </div>
       )}
 
-      {/* SIGNAL */}
       {phase === "signal" && (
         <div style={{ marginTop: 28 }}>
           <h2 style={title()}>SIGNAL DROP</h2>
           <p style={body()}>
-            AUDIT GATE INITIALIZED  
-            OPERATOR PROFILE REQUIRED
+            AUDIT GATE INITIALIZED — OPERATOR PROFILE REQUIRED
           </p>
           <button onClick={() => setPhase("local")} style={primary()}>
             Locate local terminal
@@ -214,13 +218,10 @@ export default function EpisodeOne({
         </div>
       )}
 
-      {/* LOCAL */}
       {phase === "local" && (
         <div style={{ marginTop: 28 }}>
           <h2 style={title()}>LOCAL CONTROL NODE</h2>
-          <p style={body()}>
-            A recessed panel marked MANUAL OVERRIDE.
-          </p>
+          <p style={body()}>A recessed panel marked MANUAL OVERRIDE.</p>
 
           <div style={{ display: "grid", gap: 10 }}>
             <button onClick={() => { setLocalAction("PRESS"); setPhase("localAfter"); }} style={primary()}>
@@ -236,7 +237,6 @@ export default function EpisodeOne({
         </div>
       )}
 
-      {/* LOCAL AFTER */}
       {phase === "localAfter" && (
         <div style={{ marginTop: 28 }}>
           <h2 style={title()}>OVERRIDE REJECTED</h2>
@@ -251,7 +251,6 @@ export default function EpisodeOne({
         </div>
       )}
 
-      {/* CHOICE */}
       {phase === "choice" && (
         <div style={{ marginTop: 28 }}>
           <h2 style={title()}>AUDIT PROMPT</h2>
@@ -267,7 +266,6 @@ export default function EpisodeOne({
         </div>
       )}
 
-      {/* ENDING */}
       {phase === "ending" && chainChoice && (
         <div style={{ marginTop: 28 }}>
           <h2 style={title()}>AUDIT RESULT</h2>
@@ -283,22 +281,10 @@ export default function EpisodeOne({
   );
 }
 
-/* ────────────────────────────────────────────── */
-/* Inline styles */
-/* ────────────────────────────────────────────── */
+/* ───────── styles ───────── */
 
-const title = () => ({
-  fontSize: 22,
-  fontWeight: 900,
-});
-
-const body = () => ({
-  marginTop: 10,
-  fontSize: 14,
-  opacity: 0.75,
-  lineHeight: 1.6,
-});
-
+const title = () => ({ fontSize: 22, fontWeight: 900 });
+const body = () => ({ marginTop: 10, fontSize: 14, opacity: 0.75, lineHeight: 1.6 });
 const primary = () => ({
   marginTop: 18,
   borderRadius: 999,
@@ -308,7 +294,6 @@ const primary = () => ({
   color: "#020617",
   border: "none",
 });
-
 const secondary = () => ({
   borderRadius: 999,
   padding: "12px 18px",
