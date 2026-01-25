@@ -28,26 +28,6 @@ const BONUS2_BIT = 2;
  * Helpers
  * ───────────────────────────────────────────── */
 
-function statusOf(opts: {
-  unlocked: boolean;
-  done?: boolean;
-  requiresNFT?: boolean;
-  current?: boolean;
-}) {
-  if (opts.done) return "COMPLETE";
-  if (!opts.unlocked) return opts.requiresNFT ? "NFT REQUIRED" : "LOCKED";
-  if (opts.current) return "CURRENT";
-  return "AVAILABLE";
-}
-
-function badgeColorFor(status: string) {
-  if (status === "COMPLETE") return "rgba(34,197,94,0.92)";
-  if (status === "CURRENT") return "rgba(250,204,21,0.92)";
-  if (status === "AVAILABLE") return "rgba(56,189,248,0.92)";
-  if (status === "NFT REQUIRED") return "rgba(168,85,247,0.92)";
-  return "rgba(255,255,255,0.35)";
-}
-
 function nextCoreMode(flags?: {
   ep1?: boolean;
   ep2?: boolean;
@@ -74,12 +54,13 @@ export default function StoryPage() {
   const { address, chain } = useAccount();
   const { fid } = useFid();
 
-  const tokenId = useMemo<bigint | undefined>(() => {
-    try {
-      return typeof fid === "number" && fid > 0 ? BigInt(fid) : undefined;
-    } catch {
-      return undefined;
-    }
+  /**
+   * 🔑 CRITICAL FIX:
+   * tokenId MUST be a STRING for client components
+   * Never BigInt here.
+   */
+  const tokenId = useMemo<string | undefined>(() => {
+    return typeof fid === "number" && fid > 0 ? String(fid) : undefined;
   }, [fid]);
 
   const wrongChain = Boolean(chain?.id) && chain?.id !== BASE_CHAIN_ID;
@@ -89,7 +70,7 @@ export default function StoryPage() {
   const { data: tokenUri } = useReadContract({
     ...BASEBOTS,
     functionName: "tokenURI",
-    args: tokenId ? ([tokenId] as unknown as [bigint]) : undefined,
+    args: tokenId ? ([BigInt(tokenId)] as unknown as [bigint]) : undefined,
     query: { enabled: Boolean(tokenId) },
   });
 
@@ -103,7 +84,7 @@ export default function StoryPage() {
     address: BASEBOTS_S2.address,
     abi: BASEBOTS_S2.abi,
     functionName: "getBotState",
-    args: tokenId ? [tokenId] : undefined,
+    args: tokenId ? ([BigInt(tokenId)] as unknown as [bigint]) : undefined,
     query: { enabled: Boolean(tokenId) && hasBasebot },
   });
 
@@ -126,7 +107,7 @@ export default function StoryPage() {
     address: BASEBOTS_S2.address,
     abi: BASEBOTS_S2.abi,
     functionName: "hasBonusBit",
-    args: tokenId ? [tokenId, BONUS1_BIT] : undefined,
+    args: tokenId ? ([BigInt(tokenId), BONUS1_BIT] as any) : undefined,
     query: { enabled: Boolean(tokenId) && hasBasebot },
   });
 
@@ -134,7 +115,7 @@ export default function StoryPage() {
     address: BASEBOTS_S2.address,
     abi: BASEBOTS_S2.abi,
     functionName: "hasBonusBit",
-    args: tokenId ? [tokenId, BONUS2_BIT] : undefined,
+    args: tokenId ? ([BigInt(tokenId), BONUS2_BIT] as any) : undefined,
     query: { enabled: Boolean(tokenId) && hasBasebot },
   });
 
@@ -162,8 +143,6 @@ export default function StoryPage() {
   const ep4Unlocked = canPlayGated && Boolean(progress?.ep3);
   const ep5Unlocked = canPlayGated && Boolean(progress?.ep4);
 
-  const currentCore = useMemo(() => nextCoreMode(progress), [progress]);
-
   /* ───────────────── ROUTING ───────────────── */
 
   if (mode !== "hub") {
@@ -172,7 +151,7 @@ export default function StoryPage() {
 
       ep1: (
         <EpisodeOne
-          tokenId={tokenId ?? 0n}
+          tokenId={tokenId ?? "0"}
           onExit={() => setMode("hub")}
         />
       ),
@@ -238,36 +217,11 @@ export default function StoryPage() {
           }}
         >
           {[
-            {
-              id: "ep1",
-              title: "Awakening Protocol",
-              note: "Initialization begins. Your first directive is recorded.",
-              unlocked: ep1Unlocked,
-            },
-            {
-              id: "ep2",
-              title: "Signal Fracture",
-              note: "Designation binding. A name becomes a constraint.",
-              unlocked: ep2Unlocked,
-            },
-            {
-              id: "ep3",
-              title: "Fault Lines",
-              note: "Contradictions form. You decide how the system thinks.",
-              unlocked: ep3Unlocked,
-            },
-            {
-              id: "ep4",
-              title: "Threshold",
-              note: "A profile is derived. The city prepares its response.",
-              unlocked: ep4Unlocked,
-            },
-            {
-              id: "ep5",
-              title: "Emergence",
-              note: "Surface access is negotiated. Outcomes are permanent.",
-              unlocked: ep5Unlocked,
-            },
+            { id: "ep1", title: "Awakening Protocol", img: "/story/01-awakening.png", unlocked: ep1Unlocked },
+            { id: "ep2", title: "Signal Fracture", img: "/story/ep2.png", unlocked: ep2Unlocked },
+            { id: "ep3", title: "Fault Lines", img: "/story/ep3.png", unlocked: ep3Unlocked },
+            { id: "ep4", title: "Threshold", img: "/story/ep4.png", unlocked: ep4Unlocked },
+            { id: "ep5", title: "Emergence", img: "/story/ep5.png", unlocked: ep5Unlocked },
           ].map((ep) => (
             <article
               key={ep.id}
@@ -279,10 +233,17 @@ export default function StoryPage() {
                 opacity: ep.unlocked ? 1 : 0.55,
               }}
             >
+              <img
+                src={ep.img}
+                alt={ep.title}
+                style={{
+                  width: "100%",
+                  borderRadius: 16,
+                  marginBottom: 12,
+                  border: "1px solid rgba(255,255,255,0.12)",
+                }}
+              />
               <h2 style={{ fontWeight: 900 }}>{ep.title}</h2>
-              <p style={{ fontSize: 13, opacity: 0.7, marginTop: 6 }}>
-                {ep.note}
-              </p>
 
               <button
                 disabled={!ep.unlocked}
