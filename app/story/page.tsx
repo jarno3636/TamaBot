@@ -37,41 +37,29 @@ export default function StoryPage() {
   const { address, chain } = useAccount();
   const { fid } = useFid();
 
-  /* ───────── token handling (rock solid) ───────── */
+  const isBase = chain?.id === BASE_CHAIN_ID;
 
-  // TokenId is derived from FID, but we NEVER block UI on it
+  /* ───────── FID (ONLY for episode content) ───────── */
+
   const tokenIdString = useMemo(() => {
     return typeof fid === "number" && fid > 0 ? String(fid) : undefined;
   }, [fid]);
 
-  const tokenIdBigInt = useMemo(() => {
-    try {
-      return tokenIdString ? BigInt(tokenIdString) : undefined;
-    } catch {
-      return undefined;
-    }
-  }, [tokenIdString]);
+  /* ───────── NFT OWNERSHIP (CORRECT) ───────── */
 
-  const isBase = chain?.id === BASE_CHAIN_ID;
-
-  /* ───────── NFT ownership (ONLY GATE) ───────── */
-
-  const { data: tokenUri } = useReadContract({
+  const { data: balance } = useReadContract({
     ...BASEBOTS,
-    functionName: "tokenURI",
-    args: tokenIdBigInt ? [tokenIdBigInt] : undefined,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
     query: {
-      enabled: Boolean(address && isBase && tokenIdBigInt),
+      enabled: Boolean(address && isBase),
     },
   });
 
-  const hasBasebot =
-    typeof tokenUri === "string" &&
-    tokenUri.startsWith("data:application/json;base64,");
-
+  const hasBasebot = typeof balance === "bigint" && balance > 0n;
   const nftGatePassed = Boolean(address && isBase && hasBasebot);
 
-  /* ───────── ROUTING (NO COMPLEX LOGIC) ───────── */
+  /* ───────── ROUTING ───────── */
 
   if (mode !== "hub") {
     if (!nftGatePassed) {
@@ -120,44 +108,19 @@ export default function StoryPage() {
         return <PrologueSilenceInDarkness onExit={() => setMode("hub")} />;
 
       case "ep1":
-        return (
-          <EpisodeOne
-            tokenId={tokenIdString!}
-            onExit={() => setMode("hub")}
-          />
-        );
+        return <EpisodeOne tokenId={tokenIdString ?? "0"} onExit={() => setMode("hub")} />;
 
       case "ep2":
-        return (
-          <EpisodeTwo
-            tokenId={tokenIdString!}
-            onExit={() => setMode("hub")}
-          />
-        );
+        return <EpisodeTwo tokenId={tokenIdString ?? "0"} onExit={() => setMode("hub")} />;
 
       case "ep3":
-        return (
-          <EpisodeThree
-            tokenId={tokenIdString!}
-            onExit={() => setMode("hub")}
-          />
-        );
+        return <EpisodeThree tokenId={tokenIdString ?? "0"} onExit={() => setMode("hub")} />;
 
       case "ep4":
-        return (
-          <EpisodeFour
-            tokenId={tokenIdString!}
-            onExit={() => setMode("hub")}
-          />
-        );
+        return <EpisodeFour tokenId={tokenIdString ?? "0"} onExit={() => setMode("hub")} />;
 
       case "ep5":
-        return (
-          <EpisodeFive
-            tokenId={tokenIdString!}
-            onExit={() => setMode("hub")}
-          />
-        );
+        return <EpisodeFive tokenId={tokenIdString ?? "0"} onExit={() => setMode("hub")} />;
 
       case "bonus":
         return <BonusEcho onExit={() => setMode("hub")} />;
@@ -191,7 +154,6 @@ export default function StoryPage() {
         </p>
       </header>
 
-      {/* CORE SEQUENCE */}
       <section style={{ maxWidth: 1200, margin: "0 auto" }}>
         <div
           style={{
