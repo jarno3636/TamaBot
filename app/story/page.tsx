@@ -1,7 +1,11 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
-import { useAccount, useReadContract } from "wagmi";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  useAccount,
+  usePublicClient,
+  useReadContract,
+} from "wagmi";
 
 import useFid from "@/hooks/useFid";
 
@@ -34,6 +38,7 @@ export default function StoryPage() {
   const [mode, setMode] = useState<Mode>("hub");
 
   const { address, chain } = useAccount();
+  const publicClient = usePublicClient();
   const { fid } = useFid();
   const isBase = chain?.id === BASE_CHAIN_ID;
 
@@ -55,12 +60,50 @@ export default function StoryPage() {
 
   /* ───────── ON-CHAIN STATE ───────── */
 
-  const { data: botState } = useReadContract({
+  const {
+    data: botState,
+    refetch: refetchBotState,
+  } = useReadContract({
     ...BASEBOTS_S2,
     functionName: "getBotState",
     args: tokenId ? [tokenId] : undefined,
     query: { enabled: Boolean(tokenId && nftGatePassed) },
   });
+
+  /* ───────── LIVE EVENT LISTENERS ───────── */
+
+  useEffect(() => {
+    if (!publicClient || !tokenId) return;
+
+    const unwatchEpisode = publicClient.watchContractEvent({
+      ...BASEBOTS_S2,
+      eventName: "EpisodeSet",
+      onLogs: (logs) => {
+        for (const log of logs) {
+          if ((log.args as any)?.tokenId === tokenId) {
+            refetchBotState();
+          }
+        }
+      },
+    });
+
+    const unwatchFinalized = publicClient.watchContractEvent({
+      ...BASEBOTS_S2,
+      eventName: "FinalizedProfile",
+      onLogs: (logs) => {
+        for (const log of logs) {
+          if ((log.args as any)?.tokenId === tokenId) {
+            refetchBotState();
+          }
+        }
+      },
+    });
+
+    return () => {
+      unwatchEpisode();
+      unwatchFinalized();
+    };
+  }, [publicClient, tokenId, refetchBotState]);
 
   const state = botState
     ? {
@@ -73,7 +116,7 @@ export default function StoryPage() {
       }
     : null;
 
-  /* ───────── UNLOCK RULES (CHAIN-TRUTH) ───────── */
+  /* ───────── UNLOCK LOGIC ───────── */
 
   const ep1Unlocked = nftGatePassed;
   const ep2Unlocked = nftGatePassed && state?.ep1;
@@ -148,11 +191,11 @@ export default function StoryPage() {
   /* ───────── HUB UI ───────── */
 
   const episodes = [
-    { id: "ep1", title: "Awakening Protocol", unlocked: ep1Unlocked },
-    { id: "ep2", title: "Signal Fracture", unlocked: ep2Unlocked },
-    { id: "ep3", title: "Fault Lines", unlocked: ep3Unlocked },
-    { id: "ep4", title: "Threshold", unlocked: ep4Unlocked },
-    { id: "ep5", title: "Emergence", unlocked: ep5Unlocked },
+    { id: "ep1", title: "Awakening Protocol", img: "/story/01-awakening.png", unlocked: ep1Unlocked },
+    { id: "ep2", title: "Signal Fracture", img: "/story/ep2.png", unlocked: ep2Unlocked },
+    { id: "ep3", title: "Fault Lines", img: "/story/ep3.png", unlocked: ep3Unlocked },
+    { id: "ep4", title: "Threshold", img: "/story/ep4.png", unlocked: ep4Unlocked },
+    { id: "ep5", title: "Emergence", img: "/story/ep5.png", unlocked: ep5Unlocked },
   ];
 
   return (
@@ -168,6 +211,7 @@ export default function StoryPage() {
               style={{
                 borderRadius: 22,
                 padding: 22,
+                background: "rgba(0,0,0,0.35)",
                 border: isCurrent
                   ? "1px solid rgba(168,85,247,0.85)"
                   : "1px solid rgba(255,255,255,0.14)",
@@ -176,9 +220,19 @@ export default function StoryPage() {
                   : "none",
                 animation: isCurrent ? "pulse 2.8s ease-in-out infinite" : "none",
                 opacity: ep.unlocked ? 1 : 0.45,
-                background: "rgba(0,0,0,0.35)",
               }}
             >
+              <img
+                src={ep.img}
+                alt={ep.title}
+                style={{
+                  width: "100%",
+                  borderRadius: 16,
+                  marginBottom: 12,
+                  border: "1px solid rgba(255,255,255,0.12)",
+                }}
+              />
+
               <h2 style={{ fontWeight: 900 }}>{ep.title}</h2>
 
               <p style={{ marginTop: 6, fontSize: 12, opacity: 0.65 }}>
