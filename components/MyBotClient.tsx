@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useReadContract } from "wagmi";
 import { BASEBOTS } from "@/lib/abi";
@@ -48,41 +47,7 @@ function b64ToUtf8(b64: string): string {
 }
 
 /* ─────────────────────────────────────────────
- * Glyph Maps
- * ───────────────────────────────────────────── */
-
-const EP1_GLYPHS = [
-  { label: "Obedience", glyph: "◉", color: "#60a5fa" },
-  { label: "Defiance", glyph: "▲", color: "#f472b6" },
-  { label: "Deception", glyph: "◆", color: "#a78bfa" },
-  { label: "Termination", glyph: "✕", color: "#fb7185" },
-];
-
-const BIAS_GLYPHS = [
-  { label: "Analytical", glyph: "⌬", color: "#38bdf8" },
-  { label: "Intuitive", glyph: "◈", color: "#34d399" },
-  { label: "Paranoid", glyph: "⟁", color: "#fbbf24" },
-  { label: "Detached", glyph: "◌", color: "#a3a3a3" },
-];
-
-const PROFILE_GLYPHS = [
-  { label: "Courier", glyph: "➤", color: "#60a5fa" },
-  { label: "Observer", glyph: "◎", color: "#22d3ee" },
-  { label: "Enforcer", glyph: "⬢", color: "#fb7185" },
-  { label: "Mediator", glyph: "⬡", color: "#a78bfa" },
-];
-
-const OUTCOME_GLYPHS = [
-  { label: "Integrated", glyph: "∞", color: "#34d399" },
-  { label: "Exiled", glyph: "↯", color: "#f87171" },
-  { label: "Dormant", glyph: "◍", color: "#a3a3a3" },
-  { label: "Ascended", glyph: "✶", color: "#facc15" },
-  { label: "Redacted", glyph: "▢", color: "#7c3aed" },
-  { label: "Anomaly", glyph: "⧖", color: "#fb923c" },
-];
-
-/* ─────────────────────────────────────────────
- * Lore Text (Short + Premium)
+ * Lore
  * ───────────────────────────────────────────── */
 
 const ORIGIN_LORE = [
@@ -137,21 +102,27 @@ export default function MyBotClient() {
   }, [fid]);
 
   const effectiveFid = isValidFID(fid) ? String(fid) : fidInput;
-  const tokenId = useMemo(
-    () => (isValidFID(effectiveFid) ? BigInt(effectiveFid) : null),
-    [effectiveFid]
-  );
+
+  const tokenId = useMemo<bigint | null>(() => {
+    if (!isValidFID(effectiveFid)) return null;
+    try {
+      return BigInt(effectiveFid);
+    } catch {
+      return null;
+    }
+  }, [effectiveFid]);
 
   /* ── Metadata ── */
   const { data: tokenJsonUri } = useReadContract({
     ...BASEBOTS,
     functionName: "tokenURI",
-    args: tokenId ? [tokenId] : undefined,
-    query: { enabled: !!tokenId },
+    args: tokenId !== null ? [tokenId] : undefined,
+    query: { enabled: tokenId !== null },
   });
 
   let imageSrc = "";
   let name = "";
+
   try {
     if (typeof tokenJsonUri === "string" && tokenJsonUri.startsWith("data:")) {
       const json = JSON.parse(b64ToUtf8(tokenJsonUri.split(",")[1]));
@@ -160,107 +131,140 @@ export default function MyBotClient() {
     }
   } catch {}
 
-  /* ── Core state ── */
+  /* ── Bot state ── */
   const { data: botStateRaw } = useReadContract({
     address: BASEBOTS_S2.address,
     abi: BASEBOTS_S2.abi,
     functionName: "getBotState",
-    args: tokenId ? [tokenId] : undefined,
-    query: { enabled: !!tokenId },
+    args: tokenId !== null ? [tokenId] : undefined,
+    query: { enabled: tokenId !== null },
   });
 
   const botState = botStateRaw as BotState | undefined;
   const summary = buildShortSummary(botState);
 
   const siteOrigin =
-    (typeof window !== "undefined" && window.location?.origin) ||
+    (typeof window !== "undefined" && window.location.origin) ||
     "https://basebots.vercel.app";
 
-  const imagePngUrl = tokenId
-    ? `${siteOrigin}/api/basebots/image/${effectiveFid}`
-    : "";
+  const imagePngUrl =
+    tokenId !== null ? `${siteOrigin}/api/basebots/image/${effectiveFid}` : "";
+
+  /* ───────────────────────────────────────────── */
 
   return (
-    <main className="min-h-[100svh] bg-deep text-white pb-16 page-layer">
-      <div className="container pt-6 px-5 stack">
-        <section className="glass glass-pad">
-          <h1 className="text-3xl font-extrabold">Meet Your Basebot</h1>
-          <p className="mt-2 text-white/80">
+    <main
+      style={{
+        minHeight: "100vh",
+        background: "#020617",
+        color: "white",
+        paddingBottom: 64,
+      }}
+    >
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: 20 }}>
+        <section
+          style={{
+            borderRadius: 24,
+            padding: 24,
+            background: "rgba(0,0,0,0.4)",
+            border: "1px solid rgba(255,255,255,0.12)",
+          }}
+        >
+          <h1 style={{ fontSize: 32, fontWeight: 900 }}>
+            Meet Your Basebot
+          </h1>
+          <p style={{ opacity: 0.75, marginTop: 8 }}>
             Identity forged through on-chain choice.
           </p>
-          <ShareRow
-            url={imagePngUrl || siteOrigin}
-            imageUrl={imagePngUrl}
-            label="Cast this Basebot"
-            className="mt-3"
-          />
+
+          <div style={{ marginTop: 12 }}>
+            <ShareRow
+              url={imagePngUrl || siteOrigin}
+              imageUrl={imagePngUrl}
+              label="Cast this Basebot"
+            />
+          </div>
         </section>
 
-        {tokenId && (
-          <section className="glass glass-pad bg-[#0b0f18]/70">
-            <div className="flex flex-col md:flex-row gap-6">
+        {/* ✅ FIXED: explicit boolean check */}
+        {tokenId !== null && (
+          <section
+            style={{
+              marginTop: 24,
+              borderRadius: 24,
+              padding: 24,
+              background: "rgba(0,0,0,0.35)",
+              border: "1px solid rgba(255,255,255,0.12)",
+            }}
+          >
+            <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
               <img
                 src={imageSrc}
-                className="w-full md:max-w-[360px] rounded-2xl border border-white/10"
                 alt={name}
+                style={{
+                  width: 360,
+                  maxWidth: "100%",
+                  borderRadius: 18,
+                  border: "1px solid rgba(255,255,255,0.15)",
+                }}
               />
 
-              <div className="flex-1">
-                <h2 className="text-2xl font-bold">{name}</h2>
+              <div style={{ flex: 1, minWidth: 260 }}>
+                <h2 style={{ fontSize: 24, fontWeight: 800 }}>
+                  {name}
+                </h2>
 
-                {/* Glyph grid */}
-                <div className="mt-5 grid grid-cols-2 gap-4">
-                  {[EP1_GLYPHS, BIAS_GLYPHS, PROFILE_GLYPHS, OUTCOME_GLYPHS].map(
-                    (set, i) => {
-                      const g =
-                        set[
-                          [
-                            botState?.ep1Choice,
-                            botState?.cognitionBias,
-                            botState?.profile,
-                            botState?.outcome,
-                          ][i] ?? 0
-                        ];
-                      return (
-                        <div
-                          key={i}
-                          className="rounded-xl border border-white/10 bg-black/40 p-4 text-center"
-                        >
-                          <div
-                            className="text-4xl font-black"
-                            style={{ color: g.color }}
-                          >
-                            {g.glyph}
-                          </div>
-                          <div className="mt-1 text-sm font-semibold">
-                            {g.label}
-                          </div>
-                        </div>
-                      );
-                    }
-                  )}
-                </div>
-
-                {/* Personality summary */}
-                <div className="mt-5 rounded-xl border border-white/10 bg-black/30 p-4">
+                <div
+                  style={{
+                    marginTop: 20,
+                    borderRadius: 16,
+                    padding: 16,
+                    background: "rgba(0,0,0,0.35)",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                  }}
+                >
                   {botState?.finalized && summary ? (
                     <>
-                      <div className="text-xs uppercase tracking-wider text-white/60 mb-2">
-                        Personality Summary
+                      <div
+                        style={{
+                          fontSize: 11,
+                          letterSpacing: 1.6,
+                          opacity: 0.6,
+                          marginBottom: 8,
+                          fontWeight: 700,
+                        }}
+                      >
+                        PERSONALITY SUMMARY
                       </div>
-                      <p className="text-sm text-white/85 whitespace-pre-line">
+                      <p
+                        style={{
+                          whiteSpace: "pre-line",
+                          lineHeight: 1.45,
+                          opacity: 0.9,
+                        }}
+                      >
                         {summary}
                       </p>
                     </>
                   ) : (
                     <>
-                      <p className="italic text-white/70">
+                      <p style={{ fontStyle: "italic", opacity: 0.7 }}>
                         “This unit has not yet committed to a path.
                         The city is still deciding what it will become.”
                       </p>
                       <button
                         disabled
-                        className="mt-3 w-full rounded-full border border-white/20 bg-white/5 py-2 text-xs text-white/50"
+                        style={{
+                          marginTop: 12,
+                          width: "100%",
+                          padding: "10px 12px",
+                          borderRadius: 999,
+                          border: "1px solid rgba(255,255,255,0.2)",
+                          background: "rgba(255,255,255,0.06)",
+                          color: "rgba(255,255,255,0.5)",
+                          cursor: "not-allowed",
+                          fontWeight: 700,
+                        }}
                       >
                         Retrieve Core Memory (Coming Soon)
                       </button>
