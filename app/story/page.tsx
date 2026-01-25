@@ -1,9 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useAccount, usePublicClient, useReadContract } from "wagmi";
-import { getAddress } from "viem";
-
+import { usePublicClient, useReadContract } from "wagmi";
 import useFid from "@/hooks/useFid";
 
 import EpisodeOne from "@/components/story/EpisodeOne";
@@ -15,10 +13,9 @@ import PrologueSilenceInDarkness from "@/components/story/PrologueSilenceInDarkn
 import BonusEcho from "@/components/story/BonusEcho";
 import BonusEchoArchive from "@/components/story/BonusEchoArchive";
 
-import { BASEBOTS } from "@/lib/abi";
 import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 
-const BASE_CHAIN_ID = 8453;
+/* ────────────────────────────────────────────── */
 
 type Mode =
   | "hub"
@@ -31,211 +28,256 @@ type Mode =
   | "bonus"
   | "archive";
 
+/* ────────────────────────────────────────────── */
+
 export default function StoryPage() {
-  const { address, chain } = useAccount();
+  const { fid } = useFid(); // optional identity anchor
   const publicClient = usePublicClient();
-  const { fid } = useFid();
-
-  const isBase = chain?.id === BASE_CHAIN_ID;
-  const [mode, setMode] = useState<Mode>("hub");
-
-  /* ───────── tokenId = fid (CRITICAL FIX) ───────── */
 
   const tokenId = useMemo(() => {
-    if (typeof fid === "number" && fid > 0) return BigInt(fid);
-    return null;
+    return typeof fid === "number" && fid > 0 ? BigInt(fid) : null;
   }, [fid]);
 
-  /* ───────── OWNERSHIP (SINGLE READ) ───────── */
+  const [mode, setMode] = useState<Mode>("hub");
 
-  const { data: owner, isLoading: ownerLoading } = useReadContract({
-    ...BASEBOTS,
-    functionName: "ownerOf",
-    args: tokenId ? [tokenId] : undefined,
-    query: { enabled: Boolean(tokenId && address && isBase) },
-  });
+  /* ───────── On-chain memory (silent) ───────── */
 
-  const ownsBasebot = useMemo(() => {
-    if (!owner || !address) return false;
-    return getAddress(owner) === getAddress(address);
-  }, [owner, address]);
-
-  /* ───────── BOT STATE ───────── */
-
-  const {
-    data: botState,
-    refetch: refetchBotState,
-    isLoading: botLoading,
-  } = useReadContract({
+  const { data: botState, refetch } = useReadContract({
     ...BASEBOTS_S2,
     functionName: "getBotState",
     args: tokenId ? [tokenId] : undefined,
-    query: { enabled: Boolean(tokenId && ownsBasebot) },
+    query: { enabled: Boolean(tokenId) },
   });
 
   const state = useMemo(() => {
-    if (!botState) return null;
+    if (!botState) return {};
     const s: any = botState;
     return {
-      ep1: Boolean(s.ep1Set),
-      ep2: Boolean(s.ep2Set),
-      ep3: Boolean(s.ep3Set),
-      ep4: Boolean(s.ep4Set),
-      ep5: Boolean(s.ep5Set),
+      ep1: !!s.ep1Set,
+      ep2: !!s.ep2Set,
+      ep3: !!s.ep3Set,
+      ep4: !!s.ep4Set,
+      ep5: !!s.ep5Set,
     };
   }, [botState]);
 
-  /* ───────── LIVE UPDATES ───────── */
+  /* ───────── Live updates ───────── */
+
+  const activeRef = useRef<bigint | null>(null);
 
   useEffect(() => {
     if (!publicClient || !tokenId) return;
+    activeRef.current = tokenId;
 
     const unwatch = publicClient.watchContractEvent({
       ...BASEBOTS_S2,
       eventName: "EpisodeSet",
-      onLogs: (logs) => {
-        for (const log of logs as any[]) {
-          if (log.args?.tokenId?.toString() === tokenId.toString()) {
-            refetchBotState();
-            break;
-          }
-        }
-      },
+      onLogs: () => refetch(),
     });
 
     return () => unwatch();
-  }, [publicClient, tokenId, refetchBotState]);
+  }, [publicClient, tokenId, refetch]);
 
-  /* ───────── GATES ───────── */
-
-  if (!isBase) return <main style={shell()}>Switch to Base network.</main>;
-  if (!address) return <main style={shell()}>Connect wallet.</main>;
-  if (!fid) return <main style={shell()}>Farcaster identity required.</main>;
-  if (ownerLoading) return <main style={shell()}>Checking Basebot ownership…</main>;
-  if (!ownsBasebot) return <main style={shell()}>You do not own Basebot #{fid}.</main>;
-
-  /* ───────── MODE ROUTING ───────── */
+  /* ───────── Routing ───────── */
 
   if (mode !== "hub") {
     const exit = () => setMode("hub");
+
     switch (mode) {
-      case "ep1":
-        return <EpisodeOne tokenId={tokenId!.toString()} onExit={exit} />;
-      case "ep2":
-        return state?.ep1 ? <EpisodeTwo tokenId={tokenId!.toString()} onExit={exit} /> : null;
-      case "ep3":
-        return state?.ep2 ? <EpisodeThree tokenId={tokenId!.toString()} onExit={exit} /> : null;
-      case "ep4":
-        return state?.ep3 ? <EpisodeFour tokenId={tokenId!.toString()} onExit={exit} /> : null;
-      case "ep5":
-        return state?.ep4 ? <EpisodeFive tokenId={tokenId!.toString()} onExit={exit} /> : null;
       case "prologue":
-        return state?.ep1 ? <PrologueSilenceInDarkness onExit={exit} /> : null;
+        return <PrologueSilenceInDarkness onExit={exit} />;
+      case "ep1":
+        return <EpisodeOne tokenId={tokenId?.toString()} onExit={exit} />;
+      case "ep2":
+        return <EpisodeTwo tokenId={tokenId?.toString()} onExit={exit} />;
+      case "ep3":
+        return <EpisodeThree tokenId={tokenId?.toString()} onExit={exit} />;
+      case "ep4":
+        return <EpisodeFour tokenId={tokenId?.toString()} onExit={exit} />;
+      case "ep5":
+        return <EpisodeFive tokenId={tokenId?.toString()} onExit={exit} />;
       case "bonus":
-        return state?.ep3 ? <BonusEcho onExit={exit} /> : null;
+        return state.ep3 ? <BonusEcho onExit={exit} /> : null;
       case "archive":
-        return state?.ep5 ? <BonusEchoArchive onExit={exit} /> : null;
+        return state.ep5 ? <BonusEchoArchive onExit={exit} /> : null;
     }
   }
 
-  /* ───────── HUB (IMAGES WORK AUTOMATICALLY) ───────── */
+  /* ───────── Episode Data ───────── */
+
+  const episodes = [
+    { key: "prologue", title: "Silence in Darkness", img: "/story/prologue.png", done: false },
+    { key: "ep1", title: "The Handshake", img: "/story/01-awakening.png", done: state.ep1 },
+    { key: "ep2", title: "The Recall", img: "/story/ep2.png", done: state.ep2 },
+    { key: "ep3", title: "The Watcher", img: "/story/ep3.png", done: state.ep3 },
+    { key: "ep4", title: "Drift Protocol", img: "/story/ep4.png", done: state.ep4 },
+    { key: "ep5", title: "Final Commit", img: "/story/ep5.png", done: state.ep5 },
+  ];
+
+  const bonus = [
+    {
+      key: "bonus",
+      title: "Echo Residual",
+      img: "/story/b1.png",
+      unlocked: state.ep3,
+    },
+    {
+      key: "archive",
+      title: "Classified Memory",
+      img: "/story/b2.png",
+      unlocked: state.ep5,
+    },
+  ];
+
+  /* ───────── UI ───────── */
 
   return (
     <main style={shell()}>
-      <h1>Memory Hub</h1>
+      <style>{glowCSS}</style>
 
-      <p style={{ opacity: 0.85 }}>
-        Tracking <b>Basebot #{fid}</b> · tokenId is permanently bound to your Farcaster identity.
+      <h1 style={title()}>Basebots: Core Memory</h1>
+
+      <p style={subtitle()}>
+        Memory fragments surface as systems awaken. Some are stable. Others distort
+        until the sequence is complete.
       </p>
 
-      <button
-        onClick={() => refetchBotState()}
-        disabled={botLoading}
-        style={{ marginBottom: 20 }}
-      >
-        {botLoading ? "Syncing…" : "Sync"}
-      </button>
+      <section style={grid()}>
+        {episodes.map((e) => (
+          <Card
+            key={e.key}
+            title={e.title}
+            img={e.img}
+            active={mode === e.key}
+            completed={e.done}
+            onClick={() => setMode(e.key as Mode)}
+          />
+        ))}
 
-      <div style={{ display: "grid", gap: 12 }}>
-        <EpisodeCard
-          title="Prologue"
-          img="/story/prologue.png"
-          ready={state?.ep1}
-          onClick={() => setMode("prologue")}
-        />
-        <EpisodeCard
-          title="Episode One"
-          img="/story/01-awakening.png"
-          ready={true}
-          onClick={() => setMode("ep1")}
-        />
-        <EpisodeCard
-          title="Episode Two"
-          img="/story/ep2.png"
-          ready={state?.ep1}
-          onClick={() => setMode("ep2")}
-        />
-        <EpisodeCard
-          title="Episode Three"
-          img="/story/ep3.png"
-          ready={state?.ep2}
-          onClick={() => setMode("ep3")}
-        />
-        <EpisodeCard
-          title="Episode Four"
-          img="/story/ep4.png"
-          ready={state?.ep3}
-          onClick={() => setMode("ep4")}
-        />
-        <EpisodeCard
-          title="Episode Five"
-          img="/story/ep5.png"
-          ready={state?.ep4}
-          onClick={() => setMode("ep5")}
-        />
-      </div>
+        {bonus.map((b) => (
+          <Card
+            key={b.key}
+            title={b.title}
+            img={b.img}
+            active={false}
+            completed={false}
+            glitched={!b.unlocked}
+            onClick={() => b.unlocked && setMode(b.key as Mode)}
+          />
+        ))}
+      </section>
     </main>
   );
 }
 
-/* ───────── Small helpers ───────── */
+/* ────────────────────────────────────────────── */
+/* Card Component */
 
-function EpisodeCard({
+function Card({
   title,
   img,
-  ready,
+  active,
+  completed,
+  glitched,
   onClick,
-}: {
-  title: string;
-  img: string;
-  ready?: boolean;
-  onClick: () => void;
-}) {
+}: any) {
   return (
     <button
       onClick={onClick}
-      disabled={!ready}
+      disabled={glitched}
+      className={`card ${active ? "active" : ""} ${completed ? "done" : ""} ${
+        glitched ? "glitch" : ""
+      }`}
       style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        padding: 12,
-        borderRadius: 14,
-        background: ready ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.03)",
-        border: "1px solid rgba(255,255,255,0.12)",
-        color: "white",
-        cursor: ready ? "pointer" : "not-allowed",
+        backgroundImage: `url(${img})`,
       }}
     >
-      <img src={img} width={72} height={72} alt="" />
-      <div>{title}</div>
+      <div className="overlay" />
+      <div className="label">{completed ? "Recovered" : "Fragment"}</div>
+      <div className="title">{title}</div>
     </button>
   );
 }
+
+/* ────────────────────────────────────────────── */
+/* Styles */
 
 const shell = () => ({
   minHeight: "100vh",
   background: "#020617",
   color: "white",
-  padding: 32,
+  padding: "40px 20px",
 });
+
+const title = () => ({
+  fontSize: 38,
+  marginBottom: 8,
+});
+
+const subtitle = () => ({
+  opacity: 0.8,
+  maxWidth: 720,
+  marginBottom: 32,
+});
+
+const grid = () => ({
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+  gap: 20,
+});
+
+const glowCSS = `
+.card {
+  position: relative;
+  height: 180px;
+  border-radius: 22px;
+  background-size: cover;
+  background-position: center;
+  border: 1px solid rgba(255,255,255,0.12);
+  color: white;
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform .25s, box-shadow .25s;
+}
+.card:hover { transform: translateY(-4px); }
+
+.card.active {
+  box-shadow: 0 0 40px rgba(168,85,247,.9);
+  animation: pulse 1.3s infinite;
+}
+
+.card.done .label { color: #a5f3fc; }
+
+.card.glitch {
+  filter: blur(3px) contrast(1.2);
+  pointer-events: none;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent, rgba(2,6,23,.9));
+}
+
+.label {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  font-size: 12px;
+  opacity: .85;
+}
+
+.title {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  right: 16px;
+  font-size: 16px;
+}
+
+@keyframes pulse {
+  0% { box-shadow: 0 0 18px rgba(168,85,247,.6); }
+  50% { box-shadow: 0 0 42px rgba(168,85,247,1); }
+  100% { box-shadow: 0 0 18px rgba(168,85,247,.6); }
+}
+`;
