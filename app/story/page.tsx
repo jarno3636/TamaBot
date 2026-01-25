@@ -70,7 +70,7 @@ export default function StoryPage() {
     query: { enabled: Boolean(tokenId && nftGatePassed) },
   });
 
-  /* ───────── LIVE EVENT LISTENERS ───────── */
+  /* ───────── LIVE EVENT LISTENERS (FIXED) ───────── */
 
   useEffect(() => {
     if (!publicClient || !tokenId) return;
@@ -79,8 +79,8 @@ export default function StoryPage() {
       ...BASEBOTS_S2,
       eventName: "EpisodeSet",
       onLogs: (logs) => {
-        for (const log of logs) {
-          if ((log.args as any)?.tokenId === tokenId) {
+        for (const log of logs as Array<{ args?: { tokenId?: bigint } }>) {
+          if (log.args?.tokenId === tokenId) {
             refetchBotState();
           }
         }
@@ -91,8 +91,8 @@ export default function StoryPage() {
       ...BASEBOTS_S2,
       eventName: "FinalizedProfile",
       onLogs: (logs) => {
-        for (const log of logs) {
-          if ((log.args as any)?.tokenId === tokenId) {
+        for (const log of logs as Array<{ args?: { tokenId?: bigint } }>) {
+          if (log.args?.tokenId === tokenId) {
             refetchBotState();
           }
         }
@@ -155,7 +155,12 @@ export default function StoryPage() {
         ) : null;
 
       case "ep1":
-        return <EpisodeOne tokenId={tokenId.toString()} onExit={() => setMode("hub")} />;
+        return (
+          <EpisodeOne
+            tokenId={tokenId.toString()}
+            onExit={() => setMode("hub")}
+          />
+        );
 
       case "ep2":
         return ep2Unlocked ? (
@@ -181,7 +186,9 @@ export default function StoryPage() {
         return bonusUnlocked ? <BonusEcho onExit={() => setMode("hub")} /> : null;
 
       case "archive":
-        return archiveUnlocked ? <BonusEchoArchive onExit={() => setMode("hub")} /> : null;
+        return archiveUnlocked ? (
+          <BonusEchoArchive onExit={() => setMode("hub")} />
+        ) : null;
 
       default:
         return null;
