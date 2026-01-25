@@ -12,10 +12,10 @@ import EpisodeFour from "@/components/story/EpisodeFour";
 import EpisodeFive from "@/components/story/EpisodeFive";
 import PrologueSilenceInDarkness from "@/components/story/PrologueSilenceInDarkness";
 import BonusEcho from "@/components/story/BonusEcho";
+import BonusEchoArchive from "@/components/story/BonusEchoArchive";
 
 import { BASEBOTS } from "@/lib/abi";
-
-/* ───────────────────────────────────────────── */
+import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 
 const BASE_CHAIN_ID = 8453;
 
@@ -27,103 +27,118 @@ type Mode =
   | "ep3"
   | "ep4"
   | "ep5"
-  | "bonus";
-
-/* ───────────────────────────────────────────── */
+  | "bonus"
+  | "archive";
 
 export default function StoryPage() {
   const [mode, setMode] = useState<Mode>("hub");
 
   const { address, chain } = useAccount();
   const { fid } = useFid();
-
   const isBase = chain?.id === BASE_CHAIN_ID;
 
-  /* ───────── FID (ONLY for episode content) ───────── */
+  const tokenId = useMemo(
+    () => (typeof fid === "number" && fid > 0 ? BigInt(fid) : undefined),
+    [fid]
+  );
 
-  const tokenIdString = useMemo(() => {
-    return typeof fid === "number" && fid > 0 ? String(fid) : undefined;
-  }, [fid]);
-
-  /* ───────── NFT OWNERSHIP (CORRECT) ───────── */
+  /* ───────── NFT GATE ───────── */
 
   const { data: balance } = useReadContract({
     ...BASEBOTS,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
-    query: {
-      enabled: Boolean(address && isBase),
-    },
+    query: { enabled: Boolean(address && isBase) },
   });
 
-  const hasBasebot = typeof balance === "bigint" && balance > 0n;
-  const nftGatePassed = Boolean(address && isBase && hasBasebot);
+  const nftGatePassed = typeof balance === "bigint" && balance > 0n;
+
+  /* ───────── ON-CHAIN STATE ───────── */
+
+  const { data: botState } = useReadContract({
+    ...BASEBOTS_S2,
+    functionName: "getBotState",
+    args: tokenId ? [tokenId] : undefined,
+    query: { enabled: Boolean(tokenId && nftGatePassed) },
+  });
+
+  const state = botState
+    ? {
+        ep1: (botState as any).ep1Set,
+        ep2: (botState as any).ep2Set,
+        ep3: (botState as any).ep3Set,
+        ep4: (botState as any).ep4Set,
+        ep5: (botState as any).ep5Set,
+        finalized: (botState as any).finalized,
+      }
+    : null;
+
+  /* ───────── UNLOCK RULES (CHAIN-TRUTH) ───────── */
+
+  const ep1Unlocked = nftGatePassed;
+  const ep2Unlocked = nftGatePassed && state?.ep1;
+  const ep3Unlocked = nftGatePassed && state?.ep2;
+  const ep4Unlocked = nftGatePassed && state?.ep3;
+  const ep5Unlocked = nftGatePassed && state?.ep4;
+
+  const prologueUnlocked = state?.ep1;
+  const bonusUnlocked = state?.ep3;
+  const archiveUnlocked = state?.ep5;
+
+  /* ───────── CURRENT NODE ───────── */
+
+  const currentNode =
+    !state?.ep1
+      ? "ep1"
+      : !state.ep2
+      ? "ep2"
+      : !state.ep3
+      ? "ep3"
+      : !state.ep4
+      ? "ep4"
+      : !state.ep5
+      ? "ep5"
+      : null;
 
   /* ───────── ROUTING ───────── */
 
   if (mode !== "hub") {
-    if (!nftGatePassed) {
-      return (
-        <div
-          style={{
-            minHeight: "100vh",
-            background: "#020617",
-            color: "white",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 24,
-            textAlign: "center",
-          }}
-        >
-          <div>
-            <h2 style={{ fontWeight: 900, fontSize: 22 }}>
-              Basebot Required
-            </h2>
-            <p style={{ opacity: 0.7, marginTop: 8 }}>
-              Connect a wallet on Base that owns a Basebot NFT.
-            </p>
-            <button
-              onClick={() => setMode("hub")}
-              style={{
-                marginTop: 18,
-                borderRadius: 999,
-                padding: "10px 16px",
-                fontWeight: 900,
-                background: "linear-gradient(90deg,#38bdf8,#a855f7)",
-                color: "#020617",
-                border: "none",
-                cursor: "pointer",
-              }}
-            >
-              Return to Hub
-            </button>
-          </div>
-        </div>
-      );
-    }
+    if (!nftGatePassed || !tokenId) return null;
 
     switch (mode) {
       case "prologue":
-        return <PrologueSilenceInDarkness onExit={() => setMode("hub")} />;
+        return prologueUnlocked ? (
+          <PrologueSilenceInDarkness onExit={() => setMode("hub")} />
+        ) : null;
 
       case "ep1":
-        return <EpisodeOne tokenId={tokenIdString ?? "0"} onExit={() => setMode("hub")} />;
+        return <EpisodeOne tokenId={tokenId.toString()} onExit={() => setMode("hub")} />;
 
       case "ep2":
-        return <EpisodeTwo tokenId={tokenIdString ?? "0"} onExit={() => setMode("hub")} />;
+        return ep2Unlocked ? (
+          <EpisodeTwo tokenId={tokenId.toString()} onExit={() => setMode("hub")} />
+        ) : null;
 
       case "ep3":
-        return <EpisodeThree tokenId={tokenIdString ?? "0"} onExit={() => setMode("hub")} />;
+        return ep3Unlocked ? (
+          <EpisodeThree tokenId={tokenId.toString()} onExit={() => setMode("hub")} />
+        ) : null;
 
       case "ep4":
-        return <EpisodeFour tokenId={tokenIdString ?? "0"} onExit={() => setMode("hub")} />;
+        return ep4Unlocked ? (
+          <EpisodeFour tokenId={tokenId.toString()} onExit={() => setMode("hub")} />
+        ) : null;
 
       case "ep5":
-        return <EpisodeFive tokenId={tokenIdString ?? "0"} onExit={() => setMode("hub")} />;
+        return ep5Unlocked ? (
+          <EpisodeFive tokenId={tokenId.toString()} onExit={() => setMode("hub")} />
+        ) : null;
 
       case "bonus":
-        return <BonusEcho onExit={() => setMode("hub")} />;
+        return bonusUnlocked ? <BonusEcho onExit={() => setMode("hub")} /> : null;
+
+      case "archive":
+        return archiveUnlocked ? <BonusEchoArchive onExit={() => setMode("hub")} /> : null;
 
       default:
         return null;
@@ -132,89 +147,108 @@ export default function StoryPage() {
 
   /* ───────── HUB UI ───────── */
 
-  return (
-    <main
-      style={{
-        minHeight: "100vh",
-        background:
-          "radial-gradient(1100px 520px at 50% -10%, rgba(56,189,248,0.10), transparent 62%), radial-gradient(900px 520px at 90% 120%, rgba(168,85,247,0.12), transparent 60%), #020617",
-        color: "white",
-        padding: "40px 16px 64px",
-      }}
-    >
-      <header style={{ maxWidth: 1200, margin: "0 auto 28px" }}>
-        <div style={{ opacity: 0.6, letterSpacing: 2, fontSize: 11 }}>
-          BASEBOTS
-        </div>
-        <h1 style={{ fontSize: 36, fontWeight: 950 }}>
-          Core Memory
-        </h1>
-        <p style={{ opacity: 0.75, maxWidth: 720, marginTop: 8 }}>
-          Your choices are written on-chain. The system remembers what you commit.
-        </p>
-      </header>
+  const episodes = [
+    { id: "ep1", title: "Awakening Protocol", unlocked: ep1Unlocked },
+    { id: "ep2", title: "Signal Fracture", unlocked: ep2Unlocked },
+    { id: "ep3", title: "Fault Lines", unlocked: ep3Unlocked },
+    { id: "ep4", title: "Threshold", unlocked: ep4Unlocked },
+    { id: "ep5", title: "Emergence", unlocked: ep5Unlocked },
+  ];
 
-      <section style={{ maxWidth: 1200, margin: "0 auto" }}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-            gap: 24,
-          }}
-        >
-          {[
-            { id: "ep1", title: "Awakening Protocol", img: "/story/01-awakening.png" },
-            { id: "ep2", title: "Signal Fracture", img: "/story/ep2.png" },
-            { id: "ep3", title: "Fault Lines", img: "/story/ep3.png" },
-            { id: "ep4", title: "Threshold", img: "/story/ep4.png" },
-            { id: "ep5", title: "Emergence", img: "/story/ep5.png" },
-          ].map((ep) => (
+  return (
+    <main style={{ minHeight: "100vh", background: "#020617", color: "white", padding: 40 }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", display: "grid", gap: 24 }}>
+        {episodes.map((ep) => {
+          const completed = state?.[ep.id as keyof typeof state];
+          const isCurrent = currentNode === ep.id;
+
+          return (
             <article
               key={ep.id}
               style={{
                 borderRadius: 22,
+                padding: 22,
+                border: isCurrent
+                  ? "1px solid rgba(168,85,247,0.85)"
+                  : "1px solid rgba(255,255,255,0.14)",
+                boxShadow: isCurrent
+                  ? "0 0 48px rgba(168,85,247,0.45)"
+                  : "none",
+                animation: isCurrent ? "pulse 2.8s ease-in-out infinite" : "none",
+                opacity: ep.unlocked ? 1 : 0.45,
                 background: "rgba(0,0,0,0.35)",
-                border: "1px solid rgba(255,255,255,0.14)",
-                padding: 20,
-                opacity: nftGatePassed ? 1 : 0.5,
               }}
             >
-              <img
-                src={ep.img}
-                alt={ep.title}
-                style={{
-                  width: "100%",
-                  borderRadius: 16,
-                  marginBottom: 12,
-                  border: "1px solid rgba(255,255,255,0.12)",
-                }}
-              />
               <h2 style={{ fontWeight: 900 }}>{ep.title}</h2>
 
+              <p style={{ marginTop: 6, fontSize: 12, opacity: 0.65 }}>
+                {completed
+                  ? "Committed to memory • written on-chain"
+                  : isCurrent
+                  ? "System awaiting irreversible input"
+                  : "Unavailable — prior state unresolved"}
+              </p>
+
               <button
-                disabled={!nftGatePassed}
+                disabled={!ep.unlocked}
                 onClick={() => setMode(ep.id as Mode)}
                 style={{
                   marginTop: 14,
-                  width: "100%",
                   borderRadius: 999,
-                  padding: "10px 14px",
+                  padding: "10px 16px",
                   fontWeight: 900,
-                  fontSize: 12,
-                  background: nftGatePassed
+                  background: ep.unlocked
                     ? "linear-gradient(90deg,#38bdf8,#a855f7)"
                     : "rgba(255,255,255,0.08)",
-                  color: nftGatePassed ? "#020617" : "rgba(255,255,255,0.6)",
+                  color: ep.unlocked ? "#020617" : "rgba(255,255,255,0.6)",
                   border: "none",
-                  cursor: nftGatePassed ? "pointer" : "not-allowed",
                 }}
               >
-                {nftGatePassed ? "Enter Episode" : "NFT Required"}
+                {completed ? "Review Memory" : "Enter Episode"}
               </button>
             </article>
-          ))}
-        </div>
-      </section>
+          );
+        })}
+
+        {archiveUnlocked && (
+          <article
+            style={{
+              marginTop: 32,
+              borderRadius: 22,
+              padding: 22,
+              border: "1px solid rgba(56,189,248,0.6)",
+              background: "rgba(0,0,0,0.45)",
+            }}
+          >
+            <h2 style={{ fontWeight: 900 }}>ARCHIVAL ECHO</h2>
+            <p style={{ fontSize: 12, opacity: 0.65, marginTop: 6 }}>
+              Finalized designation detected. Archive unlocked.
+            </p>
+            <button
+              onClick={() => setMode("archive")}
+              style={{
+                marginTop: 12,
+                borderRadius: 999,
+                padding: "10px 16px",
+                fontWeight: 900,
+                background: "linear-gradient(90deg,#38bdf8,#a855f7)",
+                color: "#020617",
+                border: "none",
+              }}
+            >
+              Open Archive
+            </button>
+          </article>
+        )}
+      </div>
+
+      <style>{`
+        @keyframes pulse {
+          0% { box-shadow: 0 0 14px rgba(168,85,247,0.3); }
+          50% { box-shadow: 0 0 48px rgba(168,85,247,0.75); }
+          100% { box-shadow: 0 0 14px rgba(168,85,247,0.3); }
+        }
+      `}</style>
     </main>
   );
 }
