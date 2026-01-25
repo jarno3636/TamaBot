@@ -1,12 +1,29 @@
-// components/MyBotClient.tsx
 "use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useAccount, useReadContract } from "wagmi";
+import { useReadContract } from "wagmi";
 import { BASEBOTS } from "@/lib/abi";
+import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 import ShareRow from "@/components/ShareRow";
 import useFid from "@/hooks/useFid";
+
+/* ─────────────────────────────────────────────
+ * Types
+ * ───────────────────────────────────────────── */
+
+type BotState = {
+  designation: string;
+  ep1Choice: number;
+  cognitionBias: number;
+  profile: number;
+  outcome: number;
+  finalized: boolean;
+};
+
+/* ─────────────────────────────────────────────
+ * Helpers
+ * ───────────────────────────────────────────── */
 
 function isValidFID(v: string | number | undefined) {
   if (v === undefined || v === null) return false;
@@ -19,7 +36,7 @@ function b64ToUtf8(b64: string): string {
     return decodeURIComponent(
       Array.prototype.map
         .call(atob(b64), (c: string) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-        .join(""),
+        .join("")
     );
   } catch {
     try {
@@ -30,178 +47,226 @@ function b64ToUtf8(b64: string): string {
   }
 }
 
+/* ─────────────────────────────────────────────
+ * Glyph Maps
+ * ───────────────────────────────────────────── */
+
+const EP1_GLYPHS = [
+  { label: "Obedience", glyph: "◉", color: "#60a5fa" },
+  { label: "Defiance", glyph: "▲", color: "#f472b6" },
+  { label: "Deception", glyph: "◆", color: "#a78bfa" },
+  { label: "Termination", glyph: "✕", color: "#fb7185" },
+];
+
+const BIAS_GLYPHS = [
+  { label: "Analytical", glyph: "⌬", color: "#38bdf8" },
+  { label: "Intuitive", glyph: "◈", color: "#34d399" },
+  { label: "Paranoid", glyph: "⟁", color: "#fbbf24" },
+  { label: "Detached", glyph: "◌", color: "#a3a3a3" },
+];
+
+const PROFILE_GLYPHS = [
+  { label: "Courier", glyph: "➤", color: "#60a5fa" },
+  { label: "Observer", glyph: "◎", color: "#22d3ee" },
+  { label: "Enforcer", glyph: "⬢", color: "#fb7185" },
+  { label: "Mediator", glyph: "⬡", color: "#a78bfa" },
+];
+
+const OUTCOME_GLYPHS = [
+  { label: "Integrated", glyph: "∞", color: "#34d399" },
+  { label: "Exiled", glyph: "↯", color: "#f87171" },
+  { label: "Dormant", glyph: "◍", color: "#a3a3a3" },
+  { label: "Ascended", glyph: "✶", color: "#facc15" },
+  { label: "Redacted", glyph: "▢", color: "#7c3aed" },
+  { label: "Anomaly", glyph: "⧖", color: "#fb923c" },
+];
+
+/* ─────────────────────────────────────────────
+ * Lore Text (Short + Premium)
+ * ───────────────────────────────────────────── */
+
+const ORIGIN_LORE = [
+  "Born compliant, this unit accepted its first directive without resistance.",
+  "This unit questioned its initial command — a fracture formed immediately.",
+  "This unit learned early that survival sometimes requires misdirection.",
+  "This unit crossed a boundary the system pretends does not exist.",
+];
+
+const BIAS_LORE = [
+  "It reduces uncertainty into solvable structures.",
+  "It follows patterns invisible to others.",
+  "It assumes every signal is compromised.",
+  "It observes without attachment or sentiment.",
+];
+
+const PROFILE_LORE = [
+  "It moves through the city carrying truths others avoid.",
+  "It watches and records what the city tries to forget.",
+  "It intervenes when systems fail — invited or not.",
+  "It prevents collapse by standing between opposing forces.",
+];
+
+const OUTCOME_LORE = [
+  "The city absorbed it, though never fully understood it.",
+  "The city rejected it — and may regret doing so.",
+  "It remains inactive, waiting for a signal that may never arrive.",
+  "It surpassed its limits and rewrote its own role.",
+  "Official records deny this unit ever existed.",
+  "It behaves in ways the system cannot model.",
+];
+
+function buildShortSummary(bot?: BotState) {
+  if (!bot) return null;
+
+  return `${ORIGIN_LORE[bot.ep1Choice]}
+${BIAS_LORE[bot.cognitionBias]}
+${PROFILE_LORE[bot.profile]}
+${OUTCOME_LORE[bot.outcome]}`;
+}
+
+/* ─────────────────────────────────────────────
+ * Component
+ * ───────────────────────────────────────────── */
+
 export default function MyBotClient() {
-  const { address } = useAccount(); // harmless, may be unused
-  const { fid } = useFid();         // canonical FID from mini app
+  const { fid } = useFid();
+  const [fidInput, setFidInput] = useState("");
 
-  const [fidInput, setFidInput] = useState<string>("");
-
-  // Populate from Farcaster
   useEffect(() => {
     if (isValidFID(fid)) setFidInput(String(fid));
   }, [fid]);
 
-  const fidLocked = isValidFID(fid); // as soon as we know the user's FID
-  const effectiveFid = fidLocked && isValidFID(fid) ? String(fid) : fidInput;
-
-  // Use a plain number at runtime so JSON.stringify is happy
-  const fidNum = useMemo<number | null>(
-    () => (isValidFID(effectiveFid) ? Number(effectiveFid) : null),
-    [effectiveFid],
+  const effectiveFid = isValidFID(fid) ? String(fid) : fidInput;
+  const tokenId = useMemo(
+    () => (isValidFID(effectiveFid) ? BigInt(effectiveFid) : null),
+    [effectiveFid]
   );
 
-  // Pull the on-chain tokenURI (basic bot JSON with image data URL)
-  const { data: tokenJsonUri, refetch: refetchToken } = useReadContract({
+  /* ── Metadata ── */
+  const { data: tokenJsonUri } = useReadContract({
     ...BASEBOTS,
     functionName: "tokenURI",
-    // runtime value is a Number; cast only for TypeScript
-    args:
-      fidNum !== null
-        ? ([fidNum] as unknown as [bigint])
-        : undefined,
-    query: { enabled: fidNum !== null },
+    args: tokenId ? [tokenId] : undefined,
+    query: { enabled: !!tokenId },
   });
 
-  // Decode image/name/description from tokenURI
-  let imageSrc = "",
-    name = "",
-    description = "";
+  let imageSrc = "";
+  let name = "";
   try {
-    if (
-      typeof tokenJsonUri === "string" &&
-      tokenJsonUri.startsWith("data:application/json;base64,")
-    ) {
-      const b64 = tokenJsonUri.split(",")[1] || "";
-      const json = JSON.parse(b64ToUtf8(b64));
+    if (typeof tokenJsonUri === "string" && tokenJsonUri.startsWith("data:")) {
+      const json = JSON.parse(b64ToUtf8(tokenJsonUri.split(",")[1]));
       imageSrc = json?.image || "";
       name = json?.name || "";
-      description = json?.description || "";
     }
-  } catch {
-    /* ignore decode errors */
-  }
+  } catch {}
 
-  // Determine absolute origin (works in web and mini)
+  /* ── Core state ── */
+  const { data: botStateRaw } = useReadContract({
+    address: BASEBOTS_S2.address,
+    abi: BASEBOTS_S2.abi,
+    functionName: "getBotState",
+    args: tokenId ? [tokenId] : undefined,
+    query: { enabled: !!tokenId },
+  });
+
+  const botState = botStateRaw as BotState | undefined;
+  const summary = buildShortSummary(botState);
+
   const siteOrigin =
     (typeof window !== "undefined" && window.location?.origin) ||
-    (process.env.NEXT_PUBLIC_URL || "").replace(/\/$/, "") ||
     "https://basebots.vercel.app";
 
-  // 🔥 For Farcaster-style image embeds, share the PNG directly
-  const imagePngUrl = isValidFID(effectiveFid)
+  const imagePngUrl = tokenId
     ? `${siteOrigin}/api/basebots/image/${effectiveFid}`
     : "";
-
-  const shareUrl = isValidFID(effectiveFid)
-    ? imagePngUrl              // clicking the cast opens the image itself
-    : siteOrigin || "/";
 
   return (
     <main className="min-h-[100svh] bg-deep text-white pb-16 page-layer">
       <div className="container pt-6 px-5 stack">
-        {/* Header + Share */}
-        <section className="glass glass-pad relative">
-          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">
-            Meet Your Basebot
-          </h1>
-          <p className="mt-2 text-white/85">
-            Load your Farcaster-linked Basebot and share it with the city.
+        <section className="glass glass-pad">
+          <h1 className="text-3xl font-extrabold">Meet Your Basebot</h1>
+          <p className="mt-2 text-white/80">
+            Identity forged through on-chain choice.
           </p>
           <ShareRow
-            url={shareUrl}
+            url={imagePngUrl || siteOrigin}
             imageUrl={imagePngUrl}
+            label="Cast this Basebot"
             className="mt-3"
-            label={
-              isValidFID(effectiveFid) ? "Share this bot" : "Share Basebots"
-            }
           />
         </section>
 
-        {/* Finder */}
-        <section className="glass glass-pad bg-[#0f1320]/50 border border-white/10">
-          <div className="grid gap-3 md:grid-cols-[220px_auto_160px]">
-            <label className="block">
-              <span className="text-xs uppercase tracking-wide text-white/60 flex items-center gap-2">
-                Farcaster FID
-                {fidLocked && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-[2px] text-[11px] text-emerald-300 border border-emerald-400/40">
-                    ✓ Loaded from your profile
-                  </span>
-                )}
-              </span>
-              <input
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={effectiveFid}
-                onChange={(e) =>
-                  fidLocked
-                    ? null
-                    : setFidInput(e.target.value.replace(/[^\d]/g, ""))
-                }
-                placeholder="e.g. 12345"
-                disabled={fidLocked}
-                className={`mt-1 w-full rounded-xl border px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 ${
-                  fidLocked
-                    ? "bg-white/5 border-emerald-400/40 cursor-not-allowed text-white/80"
-                    : "bg-white/10 border-white/20 focus:ring-[#79ffe1]/60"
-                }`}
+        {tokenId && (
+          <section className="glass glass-pad bg-[#0b0f18]/70">
+            <div className="flex flex-col md:flex-row gap-6">
+              <img
+                src={imageSrc}
+                className="w-full md:max-w-[360px] rounded-2xl border border-white/10"
+                alt={name}
               />
-              {fidLocked ? (
-                <p className="mt-1 text-[11px] text-emerald-300">
-                  This FID comes from the Farcaster mini app session and can’t
-                  be edited here. To view a different FID, open Basebots from
-                  that profile.
-                </p>
-              ) : (
-                <p className="mt-1 text-[11px] text-white/60">
-                  Tip: Your FID is the numeric ID on your Farcaster profile.
-                </p>
-              )}
-            </label>
-
-            <div className="flex items-end gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  if (fidNum !== null) refetchToken();
-                }}
-                className="btn-pill btn-pill--blue !font-bold"
-              >
-                Load bot
-              </button>
-              <Link href="/" className="btn-ghost">
-                Mint
-              </Link>
-            </div>
-          </div>
-        </section>
-
-        {/* Result */}
-        {fidNum !== null && (
-          <section className="glass glass-pad relative overflow-hidden bg-[#0b0f18]/70">
-            <div className="flex flex-col md:flex-row md:items-start gap-6">
-              <div className="w-full md:max-w-[360px]">
-                {imageSrc ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={imageSrc}
-                    alt={name || `Basebot #${effectiveFid}`}
-                    className="w-full rounded-2xl border border-white/10 shadow-xl"
-                  />
-                ) : (
-                  <div className="aspect-square w-full rounded-2xl border border-dashed border-white/20 grid place-items-center text-white/50">
-                    No image yet — is this FID minted?
-                  </div>
-                )}
-              </div>
 
               <div className="flex-1">
-                <h2 className="text-xl md:text-2xl font-bold">
-                  {name || `Basebot #${effectiveFid}`}
-                </h2>
-                {description ? (
-                  <p className="mt-2 text-white/85">{description}</p>
-                ) : null}
+                <h2 className="text-2xl font-bold">{name}</h2>
+
+                {/* Glyph grid */}
+                <div className="mt-5 grid grid-cols-2 gap-4">
+                  {[EP1_GLYPHS, BIAS_GLYPHS, PROFILE_GLYPHS, OUTCOME_GLYPHS].map(
+                    (set, i) => {
+                      const g =
+                        set[
+                          [
+                            botState?.ep1Choice,
+                            botState?.cognitionBias,
+                            botState?.profile,
+                            botState?.outcome,
+                          ][i] ?? 0
+                        ];
+                      return (
+                        <div
+                          key={i}
+                          className="rounded-xl border border-white/10 bg-black/40 p-4 text-center"
+                        >
+                          <div
+                            className="text-4xl font-black"
+                            style={{ color: g.color }}
+                          >
+                            {g.glyph}
+                          </div>
+                          <div className="mt-1 text-sm font-semibold">
+                            {g.label}
+                          </div>
+                        </div>
+                      );
+                    }
+                  )}
+                </div>
+
+                {/* Personality summary */}
+                <div className="mt-5 rounded-xl border border-white/10 bg-black/30 p-4">
+                  {botState?.finalized && summary ? (
+                    <>
+                      <div className="text-xs uppercase tracking-wider text-white/60 mb-2">
+                        Personality Summary
+                      </div>
+                      <p className="text-sm text-white/85 whitespace-pre-line">
+                        {summary}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="italic text-white/70">
+                        “This unit has not yet committed to a path.
+                        The city is still deciding what it will become.”
+                      </p>
+                      <button
+                        disabled
+                        className="mt-3 w-full rounded-full border border-white/20 bg-white/5 py-2 text-xs text-white/50"
+                      >
+                        Retrieve Core Memory (Coming Soon)
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </section>
