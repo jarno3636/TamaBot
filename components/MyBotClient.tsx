@@ -1,4 +1,3 @@
-// components/MyBotClient.tsx
 "use client";
 
 import Link from "next/link";
@@ -49,7 +48,7 @@ function b64ToUtf8(b64: string): string {
 }
 
 /* ─────────────────────────────────────────────
- * Personality Schema (safe + lore-first)
+ * Personality Schema
  * ───────────────────────────────────────────── */
 
 const ORIGINS = [
@@ -60,27 +59,36 @@ const ORIGINS = [
 ];
 
 const BIASES = [
-  { name: "Analytical", glyph: "⌬", lore: "Reduces uncertainty into solvable structures." },
-  { name: "Intuitive", glyph: "◈", lore: "Detects patterns invisible to others." },
-  { name: "Paranoid", glyph: "⟁", lore: "Assumes every signal is compromised." },
-  { name: "Detached", glyph: "◌", lore: "Observes without attachment or sentiment." },
+  { name: "Analytical", adj: "Analytical", glyph: "⌬", lore: "Reduces uncertainty into solvable structures." },
+  { name: "Intuitive", adj: "Intuitive", glyph: "◈", lore: "Detects patterns invisible to others." },
+  { name: "Paranoid", adj: "Paranoid", glyph: "⟁", lore: "Assumes every signal is compromised." },
+  { name: "Detached", adj: "Detached", glyph: "◌", lore: "Observes without attachment or sentiment." },
 ];
 
 const PROFILES = [
-  { name: "Courier", glyph: "➤", lore: "Carries truths others avoid." },
-  { name: "Observer", glyph: "◎", lore: "Records what the city tries to forget." },
-  { name: "Enforcer", glyph: "⬢", lore: "Intervenes when systems fail — invited or not." },
-  { name: "Mediator", glyph: "⬡", lore: "Prevents collapse by standing between forces." },
+  { name: "Courier", noun: "Courier", glyph: "➤", lore: "Carries truths others avoid." },
+  { name: "Observer", noun: "Observer", glyph: "◎", lore: "Records what the city tries to forget." },
+  { name: "Enforcer", noun: "Enforcer", glyph: "⬢", lore: "Intervenes when systems fail — invited or not." },
+  { name: "Mediator", noun: "Mediator", glyph: "⬡", lore: "Prevents collapse by standing between forces." },
 ];
 
 const OUTCOMES = [
-  { name: "Integrated", glyph: "∞", lore: "Absorbed by the city — never fully understood." },
-  { name: "Exiled", glyph: "↯", lore: "Rejected by the city. It may regret this." },
-  { name: "Dormant", glyph: "◍", lore: "Waiting for a signal that may never arrive." },
-  { name: "Ascended", glyph: "✶", lore: "Surpassed its limits and rewrote its role." },
-  { name: "Redacted", glyph: "▢", lore: "Official records deny this unit existed." },
-  { name: "Anomaly", glyph: "⧖", lore: "Behaves in ways the system cannot model." },
+  { name: "Integrated", suffix: "of the City", glyph: "∞", lore: "Absorbed by the city — never fully understood." },
+  { name: "Exiled", suffix: "of the Fringe", glyph: "↯", lore: "Rejected by the city. It may regret this." },
+  { name: "Dormant", suffix: "in Waiting", glyph: "◍", lore: "Awaiting a signal that may never arrive." },
+  { name: "Ascended", suffix: "Ascended", glyph: "✶", lore: "Surpassed its limits and rewrote its role." },
+  { name: "Redacted", suffix: "[REDACTED]", glyph: "▢", lore: "Official records deny this unit existed." },
+  { name: "Anomaly", suffix: "the Anomaly", glyph: "⧖", lore: "Behaves in ways the system cannot model." },
 ];
+
+function buildPersonalityTitle(bot?: BotState) {
+  if (!bot) return null;
+  const bias = BIASES[bot.cognitionBias];
+  const profile = PROFILES[bot.profile];
+  const outcome = OUTCOMES[bot.outcome];
+  if (!bias || !profile || !outcome) return null;
+  return `The ${bias.adj} ${profile.noun} ${outcome.suffix}`;
+}
 
 /* ─────────────────────────────────────────────
  * Component
@@ -89,7 +97,6 @@ const OUTCOMES = [
 export default function MyBotClient() {
   const { address } = useAccount();
   const { fid } = useFid();
-
   const [fidInput, setFidInput] = useState("");
 
   useEffect(() => {
@@ -104,7 +111,7 @@ export default function MyBotClient() {
     [effectiveFid]
   );
 
-  /* ── NFT metadata ── */
+  /* ── Metadata ── */
   const { data: tokenJsonUri } = useReadContract({
     ...BASEBOTS,
     functionName: "tokenURI",
@@ -138,11 +145,7 @@ export default function MyBotClient() {
   });
 
   const botState = botStateRaw as BotState | undefined;
-
-  const origin = botState ? ORIGINS[botState.ep1Choice] : null;
-  const bias = botState ? BIASES[botState.cognitionBias] : null;
-  const profile = botState ? PROFILES[botState.profile] : null;
-  const outcome = botState ? OUTCOMES[botState.outcome] : null;
+  const title = buildPersonalityTitle(botState);
 
   const siteOrigin =
     (typeof window !== "undefined" && window.location?.origin) ||
@@ -156,101 +159,143 @@ export default function MyBotClient() {
   /* ───────────────────────────────────────────── */
 
   return (
-    <main className="min-h-[100svh] bg-deep text-white pb-16 page-layer">
-      <div className="container pt-6 px-5 stack">
+    <main
+      style={{
+        minHeight: "100vh",
+        background: "radial-gradient(1200px 600px at 50% -200px, #0b1224, #020617)",
+        color: "white",
+        paddingBottom: 64,
+      }}
+    >
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: 20 }}>
         {/* Header */}
-        <section className="glass glass-pad relative">
-          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">
+        <section
+          style={{
+            borderRadius: 24,
+            padding: 24,
+            background: "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.4))",
+            border: "1px solid rgba(255,255,255,0.12)",
+          }}
+        >
+          <h1 style={{ fontSize: 32, fontWeight: 900 }}>
             Meet Your Basebot
           </h1>
-          <p className="mt-2 text-white/85">
+          <p style={{ opacity: 0.75, marginTop: 8 }}>
             Load your Farcaster-linked Basebot and share it with the city.
           </p>
 
-          <ShareRow
-            url={shareUrl}
-            imageUrl={imagePngUrl}
-            className="mt-3"
-            label={isValidFID(effectiveFid) ? "Share this bot" : "Share Basebots"}
-          />
-        </section>
-
-        {/* Finder */}
-        <section className="glass glass-pad bg-[#0f1320]/50 border border-white/10">
-          <div className="grid gap-3 md:grid-cols-[220px_auto_160px]">
-            <label className="block">
-              <span className="text-xs uppercase tracking-wide text-white/60">
-                Farcaster FID
-              </span>
-              <input
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={effectiveFid}
-                onChange={(e) =>
-                  fidLocked ? null : setFidInput(e.target.value.replace(/[^\d]/g, ""))
-                }
-                disabled={fidLocked}
-                className="mt-1 w-full rounded-xl border px-3 py-2 bg-white/10 border-white/20 text-white"
-              />
-            </label>
-
-            <div className="flex items-end gap-3">
-              <button
-                type="button"
-                onClick={() => null}
-                className="btn-pill btn-pill--blue !font-bold"
-              >
-                Load bot
-              </button>
-              <Link href="/" className="btn-ghost">
-                Mint
-              </Link>
-            </div>
+          <div style={{ marginTop: 12 }}>
+            <ShareRow
+              url={shareUrl}
+              imageUrl={imagePngUrl}
+              label={isValidFID(effectiveFid) ? "Share this bot" : "Share Basebots"}
+            />
           </div>
         </section>
 
         {/* Result */}
         {fidNum !== null && (
-          <section className="glass glass-pad bg-[#0b0f18]/70">
-            <div className="flex flex-col md:flex-row gap-6">
-              <div className="w-full md:max-w-[360px]">
-                <img
-                  src={imageSrc}
-                  alt={name}
-                  className="w-full rounded-2xl border border-white/10 shadow-xl"
-                />
-              </div>
+          <section
+            style={{
+              marginTop: 24,
+              borderRadius: 24,
+              padding: 24,
+              background: "rgba(0,0,0,0.45)",
+              border: "1px solid rgba(255,255,255,0.12)",
+            }}
+          >
+            <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+              <img
+                src={imageSrc}
+                alt={name}
+                style={{
+                  width: 360,
+                  maxWidth: "100%",
+                  borderRadius: 18,
+                  border: "1px solid rgba(255,255,255,0.15)",
+                  boxShadow: "0 30px 80px rgba(0,0,0,0.6)",
+                }}
+              />
 
-              <div className="flex-1">
-                <h2 className="text-xl md:text-2xl font-bold">
+              <div style={{ flex: 1, minWidth: 260 }}>
+                <h2 style={{ fontSize: 26, fontWeight: 900 }}>
                   {name || `Basebot #${effectiveFid}`}
                 </h2>
-                {description && (
-                  <p className="mt-2 text-white/85">{description}</p>
+
+                {title && (
+                  <div
+                    style={{
+                      marginTop: 6,
+                      fontSize: 14,
+                      letterSpacing: 0.8,
+                      opacity: 0.85,
+                    }}
+                  >
+                    {title}
+                  </div>
                 )}
 
-                {/* Personality */}
-                <div className="mt-5 rounded-xl border border-white/10 bg-black/30 p-4">
-                  <div className="text-xs uppercase tracking-wider text-white/60 mb-3">
-                    Personality Matrix
-                  </div>
-
+                <div
+                  style={{
+                    marginTop: 20,
+                    borderRadius: 16,
+                    padding: 16,
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                  }}
+                >
                   {botState?.finalized ? (
-                    <div className="space-y-2 text-sm">
-                      <div>{origin?.glyph} {origin?.name} — {origin?.lore}</div>
-                      <div>{bias?.glyph} {bias?.name} — {bias?.lore}</div>
-                      <div>{profile?.glyph} {profile?.name} — {profile?.lore}</div>
-                      <div>{outcome?.glyph} {outcome?.name} — {outcome?.lore}</div>
-                    </div>
+                    <>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          letterSpacing: 1.6,
+                          opacity: 0.6,
+                          marginBottom: 8,
+                          fontWeight: 700,
+                        }}
+                      >
+                        PERSONALITY MATRIX
+                      </div>
+
+                      <div style={{ fontSize: 14, lineHeight: 1.5 }}>
+                        <div>{ORIGINS[botState.ep1Choice].glyph} {ORIGINS[botState.ep1Choice].lore}</div>
+                        <div>{BIASES[botState.cognitionBias].glyph} {BIASES[botState.cognitionBias].lore}</div>
+                        <div>{PROFILES[botState.profile].glyph} {PROFILES[botState.profile].lore}</div>
+                        <div>{OUTCOMES[botState.outcome].glyph} {OUTCOMES[botState.outcome].lore}</div>
+                      </div>
+
+                      {/* Deep link placeholder */}
+                      <div
+                        style={{
+                          marginTop: 16,
+                          fontSize: 12,
+                          opacity: 0.45,
+                        }}
+                      >
+                        Deep Link: <span style={{ fontStyle: "italic" }}>/core-memory (locked)</span>
+                      </div>
+                    </>
                   ) : (
                     <>
-                      <p className="italic text-white/70">
+                      <p style={{ fontStyle: "italic", opacity: 0.7 }}>
                         “This unit has not yet committed to a path.
                         Its memory remains writable.”
                       </p>
+
                       <button
                         disabled
-                        className="mt-3 w-full rounded-full border border-white/20 bg-white/5 py-2 text-xs text-white/50 cursor-not-allowed"
+                        style={{
+                          marginTop: 12,
+                          width: "100%",
+                          padding: "10px 12px",
+                          borderRadius: 999,
+                          border: "1px solid rgba(255,255,255,0.2)",
+                          background: "rgba(255,255,255,0.06)",
+                          color: "rgba(255,255,255,0.5)",
+                          cursor: "not-allowed",
+                          fontWeight: 700,
+                        }}
                       >
                         Retrieve Core Memory (Coming Soon)
                       </button>
