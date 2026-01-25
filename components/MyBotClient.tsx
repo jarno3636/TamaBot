@@ -82,11 +82,20 @@ const OUTCOME_LORE = [
 
 function buildShortSummary(bot?: BotState) {
   if (!bot) return null;
-
   return `${ORIGIN_LORE[bot.ep1Choice]}
 ${BIAS_LORE[bot.cognitionBias]}
 ${PROFILE_LORE[bot.profile]}
 ${OUTCOME_LORE[bot.outcome]}`;
+}
+
+/* ─────────────────────────────────────────────
+ * Environment safety
+ * ───────────────────────────────────────────── */
+
+function canUseShare(): boolean {
+  if (typeof window === "undefined") return false;
+  // Farcaster/Base webview is very strict
+  return typeof navigator !== "undefined";
 }
 
 /* ─────────────────────────────────────────────
@@ -153,14 +162,7 @@ export default function MyBotClient() {
   /* ───────────────────────────────────────────── */
 
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        background: "#020617",
-        color: "white",
-        paddingBottom: 64,
-      }}
-    >
+    <main style={{ minHeight: "100vh", background: "#020617", color: "white", paddingBottom: 64 }}>
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: 20 }}>
         <section
           style={{
@@ -170,23 +172,23 @@ export default function MyBotClient() {
             border: "1px solid rgba(255,255,255,0.12)",
           }}
         >
-          <h1 style={{ fontSize: 32, fontWeight: 900 }}>
-            Meet Your Basebot
-          </h1>
+          <h1 style={{ fontSize: 32, fontWeight: 900 }}>Meet Your Basebot</h1>
           <p style={{ opacity: 0.75, marginTop: 8 }}>
             Identity forged through on-chain choice.
           </p>
 
-          <div style={{ marginTop: 12 }}>
-            <ShareRow
-              url={imagePngUrl || siteOrigin}
-              imageUrl={imagePngUrl}
-              label="Cast this Basebot"
-            />
-          </div>
+          {/* SAFE SHARE */}
+          {canUseShare() && imagePngUrl && (
+            <div style={{ marginTop: 12 }}>
+              <ShareRow
+                url={imagePngUrl}
+                imageUrl={imagePngUrl}
+                label="Cast this Basebot"
+              />
+            </div>
+          )}
         </section>
 
-        {/* ✅ FIXED: explicit boolean check */}
         {tokenId !== null && (
           <section
             style={{
@@ -210,9 +212,7 @@ export default function MyBotClient() {
               />
 
               <div style={{ flex: 1, minWidth: 260 }}>
-                <h2 style={{ fontSize: 24, fontWeight: 800 }}>
-                  {name}
-                </h2>
+                <h2 style={{ fontSize: 24, fontWeight: 800 }}>{name}</h2>
 
                 <div
                   style={{
@@ -236,13 +236,7 @@ export default function MyBotClient() {
                       >
                         PERSONALITY SUMMARY
                       </div>
-                      <p
-                        style={{
-                          whiteSpace: "pre-line",
-                          lineHeight: 1.45,
-                          opacity: 0.9,
-                        }}
-                      >
+                      <p style={{ whiteSpace: "pre-line", lineHeight: 1.45 }}>
                         {summary}
                       </p>
                     </>
@@ -252,22 +246,6 @@ export default function MyBotClient() {
                         “This unit has not yet committed to a path.
                         The city is still deciding what it will become.”
                       </p>
-                      <button
-                        disabled
-                        style={{
-                          marginTop: 12,
-                          width: "100%",
-                          padding: "10px 12px",
-                          borderRadius: 999,
-                          border: "1px solid rgba(255,255,255,0.2)",
-                          background: "rgba(255,255,255,0.06)",
-                          color: "rgba(255,255,255,0.5)",
-                          cursor: "not-allowed",
-                          fontWeight: 700,
-                        }}
-                      >
-                        Retrieve Core Memory (Coming Soon)
-                      </button>
                     </>
                   )}
                 </div>
