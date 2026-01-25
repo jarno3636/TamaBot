@@ -1,5 +1,12 @@
 "use client";
 
+/**
+ * IMPORTANT (DO NOT REMOVE)
+ * Forces client-only rendering.
+ * Prevents BigInt serialization + indexedDB SSR crashes.
+ */
+export const dynamic = "force-dynamic";
+
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { usePublicClient, useReadContract } from "wagmi";
 import useFid from "@/hooks/useFid";
@@ -46,14 +53,16 @@ export default function StoryPage() {
   const publicClient = usePublicClient();
   const { fid } = useFid();
 
-  // Always provide a valid on-chain "anchor" value (never undefined).
-  // If fid exists, we use it. If not, we use 0n (keeps types happy + page stays free).
-  const tokenId: bigint = useMemo(() => {
-    return typeof fid === "number" && fid > 0 ? BigInt(fid) : 0n;
+  /**
+   * SAFE identity anchor
+   * - string for React / query keys
+   * - BigInt ONLY at call time
+   */
+  const tokenIdString = useMemo(() => {
+    return typeof fid === "number" && fid > 0 ? String(fid) : null;
   }, [fid]);
 
-  // Also keep a boolean for whether on-chain memory should be read.
-  const hasIdentity = tokenId > 0n;
+  const hasIdentity = Boolean(tokenIdString);
 
   const [mode, setMode] = useState<Mode>("hub");
   const [activeKey, setActiveKey] = useState<Key>("ep1");
@@ -63,8 +72,7 @@ export default function StoryPage() {
   const { data: botState, refetch } = useReadContract({
     ...BASEBOTS_S2,
     functionName: "getBotState",
-    args: [tokenId],
-    // Only read if identity exists; otherwise we keep it “blank” but the hub still works.
+    args: tokenIdString ? [BigInt(tokenIdString)] : undefined,
     query: { enabled: hasIdentity },
   });
 
@@ -84,11 +92,12 @@ export default function StoryPage() {
 
   /* ───────── Live updates ───────── */
 
-  const activeRef = useRef<bigint>(0n);
+  const activeRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!publicClient || !hasIdentity) return;
-    activeRef.current = tokenId;
+    if (!publicClient || !hasIdentity || !tokenIdString) return;
+
+    activeRef.current = tokenIdString;
 
     const unwatch = publicClient.watchContractEvent({
       ...BASEBOTS_S2,
@@ -97,26 +106,27 @@ export default function StoryPage() {
     });
 
     return () => unwatch();
-  }, [publicClient, tokenId, hasIdentity, refetch]);
+  }, [publicClient, tokenIdString, hasIdentity, refetch]);
 
   /* ───────── Routing ───────── */
 
   const exit = () => setMode("hub");
+  const episodeTokenId = tokenIdString ?? "0";
 
   if (mode !== "hub") {
     switch (mode) {
       case "prologue":
         return <PrologueSilenceInDarkness onExit={exit} />;
       case "ep1":
-        return <EpisodeOne tokenId={tokenId} onExit={exit} />;
+        return <EpisodeOne tokenId={episodeTokenId} onExit={exit} />;
       case "ep2":
-        return <EpisodeTwo tokenId={tokenId} onExit={exit} />;
+        return <EpisodeTwo tokenId={episodeTokenId} onExit={exit} />;
       case "ep3":
-        return <EpisodeThree tokenId={tokenId} onExit={exit} />;
+        return <EpisodeThree tokenId={episodeTokenId} onExit={exit} />;
       case "ep4":
-        return <EpisodeFour tokenId={tokenId} onExit={exit} />;
+        return <EpisodeFour tokenId={episodeTokenId} onExit={exit} />;
       case "ep5":
-        return <EpisodeFive tokenId={tokenId} onExit={exit} />;
+        return <EpisodeFive tokenId={episodeTokenId} onExit={exit} />;
       case "bonus":
         return state.ep3 ? <BonusEcho onExit={exit} /> : null;
       case "archive":
@@ -133,7 +143,6 @@ export default function StoryPage() {
       teaser:
         "The room between systems exhales. A faint tone repeats—too precise to be random.",
       img: "/story/prologue.png",
-      done: false,
     },
     {
       key: "ep1",
@@ -202,42 +211,29 @@ export default function StoryPage() {
       <style>{css}</style>
 
       <header style={hero()}>
-        <div style={heroGlow()} aria-hidden />
-        <div style={heroInner()}>
-          <div style={kicker()}>CORE MEMORY INTERFACE</div>
-          <h1 style={h1()}>Basebots: Core Memory</h1>
-          <p style={lead()}>
-            Memory fragments surface as systems awaken. Some stabilize. Others distort
-            until the sequence is complete.
-          </p>
+        <h1 style={h1()}>Basebots: Core Memory</h1>
+        <p style={lead()}>
+          Memory fragments surface as systems awaken. Some stabilize. Others distort
+          until the sequence is complete.
+        </p>
 
-          <div style={hintRow()}>
-            <div style={hintPill()}>
-              {hasIdentity ? "Memory sync: stable" : "Memory sync: dormant"}
-            </div>
-            <button
-              type="button"
-              onClick={() => refetch()}
-              disabled={!hasIdentity}
-              className={`sync ${!hasIdentity ? "disabled" : ""}`}
-              aria-disabled={!hasIdentity}
-              title={!hasIdentity ? "A stable anchor has not been detected." : "Refresh memory state."}
-            >
-              Sync
-            </button>
-          </div>
+        <div style={hint()}>
+          {hasIdentity ? "Memory anchor detected." : "Memory anchor dormant."}
+          <button
+            className={`sync ${!hasIdentity ? "disabled" : ""}`}
+            disabled={!hasIdentity}
+            onClick={() => refetch()}
+          >
+            Sync
+          </button>
         </div>
       </header>
 
-      <section style={grid()} aria-label="Memory fragments">
+      <section style={grid()}>
         {cards.map((c) => {
-          const isActive = activeKey === c.key;
+          const active = activeKey === c.key;
           const completed = !!c.done;
-          const isBonus = !!c.bonus;
-          const unlocked = c.unlocked ?? true; // normal episodes always "available"
-          const glitched = isBonus && !unlocked;
-
-          const badge = completed ? "Recovered" : "Unrecovered";
+          const glitched = c.bonus && !c.unlocked;
 
           return (
             <Card
@@ -245,15 +241,13 @@ export default function StoryPage() {
               title={c.title}
               teaser={c.teaser}
               img={c.img}
-              active={isActive}
-              badge={badge}
+              active={active}
+              completed={completed}
               glitched={glitched}
-              onFocus={() => setActiveKey(c.key)}
               onHover={() => setActiveKey(c.key)}
               onOpen={() => {
                 setActiveKey(c.key);
-                if (glitched) return;
-                setMode(c.key);
+                if (!glitched) setMode(c.key);
               }}
             />
           );
@@ -261,9 +255,7 @@ export default function StoryPage() {
       </section>
 
       <footer style={footer()}>
-        <div style={footerText()}>
-          Choose a fragment. Follow the sequence. When the distortion clears, the hidden records become legible.
-        </div>
+        Choose a fragment. Follow the sequence. When distortion clears, hidden records become legible.
       </footer>
     </main>
   );
@@ -277,21 +269,19 @@ function Card({
   teaser,
   img,
   active,
-  badge,
+  completed,
   glitched,
   onOpen,
   onHover,
-  onFocus,
 }: {
   title: string;
   teaser: string;
   img: string;
   active: boolean;
-  badge: string;
+  completed: boolean;
   glitched: boolean;
   onOpen: () => void;
   onHover: () => void;
-  onFocus: () => void;
 }) {
   return (
     <button
@@ -299,29 +289,15 @@ function Card({
       className={`card ${active ? "active" : ""} ${glitched ? "glitch" : ""}`}
       onClick={onOpen}
       onMouseEnter={onHover}
-      onFocus={onFocus}
-      aria-disabled={glitched}
-      disabled={false}
       style={{ backgroundImage: `url(${img})` }}
       title={glitched ? "Unreadable fragment." : "Open fragment."}
     >
-      <div className="overlay" aria-hidden />
-      <div className="topRow">
-        <div className={`badge ${badge === "Recovered" ? "good" : "warn"}`}>{badge}</div>
-        {glitched ? <div className="locked">UNREADABLE</div> : null}
-      </div>
-
+      <div className="overlay" />
+      <div className="badge">{completed ? "Recovered" : "Unrecovered"}</div>
       <div className="content">
         <div className="cardTitle">{title}</div>
         <div className={`cardTeaser ${glitched ? "scramble" : ""}`}>{teaser}</div>
       </div>
-
-      {glitched ? (
-        <>
-          <div className="glitchScan" aria-hidden />
-          <div className="glitchNoise" aria-hidden />
-        </>
-      ) : null}
     </button>
   );
 }
@@ -333,232 +309,106 @@ const shell = () => ({
   minHeight: "100vh",
   background: "#020617",
   color: "white",
-  padding: "40px 18px 52px",
+  padding: "40px 18px 60px",
 });
 
 const hero = () => ({
-  maxWidth: 1120,
-  margin: "0 auto 18px",
-  borderRadius: 26,
-  border: "1px solid rgba(255,255,255,0.10)",
-  background:
-    "radial-gradient(1200px 420px at 10% 0%, rgba(168,85,247,0.20), rgba(2,6,23,0) 60%), radial-gradient(900px 360px at 88% 18%, rgba(34,211,238,0.14), rgba(2,6,23,0) 55%), rgba(0,0,0,0.35)",
-  boxShadow: "0 40px 120px rgba(0,0,0,0.75)",
-  overflow: "hidden",
-  position: "relative" as const,
-});
-
-const heroGlow = () => ({
-  position: "absolute" as const,
-  inset: 0,
-  background:
-    "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0)), radial-gradient(700px 260px at 40% 0%, rgba(168,85,247,0.20), rgba(2,6,23,0) 60%)",
-  pointerEvents: "none" as const,
-});
-
-const heroInner = () => ({
-  position: "relative" as const,
-  padding: "26px 18px",
-});
-
-const kicker = () => ({
-  fontSize: 12,
-  letterSpacing: 1.6,
-  opacity: 0.85,
-  marginBottom: 8,
+  maxWidth: 1100,
+  margin: "0 auto 28px",
 });
 
 const h1 = () => ({
-  fontSize: 38,
-  lineHeight: 1.05,
-  margin: "8px 0 10px",
-  letterSpacing: -0.6,
+  fontSize: 40,
+  marginBottom: 10,
 });
 
 const lead = () => ({
   opacity: 0.82,
-  maxWidth: 780,
-  margin: 0,
-  lineHeight: 1.6,
-  fontSize: 14,
+  maxWidth: 720,
 });
 
-const hintRow = () => ({
-  marginTop: 16,
+const hint = () => ({
+  marginTop: 12,
   display: "flex",
   gap: 10,
   alignItems: "center",
-  flexWrap: "wrap" as const,
-});
-
-const hintPill = () => ({
-  padding: "8px 12px",
-  borderRadius: 999,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(2,6,23,0.55)",
   fontSize: 12,
-  opacity: 0.9,
 });
 
 const grid = () => ({
-  maxWidth: 1120,
+  maxWidth: 1100,
   margin: "0 auto",
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-  gap: 16,
+  gap: 18,
 });
 
 const footer = () => ({
-  maxWidth: 1120,
-  margin: "18px auto 0",
-  opacity: 0.9,
-});
-
-const footerText = () => ({
+  maxWidth: 1100,
+  margin: "28px auto 0",
+  opacity: 0.75,
   fontSize: 12,
-  opacity: 0.78,
 });
 
-/* CSS (kept inline via <style>) */
+/* CSS */
 const css = `
-:root { color-scheme: dark; }
-
-.sync{
-  height: 36px;
-  padding: 0 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(255,255,255,0.14);
-  background: rgba(255,255,255,0.06);
-  color: white;
-  cursor: pointer;
-  font-size: 12px;
-}
-.sync.disabled{
-  opacity: .5;
-  cursor: not-allowed;
-}
-
 .card{
-  position: relative;
-  height: 210px;
-  border-radius: 22px;
-  border: 1px solid rgba(255,255,255,0.12);
-  background-size: cover;
-  background-position: center;
-  overflow: hidden;
-  cursor: pointer;
-  transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease;
-  box-shadow: 0 22px 70px rgba(0,0,0,0.50);
+  position:relative;
+  height:210px;
+  border-radius:22px;
+  background-size:cover;
+  background-position:center;
+  border:1px solid rgba(255,255,255,0.12);
+  cursor:pointer;
+  overflow:hidden;
+  transition:.25s;
+  box-shadow:0 20px 60px rgba(0,0,0,.55);
 }
-.card:hover{ transform: translateY(-4px); border-color: rgba(168,85,247,0.35); }
+.card:hover{transform:translateY(-4px)}
 
 .card.active{
-  border-color: rgba(168,85,247,0.75);
-  box-shadow:
-    0 0 0 1px rgba(168,85,247,0.45),
-    0 0 26px rgba(168,85,247,0.35),
-    0 28px 90px rgba(0,0,0,0.60);
-  animation: neonPulse 1.35s ease-in-out infinite;
+  border-color:rgba(168,85,247,.9);
+  animation:neonPulse 1.3s infinite;
 }
 
 @keyframes neonPulse{
-  0% { box-shadow: 0 0 0 1px rgba(168,85,247,0.35), 0 0 18px rgba(168,85,247,0.20), 0 28px 90px rgba(0,0,0,0.60); }
-  50%{ box-shadow: 0 0 0 1px rgba(168,85,247,0.65), 0 0 34px rgba(168,85,247,0.45), 0 28px 90px rgba(0,0,0,0.60); }
-  100%{ box-shadow: 0 0 0 1px rgba(168,85,247,0.35), 0 0 18px rgba(168,85,247,0.20), 0 28px 90px rgba(0,0,0,0.60); }
+  0%{box-shadow:0 0 18px rgba(168,85,247,.4)}
+  50%{box-shadow:0 0 44px rgba(168,85,247,1)}
+  100%{box-shadow:0 0 18px rgba(168,85,247,.4)}
 }
 
 .overlay{
-  position:absolute; inset:0;
-  background:
-    linear-gradient(180deg, rgba(2,6,23,0.10), rgba(2,6,23,0.90)),
-    radial-gradient(520px 180px at 35% 0%, rgba(168,85,247,0.18), rgba(2,6,23,0) 70%);
-}
-
-.topRow{
-  position:absolute; top:12px; left:12px; right:12px;
-  display:flex; justify-content:space-between; align-items:center; gap:10px;
+  position:absolute;inset:0;
+  background:linear-gradient(180deg,transparent,rgba(2,6,23,.9));
 }
 
 .badge{
-  padding:6px 10px; border-radius:999px;
-  border:1px solid rgba(255,255,255,0.14);
+  position:absolute;
+  top:14px;left:14px;
+  padding:6px 10px;
+  border-radius:999px;
   font-size:12px;
-  background: rgba(2,6,23,0.50);
-  backdrop-filter: blur(10px);
-}
-.badge.good{
-  color: rgba(224,255,255,0.95);
-  box-shadow: 0 0 18px rgba(34,211,238,0.18);
-  border-color: rgba(34,211,238,0.28);
-}
-.badge.warn{
-  color: rgba(245,235,255,0.95);
-  box-shadow: 0 0 18px rgba(168,85,247,0.14);
-  border-color: rgba(168,85,247,0.28);
-}
-
-.locked{
-  padding:6px 10px; border-radius:999px;
-  font-size:12px;
-  border:1px solid rgba(255,255,255,0.10);
-  background: rgba(255,255,255,0.06);
-  opacity: .85;
+  background:rgba(2,6,23,.6);
+  border:1px solid rgba(255,255,255,.14);
 }
 
 .content{
-  position:absolute; left:14px; right:14px; bottom:14px;
+  position:absolute;
+  bottom:16px;left:16px;right:16px;
 }
 
-.cardTitle{
-  font-size:16px;
-  letter-spacing: -0.2px;
-  margin-bottom: 6px;
-}
+.cardTitle{font-size:16px;margin-bottom:6px}
+.cardTeaser{font-size:13px;opacity:.85}
 
-.cardTeaser{
-  font-size:13px;
-  line-height:1.45;
-  opacity:.84;
-}
+.glitch{filter:blur(1.2px) contrast(1.1)}
+.scramble{text-shadow:0 0 12px rgba(168,85,247,.6)}
 
-.glitch{
-  filter: saturate(1.1) contrast(1.05);
+.sync{
+  padding:6px 12px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,.14);
+  background:rgba(255,255,255,.06);
+  color:white;
 }
-
-.glitch .overlay{
-  background:
-    linear-gradient(180deg, rgba(2,6,23,0.18), rgba(2,6,23,0.95)),
-    repeating-linear-gradient(0deg, rgba(168,85,247,0.08), rgba(168,85,247,0.08) 2px, rgba(2,6,23,0) 2px, rgba(2,6,23,0) 6px);
-}
-
-.scramble{
-  text-shadow: 0 0 10px rgba(168,85,247,0.25);
-  filter: blur(1.2px);
-}
-
-.glitchScan{
-  position:absolute; left:-10%; right:-10%;
-  top:-40%; height:40%;
-  background: linear-gradient(180deg, rgba(168,85,247,0), rgba(168,85,247,0.18), rgba(168,85,247,0));
-  animation: scan 2.6s linear infinite;
-  mix-blend-mode: screen;
-  pointer-events:none;
-}
-
-@keyframes scan{
-  0%{ transform: translateY(-20%); opacity:0; }
-  15%{ opacity:.22; }
-  70%{ opacity:.18; }
-  100%{ transform: translateY(320%); opacity:0; }
-}
-
-.glitchNoise{
-  position:absolute; inset:0;
-  background-image:
-    radial-gradient(rgba(255,255,255,0.06) 1px, rgba(0,0,0,0) 1px);
-  background-size: 3px 3px;
-  opacity: .16;
-  mix-blend-mode: overlay;
-  pointer-events:none;
-}
+.sync.disabled{opacity:.5}
 `;
