@@ -16,52 +16,45 @@ import BonusEcho from "@/components/story/BonusEcho";
 import { BASEBOTS } from "@/lib/abi";
 import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 
-/* ─────────────────────────────────────────────
- * Config
- * ───────────────────────────────────────────── */
+/* ───────────────────────────────────────────── */
 
 const BASE_CHAIN_ID = 8453;
 const BONUS1_BIT = 1;
 const BONUS2_BIT = 2;
 
-/* ─────────────────────────────────────────────
- * Helpers
- * ───────────────────────────────────────────── */
+type Mode =
+  | "hub"
+  | "prologue"
+  | "ep1"
+  | "ep2"
+  | "ep3"
+  | "ep4"
+  | "ep5"
+  | "bonus";
 
-function nextCoreMode(flags?: {
-  ep1?: boolean;
-  ep2?: boolean;
-  ep3?: boolean;
-  ep4?: boolean;
-  ep5?: boolean;
-}) {
-  if (!flags?.ep1) return "ep1";
-  if (!flags?.ep2) return "ep2";
-  if (!flags?.ep3) return "ep3";
-  if (!flags?.ep4) return "ep4";
-  return "ep5";
-}
-
-/* ─────────────────────────────────────────────
- * Component
- * ───────────────────────────────────────────── */
+/* ───────────────────────────────────────────── */
 
 export default function StoryPage() {
-  const [mode, setMode] = useState<
-    "hub" | "prologue" | "ep1" | "ep2" | "ep3" | "ep4" | "ep5" | "bonus"
-  >("hub");
+  const [mode, setMode] = useState<Mode>("hub");
 
   const { address, chain } = useAccount();
   const { fid } = useFid();
 
-  /**
-   * 🔑 CRITICAL FIX:
-   * tokenId MUST be a STRING for client components
-   * Never BigInt here.
-   */
-  const tokenId = useMemo<string | undefined>(() => {
+  /* ───────────────── Token handling (CRITICAL) ───────────────── */
+
+  // ✅ STRING for client components
+  const tokenIdString = useMemo(() => {
     return typeof fid === "number" && fid > 0 ? String(fid) : undefined;
   }, [fid]);
+
+  // ✅ BigInt ONLY for wagmi
+  const tokenIdBigInt = useMemo(() => {
+    try {
+      return tokenIdString ? BigInt(tokenIdString) : undefined;
+    } catch {
+      return undefined;
+    }
+  }, [tokenIdString]);
 
   const wrongChain = Boolean(chain?.id) && chain?.id !== BASE_CHAIN_ID;
 
@@ -70,8 +63,8 @@ export default function StoryPage() {
   const { data: tokenUri } = useReadContract({
     ...BASEBOTS,
     functionName: "tokenURI",
-    args: tokenId ? ([BigInt(tokenId)] as unknown as [bigint]) : undefined,
-    query: { enabled: Boolean(tokenId) },
+    args: tokenIdBigInt ? [tokenIdBigInt] : undefined,
+    query: { enabled: Boolean(tokenIdBigInt) },
   });
 
   const hasBasebot =
@@ -84,8 +77,8 @@ export default function StoryPage() {
     address: BASEBOTS_S2.address,
     abi: BASEBOTS_S2.abi,
     functionName: "getBotState",
-    args: tokenId ? ([BigInt(tokenId)] as unknown as [bigint]) : undefined,
-    query: { enabled: Boolean(tokenId) && hasBasebot },
+    args: tokenIdBigInt ? [tokenIdBigInt] : undefined,
+    query: { enabled: Boolean(tokenIdBigInt) && hasBasebot },
   });
 
   const progress = useMemo(() => {
@@ -97,7 +90,6 @@ export default function StoryPage() {
       ep3: Boolean(p.ep3Set),
       ep4: Boolean(p.ep4Set),
       ep5: Boolean(p.ep5Set),
-      finalized: Boolean(p.finalized),
     };
   }, [progressFlags]);
 
@@ -107,17 +99,19 @@ export default function StoryPage() {
     address: BASEBOTS_S2.address,
     abi: BASEBOTS_S2.abi,
     functionName: "hasBonusBit",
-    args: tokenId ? ([BigInt(tokenId), BONUS1_BIT] as any) : undefined,
-    query: { enabled: Boolean(tokenId) && hasBasebot },
+    args: tokenIdBigInt ? [tokenIdBigInt, BONUS1_BIT] : undefined,
+    query: { enabled: Boolean(tokenIdBigInt) && hasBasebot },
   });
 
   const { data: hasB2 } = useReadContract({
     address: BASEBOTS_S2.address,
     abi: BASEBOTS_S2.abi,
     functionName: "hasBonusBit",
-    args: tokenId ? ([BigInt(tokenId), BONUS2_BIT] as any) : undefined,
-    query: { enabled: Boolean(tokenId) && hasBasebot },
+    args: tokenIdBigInt ? [tokenIdBigInt, BONUS2_BIT] : undefined,
+    query: { enabled: Boolean(tokenIdBigInt) && hasBasebot },
   });
+
+  const bonusUnlocked = Boolean(hasB1 || hasB2);
 
   /* ───────────────── Global stats ───────────────── */
 
@@ -143,42 +137,56 @@ export default function StoryPage() {
   const ep4Unlocked = canPlayGated && Boolean(progress?.ep3);
   const ep5Unlocked = canPlayGated && Boolean(progress?.ep4);
 
-  /* ───────────────── ROUTING ───────────────── */
+  /* ───────────────── ROUTING (FIXED) ───────────────── */
 
   if (mode !== "hub") {
-    const map: Partial<Record<typeof mode, React.ReactNode>> = {
+    // Never mount episodes without a valid tokenId
+    if (!tokenIdString && mode !== "prologue") {
+      return (
+        <div style={{ padding: 40, color: "white", textAlign: "center" }}>
+          Waiting for Farcaster identity…
+        </div>
+      );
+    }
+
+    const map: Partial<Record<Mode, React.ReactNode>> = {
       prologue: <PrologueSilenceInDarkness onExit={() => setMode("hub")} />,
 
-      ep1: (
-        <EpisodeOne
-          tokenId={tokenId ?? "0"}
-          onExit={() => setMode("hub")}
-        />
-      ),
+      ep1:
+        tokenIdString && (
+          <EpisodeOne tokenId={tokenIdString} onExit={() => setMode("hub")} />
+        ),
 
-      ep2: tokenId ? (
-        <EpisodeTwo tokenId={tokenId} onExit={() => setMode("hub")} />
-      ) : null,
+      ep2:
+        tokenIdString && ep2Unlocked && (
+          <EpisodeTwo tokenId={tokenIdString} onExit={() => setMode("hub")} />
+        ),
 
-      ep3: tokenId ? (
-        <EpisodeThree tokenId={tokenId} onExit={() => setMode("hub")} />
-      ) : null,
+      ep3:
+        tokenIdString && ep3Unlocked && (
+          <EpisodeThree tokenId={tokenIdString} onExit={() => setMode("hub")} />
+        ),
 
-      ep4: tokenId ? (
-        <EpisodeFour tokenId={tokenId} onExit={() => setMode("hub")} />
-      ) : null,
+      ep4:
+        tokenIdString && ep4Unlocked && (
+          <EpisodeFour tokenId={tokenIdString} onExit={() => setMode("hub")} />
+        ),
 
-      ep5: tokenId ? (
-        <EpisodeFive tokenId={tokenId} onExit={() => setMode("hub")} />
-      ) : null,
+      ep5:
+        tokenIdString && ep5Unlocked && (
+          <EpisodeFive tokenId={tokenIdString} onExit={() => setMode("hub")} />
+        ),
 
-      bonus: <BonusEcho onExit={() => setMode("hub")} />,
+      bonus:
+        tokenIdString && bonusUnlocked ? (
+          <BonusEcho onExit={() => setMode("hub")} />
+        ) : null,
     };
 
     return map[mode] ?? null;
   }
 
-  /* ───────────────── UI ───────────────── */
+  /* ───────────────── HUB UI ───────────────── */
 
   return (
     <main
@@ -194,9 +202,7 @@ export default function StoryPage() {
         <div style={{ opacity: 0.6, letterSpacing: 2, fontSize: 11 }}>
           BASEBOTS
         </div>
-        <h1 style={{ fontSize: 36, fontWeight: 950 }}>
-          Core Memory
-        </h1>
+        <h1 style={{ fontSize: 36, fontWeight: 950 }}>Core Memory</h1>
         <p style={{ opacity: 0.75, maxWidth: 720, marginTop: 8 }}>
           Your choices are written on-chain. The system remembers what you commit.
         </p>
@@ -247,7 +253,7 @@ export default function StoryPage() {
 
               <button
                 disabled={!ep.unlocked}
-                onClick={() => setMode(ep.id as any)}
+                onClick={() => setMode(ep.id as Mode)}
                 style={{
                   marginTop: 14,
                   width: "100%",
@@ -285,9 +291,7 @@ export default function StoryPage() {
             border: "1px solid rgba(255,255,255,0.14)",
           }}
         >
-          <div style={{ fontSize: 28, fontWeight: 900 }}>
-            {totalFinalized}
-          </div>
+          <div style={{ fontSize: 28, fontWeight: 900 }}>{totalFinalized}</div>
           <div style={{ opacity: 0.7, marginTop: 6 }}>
             Profiles finalized across the network
           </div>
