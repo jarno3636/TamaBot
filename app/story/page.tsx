@@ -40,14 +40,14 @@ export default function StoryPage() {
   const { address, chain } = useAccount();
   const { fid } = useFid();
 
-  /* ───────────────── Token handling (CRITICAL) ───────────────── */
+  /* ───────── token handling (critical) ───────── */
 
-  // ✅ STRING for client components
+  // STRING for components
   const tokenIdString = useMemo(() => {
     return typeof fid === "number" && fid > 0 ? String(fid) : undefined;
   }, [fid]);
 
-  // ✅ BigInt ONLY for wagmi
+  // BigInt ONLY for wagmi
   const tokenIdBigInt = useMemo(() => {
     try {
       return tokenIdString ? BigInt(tokenIdString) : undefined;
@@ -58,7 +58,7 @@ export default function StoryPage() {
 
   const wrongChain = Boolean(chain?.id) && chain?.id !== BASE_CHAIN_ID;
 
-  /* ───────────────── Ownership check ───────────────── */
+  /* ───────── ownership check ───────── */
 
   const { data: tokenUri } = useReadContract({
     ...BASEBOTS,
@@ -71,7 +71,7 @@ export default function StoryPage() {
     typeof tokenUri === "string" &&
     tokenUri.startsWith("data:application/json;base64,");
 
-  /* ───────────────── Progress flags ───────────────── */
+  /* ───────── progress flags ───────── */
 
   const { data: progressFlags } = useReadContract({
     address: BASEBOTS_S2.address,
@@ -93,7 +93,7 @@ export default function StoryPage() {
     };
   }, [progressFlags]);
 
-  /* ───────────────── Bonus bits ───────────────── */
+  /* ───────── bonus bits ───────── */
 
   const { data: hasB1 } = useReadContract({
     address: BASEBOTS_S2.address,
@@ -113,7 +113,7 @@ export default function StoryPage() {
 
   const bonusUnlocked = Boolean(hasB1 || hasB2);
 
-  /* ───────────────── Global stats ───────────────── */
+  /* ───────── global stats ───────── */
 
   const { data: globalStats } = useReadContract({
     address: BASEBOTS_S2.address,
@@ -126,7 +126,7 @@ export default function StoryPage() {
     ? Number((globalStats as any)[0])
     : 0;
 
-  /* ───────────────── Gating rules ───────────────── */
+  /* ───────── gating rules ───────── */
 
   const canReadPublic = !wrongChain;
   const canPlayGated = Boolean(address) && hasBasebot && !wrongChain;
@@ -137,56 +137,49 @@ export default function StoryPage() {
   const ep4Unlocked = canPlayGated && Boolean(progress?.ep3);
   const ep5Unlocked = canPlayGated && Boolean(progress?.ep4);
 
-  /* ───────────────── ROUTING (FIXED) ───────────────── */
+  /* ───────── ROUTING (NO EARLY RETURNS) ───────── */
 
   if (mode !== "hub") {
-    // Never mount episodes without a valid tokenId
-    if (!tokenIdString && mode !== "prologue") {
-      return (
-        <div style={{ padding: 40, color: "white", textAlign: "center" }}>
-          Waiting for Farcaster identity…
-        </div>
-      );
-    }
+    switch (mode) {
+      case "prologue":
+        return <PrologueSilenceInDarkness onExit={() => setMode("hub")} />;
 
-    const map: Partial<Record<Mode, React.ReactNode>> = {
-      prologue: <PrologueSilenceInDarkness onExit={() => setMode("hub")} />,
-
-      ep1:
-        tokenIdString && (
+      case "ep1":
+        return tokenIdString ? (
           <EpisodeOne tokenId={tokenIdString} onExit={() => setMode("hub")} />
-        ),
+        ) : null;
 
-      ep2:
-        tokenIdString && ep2Unlocked && (
+      case "ep2":
+        return tokenIdString && ep2Unlocked ? (
           <EpisodeTwo tokenId={tokenIdString} onExit={() => setMode("hub")} />
-        ),
+        ) : null;
 
-      ep3:
-        tokenIdString && ep3Unlocked && (
+      case "ep3":
+        return tokenIdString && ep3Unlocked ? (
           <EpisodeThree tokenId={tokenIdString} onExit={() => setMode("hub")} />
-        ),
+        ) : null;
 
-      ep4:
-        tokenIdString && ep4Unlocked && (
+      case "ep4":
+        return tokenIdString && ep4Unlocked ? (
           <EpisodeFour tokenId={tokenIdString} onExit={() => setMode("hub")} />
-        ),
+        ) : null;
 
-      ep5:
-        tokenIdString && ep5Unlocked && (
+      case "ep5":
+        return tokenIdString && ep5Unlocked ? (
           <EpisodeFive tokenId={tokenIdString} onExit={() => setMode("hub")} />
-        ),
+        ) : null;
 
-      bonus:
-        tokenIdString && bonusUnlocked ? (
+      case "bonus":
+        return tokenIdString && bonusUnlocked ? (
           <BonusEcho onExit={() => setMode("hub")} />
-        ) : null,
-    };
+        ) : null;
 
-    return map[mode] ?? null;
+      default:
+        return null;
+    }
   }
 
-  /* ───────────────── HUB UI ───────────────── */
+  /* ───────── HUB UI ───────── */
 
   return (
     <main
@@ -198,6 +191,25 @@ export default function StoryPage() {
         padding: "40px 16px 64px",
       }}
     >
+      {/* FID loading overlay (non-blocking) */}
+      {fid === undefined && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 50,
+            background: "rgba(2,6,23,0.85)",
+            backdropFilter: "blur(6px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontWeight: 900,
+          }}
+        >
+          Waiting for Farcaster identity…
+        </div>
+      )}
+
       <header style={{ maxWidth: 1200, margin: "0 auto 28px" }}>
         <div style={{ opacity: 0.6, letterSpacing: 2, fontSize: 11 }}>
           BASEBOTS
@@ -291,7 +303,9 @@ export default function StoryPage() {
             border: "1px solid rgba(255,255,255,0.14)",
           }}
         >
-          <div style={{ fontSize: 28, fontWeight: 900 }}>{totalFinalized}</div>
+          <div style={{ fontSize: 28, fontWeight: 900 }}>
+            {totalFinalized}
+          </div>
           <div style={{ opacity: 0.7, marginTop: 6 }}>
             Profiles finalized across the network
           </div>
