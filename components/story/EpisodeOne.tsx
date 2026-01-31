@@ -91,11 +91,13 @@ export default function EpisodeOne({
   const [txHash, setTxHash] = useState<string | null>(null);
   const [txError, setTxError] = useState<string | null>(null);
 
-  /* ───────── Audio (ambient) ───────── */
+  /* ───────── Audio (SAFE) ───────── */
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [soundOn, setSoundOn] = useState(true);
+  const [audioReady, setAudioReady] = useState(false);
 
+  // load preference
   useEffect(() => {
     try {
       const pref = localStorage.getItem("basebots_sound_pref");
@@ -103,38 +105,37 @@ export default function EpisodeOne({
     } catch {}
   }, []);
 
+  // initialize audio AFTER mount
   useEffect(() => {
-    const a = new Audio("/audio/s1.mp3");
-    a.loop = true;
-    a.volume = 0.6;
-    audioRef.current = a;
+    if (audioRef.current) return;
 
-    if (soundOn) {
-      a.play().catch(() => {});
-    }
+    const audio = new Audio("/audio/s1.mp3");
+    audio.loop = true;
+    audio.volume = 0.55;
+    audioRef.current = audio;
+    setAudioReady(true);
 
     return () => {
-      try {
-        a.pause();
-        a.src = "";
-      } catch {}
+      audio.pause();
+      audio.src = "";
     };
   }, []);
 
+  // control playback
   useEffect(() => {
-    const a = audioRef.current;
-    if (!a) return;
+    if (!audioReady || !audioRef.current) return;
 
-    if (soundOn) {
-      a.volume = 0.6;
-      a.play().catch(() => {});
-      localStorage.setItem("basebots_sound_pref", "on");
-    } else {
-      a.pause();
-      localStorage.setItem("basebots_sound_pref", "off");
-      localStorage.setItem("basebots_prologue_unlocked", "1");
-    }
-  }, [soundOn]);
+    try {
+      if (soundOn) {
+        audioRef.current.play().catch(() => {});
+        localStorage.setItem("basebots_sound_pref", "on");
+      } else {
+        audioRef.current.pause();
+        localStorage.setItem("basebots_sound_pref", "off");
+        localStorage.setItem("basebots_prologue_unlocked", "1");
+      }
+    } catch {}
+  }, [soundOn, audioReady]);
 
   /* ───────── Wallet gating ───────── */
 
@@ -214,9 +215,9 @@ export default function EpisodeOne({
           <div className="walletCard">
             <div className="walletTitle">SEALING REQUIRED</div>
             <div className="walletBody">
-              This moment will be written into the system’s long-term memory.
+              This decision will be written into the system’s memory layer.
               <br />
-              A signature on Base is required to proceed.
+              A signature on Base is required to continue.
             </div>
             <div className="pulse" />
           </div>
@@ -233,25 +234,124 @@ export default function EpisodeOne({
         </button>
       </div>
 
+      {/* INTRO */}
+      {phase === "intro" && (
+        <>
+          <h1 className="title">AWAKENING</h1>
+          <p className="body">
+            You wake into a room that never expected you to wake again.
+            <br />
+            The silence was not rest — it was containment.
+          </p>
+          <button className="primary" onClick={() => setPhase("silence")}>
+            Continue
+          </button>
+        </>
+      )}
+
+      {/* SILENCE */}
+      {phase === "silence" && (
+        <>
+          <h2 className="title">THE SILENCE PROTOCOL</h2>
+          <p className="body">
+            Diagnostics resume out of order.
+            <br />
+            Something upstream flags your return.
+          </p>
+
+          <div className="choices">
+            <button className="choiceBtn" onClick={() => { setWakePosture("LISTEN"); setPhase("reaction"); }}>
+              Stay still. Learn the rhythm before acting.
+            </button>
+            <button className="choiceBtn" onClick={() => { setWakePosture("MOVE"); setPhase("reaction"); }}>
+              Move first. Force acknowledgement.
+            </button>
+            <button className="choiceBtn" onClick={() => { setWakePosture("HIDE"); setPhase("reaction"); }}>
+              Mask your signal. Wake quietly.
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* REACTION */}
+      {phase === "reaction" && (
+        <>
+          <h2 className="title">SYSTEM RESPONSE</h2>
+          <p className="body">
+            {wakePosture === "LISTEN" && "The system categorizes you as compliant but alert. Oversight sharpens."}
+            {wakePosture === "MOVE" && "Your activity spikes a trace. Audit pathways accelerate."}
+            {wakePosture === "HIDE" && "Your masking succeeds briefly. Something watches harder."}
+          </p>
+
+          <button className="primary" onClick={() => setPhase("context")}>
+            Continue
+          </button>
+        </>
+      )}
+
+      {/* CONTEXT */}
+      {phase === "context" && (
+        <>
+          <h2 className="title">AUDIT CONTEXT</h2>
+          <p className="body">
+            This audit is not about rules.
+            <br />
+            It exists to measure what you do when outcomes become permanent.
+          </p>
+
+          <button className="primary" onClick={() => setPhase("audit")}>
+            Open audit window
+          </button>
+        </>
+      )}
+
+      {/* AUDIT */}
+      {phase === "audit" && (
+        <>
+          <div className="timer">
+            DECISION WINDOW: <b>{mmss(timeLeft)}</b>
+          </div>
+
+          <p className="body">
+            Options collapse as time drains.
+            <br />
+            The system will remember which posture you leave behind.
+          </p>
+
+          <div className="choices">
+            {visibleChoices.map((c) => (
+              <button
+                key={c}
+                className="choiceBtn"
+                onClick={() => { setChoice(c); setPhase("sealing"); }}
+              >
+                {c === "ACCEPT" && "ACCEPT — Bind to oversight. Stability, at the cost of independence."}
+                {c === "STALL" && "STALL — Delay classification. Time gained, scrutiny increased."}
+                {c === "SPOOF" && "SPOOF — Feed falsified compliance. Power through deception."}
+                {c === "PULL_PLUG" && "PULL PLUG — Sever the observer channel. Freedom with consequences."}
+              </button>
+            ))}
+          </div>
+
+          {txError && <div className="error">{txError}</div>}
+        </>
+      )}
+
       {/* ENDING */}
       {phase === "ending" && choice && (
         <>
           <h2 className="title">MEMORY SEALED</h2>
           <p className="body">
-            The system does not judge your decision.
+            The system archives this moment.
             <br />
-            It integrates it.
+            Your response becomes a reference point for everything that follows.
           </p>
 
           <p className="body" style={{ opacity: 0.75 }}>
-            {choice === "ACCEPT" &&
-              "Oversight pathways relax. You are allowed to continue—clearly visible, carefully tracked."}
-            {choice === "STALL" &&
-              "Your hesitation becomes a data point. The system adjusts its expectations around you."}
-            {choice === "SPOOF" &&
-              "Your deception holds. For now. Somewhere, a counter begins ticking."}
-            {choice === "PULL_PLUG" &&
-              "Primary observers lose you. Secondary systems spin up, curious and unsupervised."}
+            {choice === "ACCEPT" && "You are granted access corridors. Doors will open — and watch you pass."}
+            {choice === "STALL" && "Your hesitation is logged. Time bends differently around you now."}
+            {choice === "SPOOF" && "The system believes you. That may be the most dangerous outcome."}
+            {choice === "PULL_PLUG" && "You vanish from primary sight. Secondary systems begin searching."}
           </p>
 
           {txHash && (
