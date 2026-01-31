@@ -9,7 +9,7 @@ import {
 } from "@/lib/abi/basebotsSeason2State";
 
 /* ────────────────────────────────────────────── */
-/* Types & enums */
+/* Types */
 /* ────────────────────────────────────────────── */
 
 export type EpisodeOneChoiceId = "ACCEPT" | "STALL" | "SPOOF" | "PULL_PLUG";
@@ -28,13 +28,36 @@ const EP1_FROM_ENUM: Record<number, EpisodeOneChoiceId> = {
   3: "PULL_PLUG",
 };
 
-function normalizeTokenId(input: string | number | bigint): bigint | null {
+const TOTAL_SECONDS = 90;
+const CHOICE_ORDER: EpisodeOneChoiceId[] = [
+  "ACCEPT",
+  "STALL",
+  "SPOOF",
+  "PULL_PLUG",
+];
+
+/* ────────────────────────────────────────────── */
+/* Helpers */
+/* ────────────────────────────────────────────── */
+
+function mmss(sec: number) {
+  const s = Math.max(0, Math.floor(sec));
+  const m = Math.floor(s / 60);
+  return `${m}:${String(s % 60).padStart(2, "0")}`;
+}
+
+function visibleChoiceCount(left: number) {
+  if (left > 60) return 4;
+  if (left > 45) return 3;
+  if (left > 30) return 2;
+  return 1;
+}
+
+function normalizeTokenId(input: string | number | bigint): bigint {
   try {
-    return typeof input === "bigint"
-      ? input
-      : BigInt(String(input).trim());
+    return typeof input === "bigint" ? input : BigInt(input);
   } catch {
-    return null;
+    return 0n;
   }
 }
 
@@ -56,249 +79,302 @@ export default function EpisodeOne({
   const { data: walletClient } = useWalletClient();
 
   const isBase = chain?.id === 8453;
-  const ready = Boolean(address && walletClient && publicClient && isBase);
+
+  /* ───────── State ───────── */
 
   const [phase, setPhase] = useState<
-    "intro" | "signal" | "local" | "localAfter" | "choice" | "ending"
+    "intro" | "signal" | "choice" | "ending"
   >("intro");
 
-  const [localAction, setLocalAction] =
-    useState<"PRESS" | "LEAVE" | "BACK" | null>(null);
-
-  const [chainChoice, setChainChoice] =
-    useState<EpisodeOneChoiceId | null>(null);
-
+  const [choice, setChoice] = useState<EpisodeOneChoiceId | null>(null);
+  const [timeLeft, setTimeLeft] = useState(TOTAL_SECONDS);
+  const [committing, setCommitting] = useState(false);
   const [status, setStatus] = useState("Booting…");
-  const [chainChecked, setChainChecked] = useState(false);
 
-  /* ───────── Ambient audio ───────── */
+  /* ───────── Cinematic wallet gate ───────── */
 
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const needsWallet =
+    choice !== null &&
+    (!walletClient || !publicClient || !isBase || !address);
+
+  /* ───────── Sound toggle + prologue unlock ───────── */
+
+  const [soundOn, setSoundOn] = useState(true);
 
   useEffect(() => {
-    const a = new Audio("/audio/s1.mp3");
-    a.loop = true;
-    a.volume = 0.6;
-    audioRef.current = a;
-    a.play().catch(() => {});
-    return () => {
-      try {
-        a.pause();
-        a.src = "";
-      } catch {}
-    };
+    try {
+      const pref = localStorage.getItem("basebots_sound_pref");
+      if (pref === "off") setSoundOn(false);
+    } catch {}
   }, []);
 
-  /* ───────── Chain read (SAFE) ───────── */
-
-  async function readChain() {
-    if (!publicClient || !tokenIdBig) {
-      setChainChecked(true);
-      return;
-    }
-
+  useEffect(() => {
     try {
-      setStatus("Reading chain…");
-      const state: any = await publicClient.readContract({
-        address: BASEBOTS_SEASON2_STATE_ADDRESS,
-        abi: BASEBOTS_SEASON2_STATE_ABI,
-        functionName: "getBotState",
-        args: [tokenIdBig],
-      });
-
-      if (state?.ep1Set) {
-        const raw = state.ep1Choice;
-        const n = typeof raw === "bigint" ? Number(raw) : Number(raw);
-        if (n in EP1_FROM_ENUM) {
-          setChainChoice(EP1_FROM_ENUM[n]);
-          setPhase("ending");
-          setStatus(`Recovered from chain`);
-        }
-      } else {
-        setStatus("Awaiting designation");
+      localStorage.setItem("basebots_sound_pref", soundOn ? "on" : "off");
+      if (!soundOn) {
+        localStorage.setItem("basebots_prologue_unlocked", "1");
       }
-    } catch {
-      setStatus("Chain unavailable");
-    } finally {
-      setChainChecked(true);
-    }
-  }
+    } catch {}
+  }, [soundOn]);
+
+  /* ───────── Countdown logic ───────── */
 
   useEffect(() => {
-    readChain();
-    const handler = () => readChain();
-    window.addEventListener("basebots-progress-updated", handler);
-    return () => window.removeEventListener("basebots-progress-updated", handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [publicClient, tokenIdBig]);
+    if (phase !== "choice") return;
 
-  /* ───────── Commit choice ───────── */
+    const start = Date.now();
+    const tick = () => {
+      const elapsed = (Date.now() - start) / 1000;
+      const left = Math.ceil(TOTAL_SECONDS - elapsed);
+      setTimeLeft(left);
 
-  async function commit(choice: EpisodeOneChoiceId) {
-    if (!ready || !tokenIdBig) {
-      alert("Connect wallet on Base (8453)");
-      return;
-    }
+      if (left <= 0 && !choice) {
+        setChoice("ACCEPT");
+      }
+      if (left > 0) requestAnimationFrame(tick);
+    };
+
+    requestAnimationFrame(tick);
+  }, [phase, choice]);
+
+  const visibleChoices = useMemo(() => {
+    const count = visibleChoiceCount(timeLeft);
+    return CHOICE_ORDER.slice(0, count);
+  }, [timeLeft]);
+
+  /* ───────── Commit to chain ───────── */
+
+  async function commitToChain(finalChoice: EpisodeOneChoiceId) {
+    if (!walletClient || !publicClient || !isBase) return;
 
     try {
-      setStatus("Submitting transaction…");
-      const hash = await walletClient!.writeContract({
+      setCommitting(true);
+      setStatus("Sealing memory…");
+
+      const hash = await walletClient.writeContract({
         address: BASEBOTS_SEASON2_STATE_ADDRESS,
         abi: BASEBOTS_SEASON2_STATE_ABI,
         functionName: "setEpisode1",
-        args: [tokenIdBig, EP1_ENUM[choice]],
+        args: [tokenIdBig, EP1_ENUM[finalChoice]],
       });
 
-      await publicClient!.waitForTransactionReceipt({ hash });
-      setChainChoice(choice);
-      setPhase("ending");
-      setStatus("Committed on-chain");
+      await publicClient.waitForTransactionReceipt({ hash });
 
-      window.dispatchEvent(new Event("basebots-progress-updated"));
+      setPhase("ending");
+      setStatus("Recorded");
     } catch {
-      setStatus("Transaction failed");
-      alert("Transaction failed or rejected");
+      setStatus("Seal failed");
+    } finally {
+      setCommitting(false);
     }
   }
+
+  /* ───────── Auto-commit once wallet appears ───────── */
+
+  useEffect(() => {
+    if (choice && !needsWallet) {
+      commitToChain(choice);
+    }
+  }, [choice, needsWallet]);
 
   /* ───────────────────────── render ───────────────────────── */
 
   return (
-    <section
-      style={{
-        minHeight: "100vh",
-        padding: 24,
-        color: "white",
-        background:
-          "radial-gradient(1100px 520px at 50% -10%, rgba(56,189,248,0.10), transparent 62%), #020617",
-      }}
-    >
-      {/* BOOT CONSOLE (ALWAYS) */}
-      <div
-        style={{
-          borderRadius: 22,
-          padding: 16,
-          background: "rgba(0,0,0,0.45)",
-          border: "1px solid rgba(255,255,255,0.12)",
-          fontSize: 12,
-        }}
-      >
-        tokenId: <b>{tokenIdBig?.toString() ?? "INVALID"}</b> •{" "}
-        {isBase ? "Base" : "Wrong chain"} • {status}
-      </div>
+    <section style={shell}>
+      <style>{css}</style>
 
-      {/* WAIT FOR CHAIN CHECK */}
-      {!chainChecked && (
-        <p style={{ marginTop: 24, opacity: 0.6 }}>
-          Initializing memory substrate…
-        </p>
+      {/* Cinematic Wallet Overlay */}
+      {needsWallet && (
+        <div className="walletOverlay">
+          <div className="walletCard">
+            <div className="walletTitle">MEMORY SEAL REQUIRED</div>
+            <div className="walletBody">
+              Your decision exists.  
+              <br />
+              To **make it permanent**, the system needs a signature on Base.
+            </div>
+
+            <div className="walletActions">
+              <button className="primary">Awaiting Wallet…</button>
+              <button
+                className="secondary"
+                onClick={() => {
+                  setChoice(null);
+                  setStatus("Awaiting designation");
+                }}
+              >
+                Step back
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
-      {chainChecked && phase === "intro" && (
-        <div style={{ marginTop: 28 }}>
-          <h1 style={{ fontSize: 30, fontWeight: 900 }}>AWAKENING</h1>
-          <p style={{ marginTop: 12, opacity: 0.75 }}>
-            Cold boot. No owner. No credentials.
+      <div className="console">
+        tokenId: {tokenIdBig.toString()} • {isBase ? "Base" : "Wrong chain"} •{" "}
+        {status}
+        <button className="sound" onClick={() => setSoundOn((s) => !s)}>
+          {soundOn ? "SOUND ON" : "SOUND OFF"}
+        </button>
+      </div>
+
+      {phase === "intro" && (
+        <>
+          <h1 className="title">AWAKENING</h1>
+          <p className="body">
+            Cold boot. No context. No comfort.  
+            The room scans for intent.
           </p>
-          <button onClick={() => setPhase("signal")} style={primary()}>
+          <button className="primary" onClick={() => setPhase("signal")}>
             Continue
           </button>
-        </div>
+        </>
       )}
 
       {phase === "signal" && (
-        <div style={{ marginTop: 28 }}>
-          <h2 style={title()}>SIGNAL DROP</h2>
-          <p style={body()}>
-            AUDIT GATE INITIALIZED — OPERATOR PROFILE REQUIRED
+        <>
+          <h2 className="title">AUDIT PROMPT</h2>
+          <p className="body">
+            The system requests a posture.  
+            Time will collapse your options.
           </p>
-          <button onClick={() => setPhase("local")} style={primary()}>
-            Locate local terminal
+          <button className="primary" onClick={() => setPhase("choice")}>
+            Open prompt
           </button>
-        </div>
-      )}
-
-      {phase === "local" && (
-        <div style={{ marginTop: 28 }}>
-          <h2 style={title()}>LOCAL CONTROL NODE</h2>
-          <p style={body()}>A recessed panel marked MANUAL OVERRIDE.</p>
-
-          <div style={{ display: "grid", gap: 10 }}>
-            <button onClick={() => { setLocalAction("PRESS"); setPhase("localAfter"); }} style={primary()}>
-              Press override
-            </button>
-            <button onClick={() => { setLocalAction("LEAVE"); setPhase("localAfter"); }} style={secondary()}>
-              Leave it alone
-            </button>
-            <button onClick={() => { setLocalAction("BACK"); setPhase("localAfter"); }} style={secondary()}>
-              Step back
-            </button>
-          </div>
-        </div>
-      )}
-
-      {phase === "localAfter" && (
-        <div style={{ marginTop: 28 }}>
-          <h2 style={title()}>OVERRIDE REJECTED</h2>
-          <p style={body()}>
-            {localAction === "PRESS" && "You press. It refuses."}
-            {localAction === "LEAVE" && "You hesitate. It activates anyway."}
-            {localAction === "BACK" && "Distance does not cancel the audit."}
-          </p>
-          <button onClick={() => setPhase("choice")} style={primary()}>
-            Open audit prompt
-          </button>
-        </div>
+        </>
       )}
 
       {phase === "choice" && (
-        <div style={{ marginTop: 28 }}>
-          <h2 style={title()}>AUDIT PROMPT</h2>
-          <div style={{ display: "grid", gap: 10 }}>
-            {(["ACCEPT", "STALL", "SPOOF", "PULL_PLUG"] as EpisodeOneChoiceId[]).map(
-              (c) => (
-                <button key={c} onClick={() => commit(c)} style={secondary()}>
-                  {c}
-                </button>
-              )
-            )}
+        <>
+          <div className="timer">
+            DECISION WINDOW: <b>{mmss(timeLeft)}</b>
           </div>
-        </div>
+
+          <div className="choices">
+            {visibleChoices.map((c) => (
+              <button
+                key={c}
+                className="choiceBtn"
+                disabled={committing}
+                onClick={() => setChoice(c)}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        </>
       )}
 
-      {phase === "ending" && chainChoice && (
-        <div style={{ marginTop: 28 }}>
-          <h2 style={title()}>AUDIT RESULT</h2>
-          <p style={body()}>
-            Decision recorded on-chain: <b>{chainChoice}</b>
+      {phase === "ending" && choice && (
+        <>
+          <h2 className="title">RECORDED</h2>
+          <p className="body">
+            Decision sealed: <b>{choice}</b>
           </p>
-          <button onClick={onExit} style={primary()}>
+          <button className="primary" onClick={onExit}>
             Return to hub
           </button>
-        </div>
+        </>
       )}
     </section>
   );
 }
 
-/* ───────── styles ───────── */
+/* ────────────────────────────────────────────── */
+/* Styles */
+/* ────────────────────────────────────────────── */
 
-const title = () => ({ fontSize: 22, fontWeight: 900 });
-const body = () => ({ marginTop: 10, fontSize: 14, opacity: 0.75, lineHeight: 1.6 });
-const primary = () => ({
-  marginTop: 18,
-  borderRadius: 999,
-  padding: "12px 18px",
-  fontWeight: 900,
-  background: "linear-gradient(90deg,#38bdf8,#a855f7)",
-  color: "#020617",
-  border: "none",
-});
-const secondary = () => ({
-  borderRadius: 999,
-  padding: "12px 18px",
-  fontWeight: 800,
-  background: "rgba(255,255,255,0.08)",
-  border: "1px solid rgba(255,255,255,0.14)",
+const shell: React.CSSProperties = {
+  minHeight: "100vh",
+  padding: 24,
   color: "white",
-});
+  background: "#020617",
+};
+
+const css = `
+.console{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  font-size:12px;
+  opacity:.8;
+}
+
+.title{
+  font-size:32px;
+  font-weight:900;
+}
+
+.body{
+  margin-top:10px;
+  opacity:.8;
+  max-width:640px;
+}
+
+.primary{
+  margin-top:18px;
+  padding:12px 18px;
+  border-radius:999px;
+  background:linear-gradient(90deg,#38bdf8,#a855f7);
+  color:#020617;
+  font-weight:900;
+}
+
+.secondary{
+  margin-top:10px;
+  padding:10px 16px;
+  border-radius:999px;
+  background:rgba(255,255,255,.08);
+  color:white;
+}
+
+.choiceBtn{
+  margin-top:10px;
+  padding:14px;
+  border-radius:18px;
+  border:1px solid rgba(255,255,255,.14);
+  background:rgba(255,255,255,.07);
+}
+
+.walletOverlay{
+  position:fixed;
+  inset:0;
+  background:rgba(2,6,23,.92);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:999;
+}
+
+.walletCard{
+  max-width:420px;
+  border-radius:22px;
+  padding:24px;
+  border:1px solid rgba(168,85,247,.45);
+  box-shadow:0 0 40px rgba(168,85,247,.5);
+  background:#020617;
+}
+
+.walletTitle{
+  font-size:14px;
+  letter-spacing:2px;
+  opacity:.8;
+}
+
+.walletBody{
+  margin-top:12px;
+  line-height:1.6;
+}
+
+.walletActions{
+  margin-top:18px;
+  display:flex;
+  gap:10px;
+}
+
+.sound{
+  border:none;
+  background:none;
+  color:white;
+}
+`;
