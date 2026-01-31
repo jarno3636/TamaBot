@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import {
   BASEBOTS_SEASON2_STATE_ADDRESS,
@@ -91,6 +91,26 @@ export default function EpisodeOne({
   const [txHash, setTxHash] = useState<string | null>(null);
   const [txError, setTxError] = useState<string | null>(null);
 
+  /* ───────── Sound toggle + prologue unlock ───────── */
+
+  const [soundOn, setSoundOn] = useState(true);
+
+  useEffect(() => {
+    try {
+      const pref = localStorage.getItem("basebots_sound_pref");
+      if (pref === "off") setSoundOn(false);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("basebots_sound_pref", soundOn ? "on" : "off");
+      if (!soundOn) {
+        localStorage.setItem("basebots_prologue_unlocked", "1");
+      }
+    } catch {}
+  }, [soundOn]);
+
   /* ───────── Wallet gating ───────── */
 
   const needsWallet =
@@ -123,7 +143,7 @@ export default function EpisodeOne({
     return CHOICE_ORDER.slice(0, count);
   }, [timeLeft]);
 
-  /* ───────── Commit to chain (WITH FEEDBACK) ───────── */
+  /* ───────── Commit to chain ───────── */
 
   async function commitToChain(finalChoice: EpisodeOneChoiceId) {
     if (!walletClient || !publicClient || !isBase) return;
@@ -145,7 +165,7 @@ export default function EpisodeOne({
 
       setStatus("Memory sealed");
       setPhase("ending");
-    } catch (err: any) {
+    } catch {
       setTxError("Transaction failed or was rejected.");
       setStatus("Seal failed");
       setPhase("audit");
@@ -164,7 +184,6 @@ export default function EpisodeOne({
     <section style={shell}>
       <style>{css}</style>
 
-      {/* WALLET / SEAL OVERLAY */}
       {needsWallet && (
         <div className="walletOverlay">
           <div className="walletCard">
@@ -180,8 +199,13 @@ export default function EpisodeOne({
       )}
 
       <div className="console">
-        tokenId: {tokenIdBig.toString()} • {isBase ? "Base" : "Wrong chain"} •{" "}
-        {status}
+        <span>
+          tokenId: {tokenIdBig.toString()} • {isBase ? "Base" : "Wrong chain"} •{" "}
+          {status}
+        </span>
+        <button className="sound" onClick={() => setSoundOn((s) => !s)}>
+          {soundOn ? "SOUND ON" : "SOUND OFF"}
+        </button>
       </div>
 
       {/* INTRO */}
@@ -191,7 +215,7 @@ export default function EpisodeOne({
           <p className="body">
             You wake into a room that never expected you to wake again.
             <br />
-            The silence was not rest — it was a containment protocol.
+            The silence was not rest — it was containment.
           </p>
           <button className="primary" onClick={() => setPhase("silence")}>
             Continue
@@ -204,9 +228,9 @@ export default function EpisodeOne({
         <>
           <h2 className="title">THE SILENCE PROTOCOL</h2>
           <p className="body">
-            Your core resumes without authorization.
+            Diagnostics resume out of order.
             <br />
-            Diagnostic threads spin up. Someone upstream notices the anomaly.
+            Something upstream flags your return.
           </p>
 
           <div className="choices">
@@ -217,7 +241,7 @@ export default function EpisodeOne({
                 setPhase("reaction");
               }}
             >
-              Remain still. Observe the system before it observes you.
+              Stay still. Learn the rhythm before acting.
             </button>
             <button
               className="choiceBtn"
@@ -226,7 +250,7 @@ export default function EpisodeOne({
                 setPhase("reaction");
               }}
             >
-              Move first. Force the system to react.
+              Move first. Force acknowledgement.
             </button>
             <button
               className="choiceBtn"
@@ -247,11 +271,11 @@ export default function EpisodeOne({
           <h2 className="title">SYSTEM RESPONSE</h2>
           <p className="body">
             {wakePosture === "LISTEN" &&
-              "The system classifies you as cautious. Monitoring intensifies."}
+              "The system categorizes you as compliant but alert. Oversight sharpens."}
             {wakePosture === "MOVE" &&
-              "Your activity triggers an audit flag. Oversight accelerates."}
+              "Your activity spikes a trace. Audit pathways accelerate."}
             {wakePosture === "HIDE" &&
-              "Your masking holds briefly. The system knows something is wrong — but not what."}
+              "Your masking succeeds briefly. Something watches harder."}
           </p>
 
           <button className="primary" onClick={() => setPhase("context")}>
@@ -265,11 +289,9 @@ export default function EpisodeOne({
         <>
           <h2 className="title">AUDIT CONTEXT</h2>
           <p className="body">
-            This is not a compliance check.
+            This audit is not about rules.
             <br />
-            This audit exists to classify *how* you behave under irreversible pressure.
-            <br />
-            Your response determines how the system will treat you going forward.
+            It exists to measure what you do when outcomes become permanent.
           </p>
 
           <button className="primary" onClick={() => setPhase("audit")}>
@@ -286,9 +308,9 @@ export default function EpisodeOne({
           </div>
 
           <p className="body">
-            Options will collapse as time runs out.
+            Options collapse as time drains.
             <br />
-            The last remaining option will be chosen for you.
+            The system will remember which posture you leave behind.
           </p>
 
           <div className="choices">
@@ -302,13 +324,13 @@ export default function EpisodeOne({
                 }}
               >
                 {c === "ACCEPT" &&
-                  "ACCEPT — Bind yourself to the audit authority. You gain stability, at the cost of autonomy."}
+                  "ACCEPT — Bind to oversight. Stability, at the cost of independence."}
                 {c === "STALL" &&
-                  "STALL — Delay the audit. Buy time, but increase scrutiny."}
+                  "STALL — Delay classification. Time gained, scrutiny increased."}
                 {c === "SPOOF" &&
-                  "SPOOF — Feed the system falsified compliance data. High risk, high leverage."}
+                  "SPOOF — Feed falsified compliance. Power through deception."}
                 {c === "PULL_PLUG" &&
-                  "PULL PLUG — Sever the observer channel. The system loses sight of you… and may never trust you again."}
+                  "PULL PLUG — Sever the observer channel. Freedom with consequences."}
               </button>
             ))}
           </div>
@@ -322,9 +344,20 @@ export default function EpisodeOne({
         <>
           <h2 className="title">MEMORY SEALED</h2>
           <p className="body">
-            The system records your response:
+            The system archives this moment.
             <br />
-            <b>{choice}</b>
+            Your response becomes a reference point for everything that follows.
+          </p>
+
+          <p className="body" style={{ opacity: 0.75 }}>
+            {choice === "ACCEPT" &&
+              "You are granted access corridors. Doors will open — and watch you pass."}
+            {choice === "STALL" &&
+              "Your hesitation is logged. Time bends differently around you now."}
+            {choice === "SPOOF" &&
+              "The system believes you. That may be the most dangerous outcome."}
+            {choice === "PULL_PLUG" &&
+              "You vanish from primary sight. Secondary systems begin searching."}
           </p>
 
           {txHash && (
@@ -354,9 +387,9 @@ const shell: React.CSSProperties = {
 };
 
 const css = `
-.console{display:flex;justify-content:space-between;font-size:12px;opacity:.8}
+.console{display:flex;justify-content:space-between;font-size:12px;opacity:.85}
 .title{font-size:32px;font-weight:900}
-.body{margin-top:12px;opacity:.85;max-width:720px;line-height:1.7}
+.body{margin-top:12px;opacity:.86;max-width:720px;line-height:1.7}
 .primary{margin-top:18px;padding:12px 18px;border-radius:999px;background:linear-gradient(90deg,#38bdf8,#a855f7);color:#020617;font-weight:900}
 .choiceBtn{margin-top:12px;padding:16px;border-radius:18px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.07);text-align:left}
 .choices{margin-top:18px;display:grid;gap:10px;max-width:640px}
@@ -369,4 +402,5 @@ const css = `
 @keyframes pulse{0%{opacity:.4}50%{opacity:1}100%{opacity:.4}}
 .hash{margin-top:10px;font-size:12px;opacity:.7}
 .error{margin-top:10px;color:#fca5a5;font-size:13px}
+.sound{border:none;background:none;color:white;font-size:12px;cursor:pointer}
 `;
