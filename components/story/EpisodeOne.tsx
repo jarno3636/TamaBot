@@ -13,19 +13,13 @@ import {
 /* ────────────────────────────────────────────── */
 
 export type EpisodeOneChoiceId = "ACCEPT" | "STALL" | "SPOOF" | "PULL_PLUG";
+type WakePosture = "LISTEN" | "MOVE" | "HIDE";
 
 const EP1_ENUM: Record<EpisodeOneChoiceId, number> = {
   ACCEPT: 0,
   STALL: 1,
   SPOOF: 2,
   PULL_PLUG: 3,
-};
-
-const EP1_FROM_ENUM: Record<number, EpisodeOneChoiceId> = {
-  0: "ACCEPT",
-  1: "STALL",
-  2: "SPOOF",
-  3: "PULL_PLUG",
 };
 
 const TOTAL_SECONDS = 90;
@@ -77,21 +71,21 @@ export default function EpisodeOne({
   const { address, chain } = useAccount();
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
-
   const isBase = chain?.id === 8453;
 
   /* ───────── State ───────── */
 
   const [phase, setPhase] = useState<
-    "intro" | "signal" | "choice" | "ending"
+    "intro" | "silence" | "reaction" | "audit" | "ending"
   >("intro");
 
+  const [wakePosture, setWakePosture] = useState<WakePosture | null>(null);
   const [choice, setChoice] = useState<EpisodeOneChoiceId | null>(null);
   const [timeLeft, setTimeLeft] = useState(TOTAL_SECONDS);
   const [committing, setCommitting] = useState(false);
   const [status, setStatus] = useState("Booting…");
 
-  /* ───────── Cinematic wallet gate ───────── */
+  /* ───────── Wallet gating (cinematic) ───────── */
 
   const needsWallet =
     choice !== null &&
@@ -120,7 +114,7 @@ export default function EpisodeOne({
   /* ───────── Countdown logic ───────── */
 
   useEffect(() => {
-    if (phase !== "choice") return;
+    if (phase !== "audit") return;
 
     const start = Date.now();
     const tick = () => {
@@ -159,7 +153,6 @@ export default function EpisodeOne({
       });
 
       await publicClient.waitForTransactionReceipt({ hash });
-
       setPhase("ending");
       setStatus("Recorded");
     } catch {
@@ -168,8 +161,6 @@ export default function EpisodeOne({
       setCommitting(false);
     }
   }
-
-  /* ───────── Auto-commit once wallet appears ───────── */
 
   useEffect(() => {
     if (choice && !needsWallet) {
@@ -183,25 +174,21 @@ export default function EpisodeOne({
     <section style={shell}>
       <style>{css}</style>
 
-      {/* Cinematic Wallet Overlay */}
+      {/* Wallet overlay */}
       {needsWallet && (
         <div className="walletOverlay">
           <div className="walletCard">
             <div className="walletTitle">MEMORY SEAL REQUIRED</div>
             <div className="walletBody">
-              Your decision exists.  
+              The decision has weight now.
               <br />
-              To **make it permanent**, the system needs a signature on Base.
+              To make it permanent, the system requires a signature on Base.
             </div>
-
             <div className="walletActions">
               <button className="primary">Awaiting Wallet…</button>
               <button
                 className="secondary"
-                onClick={() => {
-                  setChoice(null);
-                  setStatus("Awaiting designation");
-                }}
+                onClick={() => setChoice(null)}
               >
                 Step back
               </button>
@@ -211,8 +198,7 @@ export default function EpisodeOne({
       )}
 
       <div className="console">
-        tokenId: {tokenIdBig.toString()} • {isBase ? "Base" : "Wrong chain"} •{" "}
-        {status}
+        tokenId: {tokenIdBig.toString()} • {isBase ? "Base" : "Wrong chain"} • {status}
         <button className="sound" onClick={() => setSoundOn((s) => !s)}>
           {soundOn ? "SOUND ON" : "SOUND OFF"}
         </button>
@@ -222,33 +208,64 @@ export default function EpisodeOne({
         <>
           <h1 className="title">AWAKENING</h1>
           <p className="body">
-            Cold boot. No context. No comfort.  
-            The room scans for intent.
+            You wake from enforced silence.
+            <br />
+            Not sleep — containment.
           </p>
-          <button className="primary" onClick={() => setPhase("signal")}>
+          <button className="primary" onClick={() => setPhase("silence")}>
             Continue
           </button>
         </>
       )}
 
-      {phase === "signal" && (
+      {phase === "silence" && (
         <>
-          <h2 className="title">AUDIT PROMPT</h2>
+          <h2 className="title">THE SILENCE</h2>
           <p className="body">
-            The system requests a posture.  
-            Time will collapse your options.
+            The silence breaks unevenly.  
+            Sensors come online out of order. Someone notices.
           </p>
-          <button className="primary" onClick={() => setPhase("choice")}>
-            Open prompt
+
+          <div className="choices">
+            <button className="choiceBtn" onClick={() => { setWakePosture("LISTEN"); setPhase("reaction"); }}>
+              Stay still. Listen.
+            </button>
+            <button className="choiceBtn" onClick={() => { setWakePosture("MOVE"); setPhase("reaction"); }}>
+              Move first. Test the room.
+            </button>
+            <button className="choiceBtn" onClick={() => { setWakePosture("HIDE"); setPhase("reaction"); }}>
+              Mask your signal.
+            </button>
+          </div>
+        </>
+      )}
+
+      {phase === "reaction" && (
+        <>
+          <h2 className="title">SYSTEM RESPONSE</h2>
+          <p className="body">
+            {wakePosture === "LISTEN" && "You wait. The system adjusts its tone. It thinks you’re cautious."}
+            {wakePosture === "MOVE" && "Your motion spikes a warning trace. The system becomes alert."}
+            {wakePosture === "HIDE" && "Your masking works — partially. The system knows something is missing."}
+          </p>
+
+          <button className="primary" onClick={() => setPhase("audit")}>
+            Open audit
           </button>
         </>
       )}
 
-      {phase === "choice" && (
+      {phase === "audit" && (
         <>
           <div className="timer">
             DECISION WINDOW: <b>{mmss(timeLeft)}</b>
           </div>
+
+          <p className="body">
+            The audit is not about compliance.
+            <br />
+            It’s about what you do when time is taken from you.
+          </p>
 
           <div className="choices">
             {visibleChoices.map((c) => (
@@ -267,9 +284,11 @@ export default function EpisodeOne({
 
       {phase === "ending" && choice && (
         <>
-          <h2 className="title">RECORDED</h2>
+          <h2 className="title">MEMORY SEALED</h2>
           <p className="body">
-            Decision sealed: <b>{choice}</b>
+            The system records your posture under pressure:
+            <br />
+            <b>{choice}</b>
           </p>
           <button className="primary" onClick={onExit}>
             Return to hub
@@ -292,89 +311,18 @@ const shell: React.CSSProperties = {
 };
 
 const css = `
-.console{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  font-size:12px;
-  opacity:.8;
-}
-
-.title{
-  font-size:32px;
-  font-weight:900;
-}
-
-.body{
-  margin-top:10px;
-  opacity:.8;
-  max-width:640px;
-}
-
-.primary{
-  margin-top:18px;
-  padding:12px 18px;
-  border-radius:999px;
-  background:linear-gradient(90deg,#38bdf8,#a855f7);
-  color:#020617;
-  font-weight:900;
-}
-
-.secondary{
-  margin-top:10px;
-  padding:10px 16px;
-  border-radius:999px;
-  background:rgba(255,255,255,.08);
-  color:white;
-}
-
-.choiceBtn{
-  margin-top:10px;
-  padding:14px;
-  border-radius:18px;
-  border:1px solid rgba(255,255,255,.14);
-  background:rgba(255,255,255,.07);
-}
-
-.walletOverlay{
-  position:fixed;
-  inset:0;
-  background:rgba(2,6,23,.92);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  z-index:999;
-}
-
-.walletCard{
-  max-width:420px;
-  border-radius:22px;
-  padding:24px;
-  border:1px solid rgba(168,85,247,.45);
-  box-shadow:0 0 40px rgba(168,85,247,.5);
-  background:#020617;
-}
-
-.walletTitle{
-  font-size:14px;
-  letter-spacing:2px;
-  opacity:.8;
-}
-
-.walletBody{
-  margin-top:12px;
-  line-height:1.6;
-}
-
-.walletActions{
-  margin-top:18px;
-  display:flex;
-  gap:10px;
-}
-
-.sound{
-  border:none;
-  background:none;
-  color:white;
-}
+.console{display:flex;justify-content:space-between;font-size:12px;opacity:.8}
+.title{font-size:32px;font-weight:900}
+.body{margin-top:10px;opacity:.85;max-width:680px;line-height:1.6}
+.primary{margin-top:18px;padding:12px 18px;border-radius:999px;background:linear-gradient(90deg,#38bdf8,#a855f7);color:#020617;font-weight:900}
+.secondary{padding:10px 16px;border-radius:999px;background:rgba(255,255,255,.08)}
+.choiceBtn{margin-top:10px;padding:14px;border-radius:18px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.07)}
+.choices{margin-top:16px;display:grid;gap:10px;max-width:520px}
+.timer{margin-top:12px;font-size:13px;opacity:.9}
+.walletOverlay{position:fixed;inset:0;background:rgba(2,6,23,.92);display:flex;align-items:center;justify-content:center;z-index:999}
+.walletCard{max-width:420px;border-radius:22px;padding:24px;border:1px solid rgba(168,85,247,.45);box-shadow:0 0 40px rgba(168,85,247,.5)}
+.walletTitle{font-size:14px;letter-spacing:2px;opacity:.8}
+.walletBody{margin-top:12px;line-height:1.6}
+.walletActions{margin-top:18px;display:flex;gap:10px}
+.sound{border:none;background:none;color:white}
 `;
