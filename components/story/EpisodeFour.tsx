@@ -17,6 +17,9 @@ import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 const SOUND_KEY = "basebots_ep4_sound";
 const BASE_CHAIN_ID = 8453;
 
+// match Ep2/Ep3 fid cache key
+const FID_KEY = "basebots_fid_v1";
+
 /* ────────────────────────────────────────────── */
 /* Helpers */
 /* ────────────────────────────────────────────── */
@@ -27,10 +30,53 @@ function normalizePositiveBigint(
   try {
     if (input === undefined || input === null) return null;
     if (typeof input === "bigint") return input > 0n ? input : null;
+
+    // pull first digit run (handles strings like "fid: 1434171")
     const digits = String(input).match(/\d+/)?.[0];
     if (!digits) return null;
+
     const v = BigInt(digits);
     return v > 0n ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function loadCachedFid(): bigint | null {
+  try {
+    const raw = localStorage.getItem(FID_KEY);
+    return normalizePositiveBigint(raw);
+  } catch {
+    return null;
+  }
+}
+
+function cacheFid(fid: bigint) {
+  try {
+    localStorage.setItem(FID_KEY, fid.toString());
+  } catch {}
+  try {
+    window.dispatchEvent(new Event("basebots-fid-updated"));
+  } catch {}
+}
+
+/**
+ * Try to extract fid from Farcaster Frame SDK (dynamic import).
+ */
+async function tryGetFidFromFarcasterSdk(): Promise<number | null> {
+  try {
+    const mod: any = await import("@farcaster/frame-sdk");
+    const sdk: any = mod?.sdk ?? mod?.default ?? mod;
+
+    const ctx =
+      (typeof sdk?.getContext === "function" ? await sdk.getContext() : null) ??
+      (sdk?.context && typeof sdk.context.then === "function"
+        ? await sdk.context
+        : null) ??
+      null;
+
+    const fid = ctx?.user?.fid ?? ctx?.fid ?? ctx?.client?.user?.fid ?? null;
+    return typeof fid === "number" && fid > 0 ? fid : null;
   } catch {
     return null;
   }
@@ -83,23 +129,30 @@ export default function EpisodeFour({
   tokenId,
   onExit,
 }: {
-  tokenId?: string | number | bigint;
+  tokenId?: string | number | bigint; // optional
   onExit: () => void;
 }) {
-  const resolvedTokenId = useMemo(
+  const tokenIdFromProps = useMemo(
     () => normalizePositiveBigint(tokenId),
     [tokenId]
   );
 
-  const [phase, setPhase] = useState<
-    "intro" | "analysis" | "projection" | "lock"
-  >("intro");
+  // fid fallback (Ep2/Ep3 wiring)
+  const [fidBig, setFidBig] = useState<bigint | null>(null);
+  const [identityStatus, setIdentityStatus] = useState<string>("");
+
+  const resolvedTokenId = tokenIdFromProps ?? fidBig;
+
+  const [phase, setPhase] = useState<"intro" | "analysis" | "projection" | "lock">(
+    "intro"
+  );
 
   const [submitting, setSubmitting] = useState(false);
   const [alreadySet, setAlreadySet] = useState(false);
   const [chainStatus, setChainStatus] = useState("Idle");
 
   const [bias, setBias] = useState<number | null>(null);
+  const [readBusy, setReadBusy] = useState(false);
 
   const profileEnum = useMemo(
     () => (bias !== null ? biasToProfileEnum(bias) : null),
@@ -114,46 +167,108 @@ export default function EpisodeFour({
   const isBase = chain?.id === BASE_CHAIN_ID;
 
   /* ────────────────────────────────────────────── */
-  /* Read chain state */
+  /* Identity wiring (tokenId OR fid) */
   /* ────────────────────────────────────────────── */
 
   useEffect(() => {
-    if (!publicClient || !resolvedTokenId) return;
-
     let cancelled = false;
 
     (async () => {
-      try {
-        setChainStatus("Reading cognition…");
+      // if we have tokenId, use it and skip fid probing
+      if (tokenIdFromProps && tokenIdFromProps > 0n) {
+        setIdentityStatus(`identity: tokenId ${tokenIdFromProps.toString()}`);
+        return;
+      }
 
-        const state: any = await publicClient.readContract({
-          address: BASEBOTS_S2.address,
-          abi: BASEBOTS_S2.abi,
-          functionName: "getBotState",
-          args: [resolvedTokenId],
-        });
+      const cached = loadCachedFid();
+      if (!cancelled && cached && cached > 0n) {
+        setFidBig(cached);
+        setIdentityStatus(`identity: cached fid ${cached.toString()}`);
+      } else if (!cancelled) {
+        setIdentityStatus("identity: probing farcaster…");
+      }
 
-        if (cancelled) return;
+      const fid = await tryGetFidFromFarcasterSdk();
+      if (cancelled) return;
 
-        setBias(Number(state?.[2])); // cognitionBias
-        const ep4Set = Boolean(state?.[11]);
-
-        if (ep4Set) {
-          setAlreadySet(true);
-          setPhase("lock");
-          setChainStatus("Surface profile already registered");
-        } else {
-          setChainStatus("Profile pending");
-        }
-      } catch {
-        if (!cancelled) setChainStatus("Chain read failed");
+      if (typeof fid === "number" && fid > 0) {
+        const b = BigInt(fid);
+        setFidBig(b);
+        cacheFid(b);
+        setIdentityStatus(`identity: fid ${fid}`);
+      } else {
+        setIdentityStatus(cached ? `identity: cached fid ${cached}` : "identity: not ready");
       }
     })();
 
+    const onFidUpdate = () => {
+      if (tokenIdFromProps && tokenIdFromProps > 0n) return;
+      const cached = loadCachedFid();
+      if (cached && cached > 0n) {
+        setFidBig(cached);
+        setIdentityStatus(`identity: synced fid ${cached.toString()}`);
+      }
+    };
+
+    window.addEventListener("basebots-fid-updated", onFidUpdate);
     return () => {
       cancelled = true;
+      window.removeEventListener("basebots-fid-updated", onFidUpdate);
     };
-  }, [publicClient, resolvedTokenId]);
+  }, [tokenIdFromProps]);
+
+  /* ────────────────────────────────────────────── */
+  /* Chain read (extracted into callable) */
+  /* ────────────────────────────────────────────── */
+
+  async function readChainState(targetId: bigint) {
+    if (!publicClient) {
+      setChainStatus("No public client");
+      return;
+    }
+
+    setReadBusy(true);
+    try {
+      setChainStatus("Reading cognition…");
+
+      const state: any = await publicClient.readContract({
+        address: BASEBOTS_S2.address,
+        abi: BASEBOTS_S2.abi,
+        functionName: "getBotState",
+        args: [targetId],
+      });
+
+      // getBotState tuple index map:
+      // [2] cognitionBias, [11] ep4Set
+      const nextBias = Number(state?.[2]);
+      const ep4Set = Boolean(state?.[11]);
+
+      setBias(Number.isFinite(nextBias) ? nextBias : null);
+
+      if (ep4Set) {
+        setAlreadySet(true);
+        setPhase("lock");
+        setChainStatus("Surface profile already registered");
+      } else {
+        setAlreadySet(false);
+        setChainStatus("Profile pending");
+      }
+    } catch (e: any) {
+      setChainStatus(e?.shortMessage || e?.message || "Chain read failed");
+    } finally {
+      setReadBusy(false);
+    }
+  }
+
+  // initial read whenever identity becomes available
+  useEffect(() => {
+    if (!resolvedTokenId || resolvedTokenId <= 0n) {
+      setChainStatus("Waiting for identity…");
+      return;
+    }
+    void readChainState(resolvedTokenId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolvedTokenId, publicClient]);
 
   /* ────────────────────────────────────────────── */
   /* Sound */
@@ -181,6 +296,7 @@ export default function EpisodeFour({
       } catch {}
       audioRef.current = null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -199,7 +315,7 @@ export default function EpisodeFour({
   }, [soundOn]);
 
   /* ────────────────────────────────────────────── */
-  /* Commit profile (Ep2 / Ep3 pattern) */
+  /* Commit profile (Ep2/Ep3 pattern) */
   /* ────────────────────────────────────────────── */
 
   async function commit() {
@@ -216,7 +332,7 @@ export default function EpisodeFour({
     }
 
     if (profileEnum === null) {
-      setChainStatus("Profile not synthesized");
+      setChainStatus("Bias not loaded — tap Refresh");
       return;
     }
 
@@ -254,10 +370,19 @@ export default function EpisodeFour({
   /* Render */
   /* ────────────────────────────────────────────── */
 
+  const canProject = Boolean(resolvedTokenId && resolvedTokenId > 0n);
+  const canProceedToProjection = canProject && bias !== null;
+
   return (
     <section style={shell}>
       <div style={topRow}>
-        <span style={{ fontSize: 11, opacity: 0.7 }}>{chainStatus}</span>
+        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <span style={{ fontSize: 11, opacity: 0.7 }}>{chainStatus}</span>
+          {!!identityStatus && (
+            <span style={{ fontSize: 10, opacity: 0.55 }}>{identityStatus}</span>
+          )}
+        </div>
+
         <button style={soundBtn} onClick={() => setSoundOn((s) => !s)}>
           {soundOn ? "SOUND ON" : "SOUND OFF"}
         </button>
@@ -268,14 +393,23 @@ export default function EpisodeFour({
         <>
           <h2 style={title}>THRESHOLD</h2>
           <p style={body}>
-            Internal cognition has stabilized.
+            Oversight opens a sealed channel. The message is short:
             <br />
-            Before deployment, the system must decide how you appear when
-            observed.
+            <b>“Cognition confirmed. Surface posture required.”</b>
+            <br />
+            <br />
+            Out there, you won’t be judged by what you are —
+            <br />
+            only by what you do when someone is watching.
           </p>
 
-          <button style={primaryBtn} onClick={() => setPhase("analysis")}>
-            Continue
+          <button
+            style={{ ...primaryBtn, opacity: canProject ? 1 : 0.6 }}
+            onClick={() => setPhase("analysis")}
+            disabled={!canProject}
+            type="button"
+          >
+            {canProject ? "Continue" : "Waiting for identity…"}
           </button>
         </>
       )}
@@ -284,66 +418,106 @@ export default function EpisodeFour({
       {phase === "analysis" && (
         <>
           <p style={body}>
-            Oversight reviews your prior decisions.
+            Oversight replays your previous decisions and isolates a dominant bias.
             <br />
-            A dominant cognitive bias has emerged.
+            This bias becomes your deployment posture.
           </p>
 
           <div style={monoBox}>
-            {bias !== null ? `BIAS :: ${bias}` : "CLASSIFYING…"}
+            {bias !== null ? `COGNITION_BIAS :: ${bias}` : "CLASSIFYING…"}
+            <div style={{ marginTop: 8, fontSize: 11, opacity: 0.6 }}>
+              {readBusy ? "reading chain…" : "tap refresh if this stalls"}
+            </div>
           </div>
 
-          <p style={{ ...body, fontSize: 13 }}>
-            Bias defines how you think.
-            <br />
-            The next step defines how you operate under observation.
-          </p>
+          <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+            <button
+              type="button"
+              style={secondaryBtnInline}
+              onClick={() => {
+                if (resolvedTokenId) void readChainState(resolvedTokenId);
+              }}
+              disabled={!resolvedTokenId || readBusy}
+            >
+              {readBusy ? "REFRESHING…" : "Refresh"}
+            </button>
 
-          <button style={primaryBtn} onClick={() => setPhase("projection")}>
-            Project surface role
-          </button>
+            <button
+              type="button"
+              style={{
+                ...secondaryBtnInline,
+                opacity: canProceedToProjection ? 1 : 0.6,
+              }}
+              onClick={() => setPhase("projection")}
+              disabled={!canProceedToProjection}
+            >
+              Project surface role
+            </button>
+          </div>
+
+          {!canProceedToProjection && (
+            <p style={{ ...body, fontSize: 12, opacity: 0.65 }}>
+              If you’re seeing “CLASSIFYING…” forever, your identity wasn’t available
+              or the chain read didn’t run. Hit <b>Refresh</b>.
+            </p>
+          )}
         </>
       )}
 
-      {/* PROJECTION (never blank) */}
+      {/* PROJECTION */}
       {phase === "projection" && (
         <>
           <p style={body}>
-            Internal cognition has stabilized.
+            The system now determines how you move under observation.
             <br />
-            The system now determines your surface posture.
+            Your surface profile is a mask — but masks can save lives.
           </p>
 
           {profileEnum === null ? (
-            <div style={monoBox}>
-              ▒▒ SYNTHESIZING SURFACE PROFILE ▒▒
-              <div style={{ marginTop: 6, fontSize: 11, opacity: 0.6 }}>
-                correlating bias → posture
+            <>
+              <div style={monoBox}>
+                ▒▒ SYNTHESIZING SURFACE PROFILE ▒▒
+                <div style={{ marginTop: 6, fontSize: 11, opacity: 0.6 }}>
+                  missing bias — go back and refresh chain read
+                </div>
               </div>
-            </div>
+
+              <button
+                type="button"
+                style={secondaryBtn}
+                onClick={() => setPhase("analysis")}
+              >
+                Back
+              </button>
+            </>
           ) : (
             <>
               <div style={card}>
-                <div style={cardTitle}>
-                  {profileLabel(profileEnum)}
-                </div>
-                <div style={cardDesc}>
-                  {profileDescription(profileEnum)}
-                </div>
+                <div style={cardTitle}>{profileLabel(profileEnum)}</div>
+                <div style={cardDesc}>{profileDescription(profileEnum)}</div>
               </div>
 
               <p style={{ ...body, fontSize: 13 }}>
-                This profile governs how you respond when observed.
+                This will be written on-chain.
                 <br />
-                It does not change what you are — only how you act when seen.
+                Once registered, you don’t get to “rebrand” in the field.
               </p>
 
               <button
+                type="button"
                 style={primaryBtn}
                 onClick={commit}
                 disabled={submitting}
               >
                 {submitting ? "AUTHORIZING…" : "Authorize surface profile"}
+              </button>
+
+              <button
+                type="button"
+                style={secondaryBtn}
+                onClick={onExit}
+              >
+                Exit
               </button>
             </>
           )}
@@ -354,7 +528,7 @@ export default function EpisodeFour({
       {phase === "lock" && (
         <>
           <p style={locked}>SURFACE PROFILE REGISTERED</p>
-          <button style={secondaryBtn} onClick={onExit}>
+          <button style={secondaryBtn} onClick={onExit} type="button">
             Return to hub
           </button>
         </>
@@ -364,7 +538,7 @@ export default function EpisodeFour({
 }
 
 /* ────────────────────────────────────────────── */
-/* Styles */
+/* Styles (match Ep2/Ep3) */
 /* ────────────────────────────────────────────── */
 
 const shell: CSSProperties = {
@@ -380,6 +554,8 @@ const topRow: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
   marginBottom: 18,
+  alignItems: "flex-start",
+  gap: 12,
 };
 
 const title: CSSProperties = { fontSize: 24, fontWeight: 900 };
@@ -409,6 +585,17 @@ const secondaryBtn: CSSProperties = {
   background: "rgba(255,255,255,0.08)",
   border: "1px solid rgba(255,255,255,0.18)",
   color: "white",
+  fontWeight: 900,
+};
+
+const secondaryBtnInline: CSSProperties = {
+  flex: 1,
+  padding: "12px 14px",
+  borderRadius: 999,
+  background: "rgba(255,255,255,0.08)",
+  border: "1px solid rgba(255,255,255,0.18)",
+  color: "white",
+  fontWeight: 900,
 };
 
 const monoBox: CSSProperties = {
@@ -455,4 +642,5 @@ const soundBtn: CSSProperties = {
   border: "1px solid rgba(255,255,255,0.18)",
   fontSize: 11,
   fontWeight: 900,
+  color: "white",
 };
