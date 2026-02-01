@@ -1,145 +1,86 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useAccount, usePublicClient, useWalletClient } from "wagmi";
-
+import { useAccount, usePublicClient, useSwitchChain, useWriteContract } from "wagmi";
 import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 
-/* ──────────────────────────────────────────────
- * Storage
- * ────────────────────────────────────────────── */
+/* ────────────────────────────────────────────── */
+/* Constants */
+/* ────────────────────────────────────────────── */
 
+const BASE_CHAIN_ID = 8453;
 const SOUND_KEY = "basebots_ep5_sound";
 
-/* ──────────────────────────────────────────────
- * Types
- * ────────────────────────────────────────────── */
+/* ────────────────────────────────────────────── */
+/* Outcome enum (MUST MATCH CONTRACT ORDER) */
+/*
+enum Outcome {
+  NONE,
+  AUTHORIZED,
+  OBSERVED,
+  SILENT,
+  UNTRACKED,
+  FLAGGED
+}
+*/
+/* ────────────────────────────────────────────── */
 
-type Outcome =
-  | "AUTHORIZED"
-  | "OBSERVED"
-  | "SILENT"
-  | "UNTRACKED"
-  | "FLAGGED";
+const OUTCOME_ENUM: Record<string, number> = {
+  AUTHORIZED: 1,
+  OBSERVED: 2,
+  SILENT: 3,
+  UNTRACKED: 4,
+  FLAGGED: 5,
+};
 
-/* ──────────────────────────────────────────────
- * Helpers
- * ────────────────────────────────────────────── */
+/* ────────────────────────────────────────────── */
+/* Helpers */
+/* ────────────────────────────────────────────── */
 
-function normalizeTokenId(input: string | number | bigint): bigint | null {
-  try {
-    if (typeof input === "bigint") return input;
-    if (typeof input === "number")
-      return Number.isFinite(input) ? BigInt(Math.floor(input)) : null;
-    if (typeof input === "string" && input.trim())
-      return BigInt(input.trim());
-    return null;
-  } catch {
-    return null;
-  }
+function deriveOutcomeEnum(ep1: number, profile: number): number {
+  // ep1Choice: 1..4 (ACCEPT, STALL, SPOOF, PULL_PLUG)
+  // profile: 1..4 (EXECUTOR, OBSERVER, OPERATOR, SENTINEL)
+
+  if (ep1 === 4) return OUTCOME_ENUM.UNTRACKED; // PULL_PLUG
+  if (ep1 === 3) return OUTCOME_ENUM.SILENT;    // SPOOF
+  if (profile === 4) return OUTCOME_ENUM.FLAGGED; // SENTINEL
+  if (profile === 2) return OUTCOME_ENUM.OBSERVED; // OBSERVER
+  return OUTCOME_ENUM.AUTHORIZED;
 }
 
-function deriveOutcome(
-  directive?: string,
-  profile?: string
-): Outcome {
-  if (directive === "PULL_PLUG") return "UNTRACKED";
-  if (directive === "SPOOF") return "SILENT";
-  if (profile === "SENTINEL") return "FLAGGED";
-  if (profile === "OBSERVER") return "OBSERVED";
-  return "AUTHORIZED";
+function outcomeLabel(v: number): string {
+  return Object.keys(OUTCOME_ENUM).find(k => OUTCOME_ENUM[k] === v) ?? "UNKNOWN";
 }
 
-/* ──────────────────────────────────────────────
- * Component
- * ────────────────────────────────────────────── */
+/* ────────────────────────────────────────────── */
+/* Component */
+/* ────────────────────────────────────────────── */
 
 export default function EpisodeFive({
-  tokenId,
+  fid,
   onExit,
 }: {
-  tokenId: string | number | bigint;
+  fid: string | number | bigint;
   onExit: () => void;
 }) {
-  /* ───────── hydration ───────── */
-  const [hydrated, setHydrated] = useState(false);
-  useEffect(() => setHydrated(true), []);
+  const fidBig = useMemo(() => BigInt(fid), [fid]);
 
-  const tokenIdBig = useMemo(() => normalizeTokenId(tokenId), [tokenId]);
-
-  /* ───────── wagmi ───────── */
+  /* wagmi */
   const { address, chain } = useAccount();
   const publicClient = usePublicClient();
-  const { data: walletClient } = useWalletClient();
-  const isBase = chain?.id === 8453;
+  const { writeContractAsync } = useWriteContract();
+  const { switchChainAsync } = useSwitchChain();
+  const isBase = chain?.id === BASE_CHAIN_ID;
 
-  const ready =
-    Boolean(address && walletClient && publicClient && isBase && tokenIdBig);
-
-  /* ───────── chain state ───────── */
-  const [directive, setDirective] = useState<string>();
-  const [profile, setProfile] = useState<string>();
-  const [alreadySet, setAlreadySet] = useState(false);
+  /* state */
+  const [ep1Choice, setEp1Choice] = useState<number | null>(null);
+  const [profile, setProfile] = useState<number | null>(null);
+  const [alreadyFinalized, setAlreadyFinalized] = useState(false);
   const [chainStatus, setChainStatus] = useState("Idle");
+  const [submitting, setSubmitting] = useState(false);
 
-  /* ───────── residual ───────── */
-  const [showResidual, setShowResidual] = useState(false);
-  const lingerTimer = useRef<number | null>(null);
-
-  /* ───────── read chain ───────── */
-  useEffect(() => {
-    if (!publicClient || !tokenIdBig) return;
-
-    let cancelled = false;
-
-    (async () => {
-      try {
-        setChainStatus("Reading chain…");
-
-        const state: any = await publicClient.readContract({
-          address: BASEBOTS_S2.address,
-          abi: BASEBOTS_S2.abi,
-          functionName: "getBotState",
-          args: [tokenIdBig],
-        });
-
-        if (cancelled) return;
-
-        setDirective(
-          state?.ep1Directive ??
-            state?.directive ??
-            state?.episode1Directive
-        );
-
-        setProfile(state?.profile);
-
-        const ep5 =
-          state?.ep5Set ??
-          state?.episode5Set ??
-          (Array.isArray(state) ? state[5] : false);
-
-        if (ep5) {
-          setAlreadySet(true);
-          setChainStatus("Outcome finalized");
-        } else {
-          setChainStatus("Outcome pending");
-        }
-      } catch {
-        if (!cancelled) setChainStatus("Chain read failed");
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [publicClient, tokenIdBig]);
-
-  const outcome = useMemo(
-    () => deriveOutcome(directive, profile),
-    [directive, profile]
-  );
-
-  /* ───────── sound ───────── */
+  /* sound */
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [soundOn, setSoundOn] = useState(() => {
     try {
       return localStorage.getItem(SOUND_KEY) !== "off";
@@ -148,165 +89,144 @@ export default function EpisodeFive({
     }
   });
 
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  /* ────────────────────────────────────────────── */
+  /* Sound */
+/* ────────────────────────────────────────────── */
 
   useEffect(() => {
     const a = new Audio("/audio/s5.mp3");
     a.loop = true;
-    a.volume = 0.5;
+    a.volume = 0.45;
     audioRef.current = a;
     if (soundOn) a.play().catch(() => {});
     return () => {
-      try {
-        a.pause();
-        a.src = "";
-      } catch {}
+      a.pause();
+      a.src = "";
       audioRef.current = null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
-    if (!soundOn) {
+    if (soundOn) a.play().catch(() => {});
+    else {
       a.pause();
       a.currentTime = 0;
-    } else {
-      a.play().catch(() => {});
     }
     try {
       localStorage.setItem(SOUND_KEY, soundOn ? "on" : "off");
     } catch {}
   }, [soundOn]);
 
-  /* ───────── finalize once (ON-CHAIN) ───────── */
+  /* ────────────────────────────────────────────── */
+  /* Read chain */
+/* ────────────────────────────────────────────── */
+
   useEffect(() => {
-    if (!ready || alreadySet) return;
+    if (!publicClient) return;
 
     let cancelled = false;
 
     (async () => {
       try {
-        setChainStatus("Finalizing outcome…");
+        setChainStatus("Reading final state…");
 
-        const hash = await walletClient!.writeContract({
+        const s: any = await publicClient.readContract({
           address: BASEBOTS_S2.address,
           abi: BASEBOTS_S2.abi,
-          functionName: "setEpisode5Outcome",
-          args: [tokenIdBig!, outcome],
+          functionName: "getBotState",
+          args: [fidBig],
         });
 
-        await publicClient!.waitForTransactionReceipt({ hash });
+        if (cancelled) return;
 
-        if (!cancelled) {
-          setChainStatus("Outcome committed");
-          window.dispatchEvent(new Event("basebots-progress-updated"));
+        setEp1Choice(Number(s.ep1Choice));
+        setProfile(Number(s.profile));
+
+        if (s.ep5Set) {
+          setAlreadyFinalized(true);
+          setChainStatus("Outcome finalized");
+        } else {
+          setChainStatus("Outcome pending");
         }
-      } catch {
-        if (!cancelled) setChainStatus("Finalization failed");
+      } catch (e: any) {
+        if (!cancelled) {
+          setChainStatus(e?.shortMessage || e?.message || "Chain read failed");
+        }
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [ready, alreadySet, outcome]);
+  }, [publicClient, fidBig]);
 
-  /* ───────── residual unlock ───────── */
-  useEffect(() => {
-    if (alreadySet) return;
+  const outcomeEnum = useMemo(() => {
+    if (ep1Choice == null || profile == null) return null;
+    return deriveOutcomeEnum(ep1Choice, profile);
+  }, [ep1Choice, profile]);
 
-    if (outcome !== "AUTHORIZED") {
-      setShowResidual(true);
+  /* ────────────────────────────────────────────── */
+  /* Finalize */
+/* ────────────────────────────────────────────── */
+
+  async function finalize() {
+    if (alreadyFinalized || submitting) return;
+    if (!address) {
+      setChainStatus("Connect wallet");
+      return;
+    }
+    if (outcomeEnum == null) {
+      setChainStatus("Outcome not derivable");
       return;
     }
 
-    lingerTimer.current = window.setTimeout(() => {
-      setShowResidual(true);
-    }, 9000);
-
-    return () => {
-      if (lingerTimer.current) clearTimeout(lingerTimer.current);
-    };
-  }, [outcome, alreadySet]);
-
-  async function unlockResidual() {
-    if (!ready) return;
-
     try {
-      const hash = await walletClient!.writeContract({
+      setSubmitting(true);
+
+      if (!isBase) {
+        setChainStatus("Switching to Base…");
+        await switchChainAsync({ chainId: BASE_CHAIN_ID });
+      }
+
+      setChainStatus("Awaiting signature…");
+
+      const hash = await writeContractAsync({
         address: BASEBOTS_S2.address,
         abi: BASEBOTS_S2.abi,
-        functionName: "setBonusBit",
-        args: [tokenIdBig!, 2],
+        functionName: "finalize",
+        args: [fidBig, outcomeEnum],
       });
 
+      setChainStatus("Finalizing on-chain…");
       await publicClient!.waitForTransactionReceipt({ hash });
-      window.dispatchEvent(new Event("basebots-progress-updated"));
-      setShowResidual(false);
-    } catch {
-      // silent
-    }
-  }
 
-  /* ───────── ending text ───────── */
-  function renderEnding() {
-    switch (outcome) {
-      case "FLAGGED":
-        return (
-          <>
-            <p>You notice it before they approach.</p>
-            <p style={quote}>“Visibility is a liability.”</p>
-          </>
-        );
-      case "OBSERVED":
-        return (
-          <>
-            <p>A figure walks beside you.</p>
-            <p style={quote}>“You are still being mapped.”</p>
-          </>
-        );
-      case "SILENT":
-        return (
-          <>
-            <p>No records attribute movement to you.</p>
-            <p style={quote}>“Unobserved does not mean free.”</p>
-          </>
-        );
-      case "UNTRACKED":
-        return (
-          <>
-            <p>The city closes behind sealed doors.</p>
-            <p style={quote}>“Absence is still a signal.”</p>
-          </>
-        );
-      default:
-        return (
-          <>
-            <p>Access nodes illuminate.</p>
-            <p style={quote}>“Do not confuse permission with trust.”</p>
-          </>
-        );
+      window.dispatchEvent(new Event("basebots-progress-updated"));
+      setAlreadyFinalized(true);
+      setChainStatus("Outcome committed");
+    } catch (e: any) {
+      setChainStatus(e?.shortMessage || e?.message || "Finalization failed");
+    } finally {
+      setSubmitting(false);
     }
   }
 
   /* ────────────────────────────────────────────── */
+  /* Render */
+/* ────────────────────────────────────────────── */
 
   return (
     <section style={container}>
-      <div aria-hidden style={scanlines} />
-
-      {/* boot console */}
       <div style={{ fontSize: 11, opacity: 0.75 }}>
-        Boot: {hydrated ? "hydrated" : "hydrating"} • tokenId:{" "}
-        <b>{tokenIdBig ? tokenIdBig.toString() : "INVALID"}</b> • chain:{" "}
+        fid: <b>{fidBig.toString()}</b> • chain:{" "}
         <b>{isBase ? "Base" : chain?.id ?? "none"}</b> • status:{" "}
         <b>{chainStatus}</b>
       </div>
 
-      {/* controls */}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-        <button onClick={() => setSoundOn((s) => !s)} style={controlBtn}>
+        <button onClick={() => setSoundOn(s => !s)} style={controlBtn}>
           SOUND {soundOn ? "ON" : "OFF"}
         </button>
         <button onClick={onExit} style={controlBtn}>
@@ -315,18 +235,31 @@ export default function EpisodeFive({
       </div>
 
       <h2 style={{ marginTop: 18, fontSize: 20, fontWeight: 900 }}>
-        BASE CITY
+        FINAL COMMIT
       </h2>
 
       <div style={{ marginTop: 18, fontSize: 14, opacity: 0.88 }}>
-        {renderEnding()}
+        {outcomeEnum !== null && (
+          <>
+            <p>System synthesis complete.</p>
+            <p style={quote}>
+              “Outcome classified: {outcomeLabel(outcomeEnum)}”
+            </p>
+          </>
+        )}
       </div>
 
-      <div style={outcomeBox}>{outcome}</div>
+      <div style={outcomeBox}>
+        {outcomeEnum ? outcomeLabel(outcomeEnum) : "PENDING"}
+      </div>
 
-      {showResidual && (
-        <button onClick={unlockResidual} style={residualBtn}>
-          ░ residual handshake acknowledged ░
+      {!alreadyFinalized && (
+        <button
+          onClick={finalize}
+          disabled={submitting || outcomeEnum == null}
+          style={primaryBtn}
+        >
+          {submitting ? "FINALIZING…" : "Finalize outcome"}
         </button>
       )}
 
@@ -338,6 +271,8 @@ export default function EpisodeFive({
 }
 
 /* ────────────────────────────────────────────── */
+/* Styles */
+/* ────────────────────────────────────────────── */
 
 const container = {
   position: "relative" as const,
@@ -347,18 +282,8 @@ const container = {
   padding: 26,
   color: "white",
   background:
-    "radial-gradient(1200px 480px at 50% -10%, rgba(52,211,153,0.12), transparent 60%), linear-gradient(180deg, rgba(2,6,23,0.98), rgba(2,6,23,0.78))",
+    "linear-gradient(180deg, rgba(2,6,23,0.98), rgba(2,6,23,0.78))",
   boxShadow: "0 70px 260px rgba(0,0,0,0.95)",
-};
-
-const scanlines = {
-  position: "absolute" as const,
-  inset: 0,
-  pointerEvents: "none" as const,
-  background:
-    "linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px)",
-  backgroundSize: "100% 3px",
-  opacity: 0.07,
 };
 
 const controlBtn = {
@@ -374,7 +299,7 @@ const outcomeBox = {
   marginTop: 22,
   borderRadius: 18,
   padding: "14px",
-  fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+  fontFamily: "monospace",
   fontSize: 13,
   letterSpacing: 2,
   background: "rgba(0,0,0,0.45)",
@@ -389,21 +314,18 @@ const quote = {
   opacity: 0.65,
 };
 
-const residualBtn = {
-  position: "absolute" as const,
-  bottom: "18%",
-  right: "12%",
-  fontSize: 11,
-  fontFamily: "monospace",
-  padding: "6px 10px",
-  background: "rgba(255,255,255,0.06)",
-  border: "1px solid rgba(255,255,255,0.2)",
-  opacity: 0.9,
-  textShadow: "0 0 8px rgba(52,211,153,0.6)",
+const primaryBtn = {
+  marginTop: 18,
+  width: "100%",
+  padding: "12px 18px",
+  borderRadius: 999,
+  fontWeight: 900,
+  background: "linear-gradient(90deg,#38bdf8,#a855f7)",
+  color: "#020617",
 };
 
 const exitBtn = {
-  marginTop: 24,
+  marginTop: 18,
   borderRadius: 999,
   padding: "8px 18px",
   fontSize: 12,
