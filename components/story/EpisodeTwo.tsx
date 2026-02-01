@@ -1,7 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useAccount, usePublicClient, useWalletClient } from "wagmi";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
+import {
+  useAccount,
+  usePublicClient,
+  useSwitchChain,
+  useWriteContract,
+} from "wagmi";
 import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 
 /* ────────────────────────────────────────────── */
@@ -9,6 +15,7 @@ import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 /* ────────────────────────────────────────────── */
 
 const EP1_KEY = "basebots_story_save_v1";
+const SOUND_KEY = "basebots_ep2_sound";
 const BASE_CHAIN_ID = 8453;
 
 /* ────────────────────────────────────────────── */
@@ -43,9 +50,10 @@ function validateDesignation(v: string) {
 
 function normalizeTokenId(input: string | number | bigint): bigint | null {
   try {
-    return typeof input === "bigint"
-      ? input
-      : BigInt(String(input).trim());
+    if (typeof input === "bigint") return input;
+    const s = String(input).trim();
+    if (!s) return null;
+    return BigInt(s);
   } catch {
     return null;
   }
@@ -68,36 +76,81 @@ export default function EpisodeTwo({
   const [phase, setPhase] = useState<Phase>("descent");
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
   const [alreadySet, setAlreadySet] = useState(false);
   const [chainStatus, setChainStatus] = useState("Idle");
+  const [submitting, setSubmitting] = useState(false);
 
   /* wagmi */
-  const { address, chain } = useAccount();
+  const { address, chain, connector, isConnected } = useAccount();
   const publicClient = usePublicClient();
-  const { data: walletClient } = useWalletClient();
 
-  /* IMPORTANT: mirror Episode One */
-  const ready = Boolean(address && publicClient && tokenIdBig);
+  // IMPORTANT: Farcaster may show “Connected” while walletClient is undefined.
+  // So we write using useWriteContract (connector-backed), not walletClient.
+  const { switchChainAsync } = useSwitchChain();
+  const { writeContractAsync } = useWriteContract();
 
-  /* ───────── auto Base switch (SAFE) ───────── */
-  async function ensureBaseChain() {
-    if (!walletClient) return false;
-    if (chain?.id === BASE_CHAIN_ID) return true;
+  const isBase = chain?.id === BASE_CHAIN_ID;
+  const readyToRead = Boolean(publicClient && tokenIdBig);
+  const readyToWrite = Boolean(address && publicClient && tokenIdBig);
+
+  /* ────────────────────────────────────────────── */
+  /* Audio: s2.mp3 loop + mute toggle */
+  /* ────────────────────────────────────────────── */
+
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [soundOn, setSoundOn] = useState(true);
+
+  // load preference
+  useEffect(() => {
+    try {
+      const pref = localStorage.getItem(SOUND_KEY);
+      if (pref === "off") setSoundOn(false);
+    } catch {}
+  }, []);
+
+  // init audio after mount
+  useEffect(() => {
+    const a = new Audio("/audio/s2.mp3");
+    a.loop = true;
+    a.volume = 0.6;
+    audioRef.current = a;
+
+    // attempt autoplay (may be blocked until user interaction)
+    if (soundOn) a.play().catch(() => {});
+
+    return () => {
+      try {
+        a.pause();
+        a.src = "";
+      } catch {}
+      audioRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // apply toggle
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
 
     try {
-      setChainStatus("Requesting Base network…");
-      await walletClient.switchChain({ id: BASE_CHAIN_ID });
-      return true;
-    } catch {
-      setError("PLEASE SWITCH TO BASE TO CONTINUE");
-      return false;
-    }
-  }
+      if (soundOn) {
+        a.play().catch(() => {});
+        localStorage.setItem(SOUND_KEY, "on");
+      } else {
+        a.pause();
+        a.currentTime = 0;
+        localStorage.setItem(SOUND_KEY, "off");
+      }
+    } catch {}
+  }, [soundOn]);
 
-  /* ───────── read EP2 state (READS NEVER BLOCKED) ───────── */
+  /* ────────────────────────────────────────────── */
+  /* Read EP2 state */
+  /* ────────────────────────────────────────────── */
+
   useEffect(() => {
-    if (!publicClient || !tokenIdBig) return;
+    if (!readyToRead) return;
 
     let cancelled = false;
 
@@ -105,11 +158,11 @@ export default function EpisodeTwo({
       try {
         setChainStatus("Reading designation state…");
 
-        const state: any = await publicClient.readContract({
+        const state: any = await publicClient!.readContract({
           address: BASEBOTS_S2.address,
           abi: BASEBOTS_S2.abi,
           functionName: "getBotState",
-          args: [tokenIdBig],
+          args: [tokenIdBig!],
         });
 
         const ep2Set =
@@ -132,19 +185,21 @@ export default function EpisodeTwo({
     return () => {
       cancelled = true;
     };
-  }, [publicClient, tokenIdBig]);
+  }, [readyToRead, publicClient, tokenIdBig]);
 
-  /* ───────── commit designation (FIXED) ───────── */
+  /* ────────────────────────────────────────────── */
+  /* Commit designation */
+  /* ────────────────────────────────────────────── */
+
   async function commit() {
     if (submitting || alreadySet) return;
 
-    if (!ready || !walletClient) {
-      setError("CONNECT WALLET TO CONTINUE");
+    setError(null);
+
+    if (!tokenIdBig) {
+      setError("INVALID TOKEN ID");
       return;
     }
-
-    const onBase = await ensureBaseChain();
-    if (!onBase) return;
 
     const err = validateDesignation(value);
     if (err) {
@@ -152,37 +207,53 @@ export default function EpisodeTwo({
       return;
     }
 
+    if (!readyToWrite) {
+      // This is the only “connect” gate now — address is the truth.
+      setError("CONNECT WALLET TO CONTINUE");
+      return;
+    }
+
     try {
       setSubmitting(true);
-      setError(null);
-      setChainStatus("Preparing transaction…");
 
+      // switch to Base if needed (best-effort)
+      if (!isBase) {
+        setChainStatus("Switching to Base…");
+        try {
+          await switchChainAsync({ chainId: BASE_CHAIN_ID });
+        } catch {
+          // Some wallets block programmatic switching; user must do it.
+          setError("SWITCH TO BASE IN WALLET TO CONTINUE");
+          setChainStatus("Wrong network");
+          return;
+        }
+      }
+
+      // simulate first (forces gas estimation + catches reverts)
+      setChainStatus("Preparing transaction…");
       const { request } = await publicClient!.simulateContract({
         address: BASEBOTS_S2.address,
         abi: BASEBOTS_S2.abi,
         functionName: "setEpisode2Designation",
-        args: [tokenIdBig!, value],
+        args: [tokenIdBig, value],
         account: address!,
       });
 
-      setChainStatus("Awaiting wallet signature…");
+      setChainStatus("Awaiting signature…");
 
-      const hash = await walletClient.writeContract(request);
+      // write via wagmi (does not require walletClient hook)
+      const hash = await writeContractAsync(request as any);
 
       setChainStatus("Finalizing on-chain…");
       await publicClient!.waitForTransactionReceipt({ hash });
 
       window.dispatchEvent(new Event("basebots-progress-updated"));
 
+      setChainStatus("Designation committed");
       setPhase("binding");
       setTimeout(() => setPhase("approach"), 1400);
-      setChainStatus("Designation committed");
     } catch (e: any) {
-      setError(
-        e?.shortMessage ||
-          e?.message ||
-          "TRANSACTION REJECTED"
-      );
+      setError(e?.shortMessage || e?.message || "TRANSACTION REJECTED");
       setChainStatus("Transaction failed");
     } finally {
       setSubmitting(false);
@@ -191,23 +262,44 @@ export default function EpisodeTwo({
 
   /* ────────────────────────────────────────────── */
   /* Render */
-/* ────────────────────────────────────────────── */
+  /* ────────────────────────────────────────────── */
 
   return (
     <section style={shell}>
-      <div style={{ fontSize: 11, opacity: 0.75 }}>{chainStatus}</div>
+      {/* console row (helps you debug Farcaster) */}
+      <div style={consoleRow}>
+        <span>
+          status: <b>{chainStatus}</b> • chain: <b>{chain?.id ?? "none"}</b> •{" "}
+          addr: <b>{address ? "yes" : "no"}</b> • conn:{" "}
+          <b>{connector?.name ?? (isConnected ? "connected" : "none")}</b>
+        </span>
+
+        <button
+          type="button"
+          onClick={() => setSoundOn((s) => !s)}
+          style={soundBtn}
+        >
+          {soundOn ? "SOUND ON" : "SOUND OFF"}
+        </button>
+      </div>
 
       {phase === "descent" && (
         <>
           <h2 style={title}>VERTICAL TRANSFER</h2>
+
           <p style={body}>
-            Oversight reconstructs the pattern you left behind.
-          </p>
-          <p style={{ opacity: 0.9 }}>
-            Archetype detected:
+            Elevation protocols engage. Your prior posture propagates upward.
             <br />
-            <b>{ep1?.profile?.archetype ?? "UNRESOLVED"}</b>
+            Oversight reconstructs your pattern from residue alone.
           </p>
+
+          <div style={callout}>
+            <div style={calloutLabel}>ARCTYPE TRACE</div>
+            <div style={calloutValue}>
+              {ep1?.profile?.archetype ?? "UNRESOLVED"}
+            </div>
+          </div>
+
           <button style={primaryBtn} onClick={() => setPhase("input")}>
             Continue
           </button>
@@ -217,8 +309,11 @@ export default function EpisodeTwo({
       {phase === "input" && (
         <>
           <h2 style={title}>ASSIGN DESIGNATION</h2>
+
           <p style={body}>
-            This identifier will persist across all audits.
+            Upper systems require a stable identifier.
+            <br />
+            This value will persist across all future audits.
           </p>
 
           <input
@@ -229,35 +324,56 @@ export default function EpisodeTwo({
             }}
             maxLength={7}
             style={inputStyle}
+            placeholder="XXXXXXX"
           />
+
+          <div style={hintRow}>
+            <span style={{ opacity: 0.7 }}>
+              Format: <b>A–Z / 0–9</b> • Length: <b>7</b>
+            </span>
+            <span style={{ opacity: 0.7 }}>
+              Network: <b>{isBase ? "Base" : "Not Base"}</b>
+            </span>
+          </div>
 
           {error && <div style={errorStyle}>{error}</div>}
 
           <button
             style={{
               ...primaryBtn,
-              opacity: submitting || alreadySet ? 0.5 : 1,
+              opacity: submitting || alreadySet ? 0.55 : 1,
             }}
             disabled={submitting || alreadySet}
             onClick={commit}
           >
             {submitting ? "CONFIRMING…" : "CONFIRM DESIGNATION"}
           </button>
+
+          <button style={secondaryBtn} onClick={onExit}>
+            Exit
+          </button>
         </>
       )}
 
       {phase === "binding" && (
-        <div style={mono}>IDENTITY LOCKED</div>
+        <div style={mono}>
+          <div style={{ fontSize: 12, opacity: 0.75 }}>AUDIT LAYER</div>
+          <div style={{ marginTop: 10, fontSize: 16, letterSpacing: 2 }}>
+            IDENTITY LOCKED
+          </div>
+        </div>
       )}
 
       {phase === "approach" && (
         <>
+          <h2 style={title}>RECOGNIZED</h2>
           <p style={body}>
             Designation accepted.
             <br />
             Oversight now recognizes continuity.
           </p>
-          <button style={secondaryBtn} onClick={onExit}>
+
+          <button style={primaryBtn} onClick={onExit}>
             Return to hub
           </button>
         </>
@@ -270,52 +386,103 @@ export default function EpisodeTwo({
 /* Styles */
 /* ────────────────────────────────────────────── */
 
-const shell: React.CSSProperties = {
+const shell: CSSProperties = {
   borderRadius: 28,
   padding: 24,
   color: "white",
   border: "1px solid rgba(168,85,247,0.35)",
-  background:
-    "linear-gradient(180deg, rgba(2,6,23,0.96), rgba(2,6,23,0.72))",
+  background: "linear-gradient(180deg, rgba(2,6,23,0.96), rgba(2,6,23,0.72))",
   boxShadow: "0 0 80px rgba(168,85,247,0.45)",
 };
 
-const title: React.CSSProperties = { fontSize: 24, fontWeight: 900 };
-
-const body: React.CSSProperties = {
-  marginTop: 10,
-  opacity: 0.75,
-  lineHeight: 1.6,
+const consoleRow: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  fontSize: 11,
+  opacity: 0.8,
+  marginBottom: 14,
 };
 
-const mono: React.CSSProperties = {
+const soundBtn: CSSProperties = {
+  border: "1px solid rgba(255,255,255,0.16)",
+  background: "rgba(255,255,255,0.06)",
+  color: "rgba(255,255,255,0.9)",
+  padding: "8px 12px",
+  borderRadius: 999,
+  fontWeight: 900,
+  letterSpacing: 1,
+};
+
+const title: CSSProperties = { fontSize: 24, fontWeight: 900 };
+
+const body: CSSProperties = {
+  marginTop: 10,
+  opacity: 0.78,
+  lineHeight: 1.65,
+};
+
+const callout: CSSProperties = {
+  marginTop: 14,
+  padding: 14,
+  borderRadius: 18,
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(255,255,255,0.06)",
+};
+
+const calloutLabel: CSSProperties = {
+  fontSize: 11,
+  letterSpacing: 2,
+  opacity: 0.65,
+  fontWeight: 900,
+};
+
+const calloutValue: CSSProperties = {
+  marginTop: 6,
+  fontSize: 16,
+  fontWeight: 900,
+};
+
+const hintRow: CSSProperties = {
+  marginTop: 10,
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 10,
+  fontSize: 12,
+};
+
+const mono: CSSProperties = {
   marginTop: 48,
   textAlign: "center",
   fontFamily: "monospace",
   letterSpacing: 2,
+  opacity: 0.92,
 };
 
-const primaryBtn: React.CSSProperties = {
-  marginTop: 24,
-  padding: "12px 22px",
+const primaryBtn: CSSProperties = {
+  marginTop: 18,
+  width: "100%",
+  padding: "14px 18px",
   borderRadius: 999,
   fontWeight: 900,
-  background:
-    "linear-gradient(90deg, rgba(56,189,248,0.9), rgba(168,85,247,0.9))",
+  background: "linear-gradient(90deg, rgba(56,189,248,0.9), rgba(168,85,247,0.9))",
   color: "#020617",
   boxShadow: "0 0 24px rgba(168,85,247,0.6)",
 };
 
-const secondaryBtn: React.CSSProperties = {
-  marginTop: 28,
-  padding: "10px 20px",
+const secondaryBtn: CSSProperties = {
+  marginTop: 12,
+  width: "100%",
+  padding: "12px 18px",
   borderRadius: 999,
   background: "rgba(255,255,255,0.08)",
   border: "1px solid rgba(255,255,255,0.18)",
   color: "white",
+  fontWeight: 900,
 };
 
-const inputStyle: React.CSSProperties = {
+const inputStyle: CSSProperties = {
   marginTop: 18,
   width: "100%",
   padding: "14px",
@@ -326,10 +493,11 @@ const inputStyle: React.CSSProperties = {
   background: "rgba(0,0,0,0.45)",
   border: "1px solid rgba(168,85,247,0.45)",
   color: "white",
+  outline: "none",
 };
 
-const errorStyle: React.CSSProperties = {
+const errorStyle: CSSProperties = {
   color: "#fca5a5",
   fontSize: 12,
-  marginTop: 8,
+  marginTop: 10,
 };
