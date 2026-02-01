@@ -71,22 +71,20 @@ export default function EpisodeTwo({
   const [alreadySet, setAlreadySet] = useState(false);
   const [chainStatus, setChainStatus] = useState("Idle");
 
-  /* ───────── wagmi ───────── */
+  /* wagmi */
   const { address, chain } = useAccount();
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
 
-  /* IMPORTANT: trust wagmi, not walletClient.chain */
   const isBase = chain?.id === 8453;
 
+  // IMPORTANT FIX: do NOT require walletClient here
   const ready =
-    Boolean(address && publicClient && walletClient && isBase && tokenIdBig);
+    Boolean(address && publicClient && isBase && tokenIdBig);
 
-  /* ───────── read on-chain EP2 state ───────── */
+  /* ───────── read EP2 state ───────── */
   useEffect(() => {
     if (!publicClient || !tokenIdBig) return;
-
-    let cancelled = false;
 
     (async () => {
       try {
@@ -104,21 +102,17 @@ export default function EpisodeTwo({
           state?.episode2Set ??
           (Array.isArray(state) ? state[2] : false);
 
-        if (!cancelled && ep2Set) {
+        if (ep2Set) {
           setAlreadySet(true);
           setPhase("approach");
           setChainStatus("Designation already bound");
-        } else if (!cancelled) {
+        } else {
           setChainStatus("Awaiting designation");
         }
       } catch {
-        if (!cancelled) setChainStatus("Chain read failed");
+        setChainStatus("Chain read failed");
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
   }, [publicClient, tokenIdBig]);
 
   /* ───────── commit designation ───────── */
@@ -139,8 +133,9 @@ export default function EpisodeTwo({
     try {
       setSubmitting(true);
       setError(null);
-      setChainStatus("Simulating commitment…");
+      setChainStatus("Preparing transaction…");
 
+      // simulate FIRST (forces gas estimation)
       const { request } = await publicClient!.simulateContract({
         address: BASEBOTS_S2.address,
         abi: BASEBOTS_S2.abi,
@@ -149,8 +144,9 @@ export default function EpisodeTwo({
         account: address!,
       });
 
-      setChainStatus("Awaiting signature…");
+      setChainStatus("Awaiting wallet signature…");
 
+      // walletClient may resolve lazily here — this is OK
       const hash = await walletClient!.writeContract(request);
 
       setChainStatus("Finalizing on-chain…");
@@ -178,43 +174,21 @@ export default function EpisodeTwo({
   /* ────────────────────────────────────────────── */
 
   return (
-    <section
-      style={{
-        borderRadius: 28,
-        padding: 24,
-        color: "white",
-        border: "1px solid rgba(168,85,247,0.35)",
-        background:
-          "linear-gradient(180deg, rgba(2,6,23,0.96), rgba(2,6,23,0.72))",
-        boxShadow: "0 0 80px rgba(168,85,247,0.45)",
-      }}
-    >
-      <div style={{ fontSize: 11, opacity: 0.75 }}>
-        {chainStatus}
-      </div>
+    <section style={shell}>
+      <div style={{ fontSize: 11, opacity: 0.75 }}>{chainStatus}</div>
 
       {phase === "descent" && (
         <>
-          <h2 style={{ fontSize: 24, fontWeight: 900 }}>
-            VERTICAL TRANSFER
-          </h2>
-
-          <p style={{ marginTop: 10, opacity: 0.75, lineHeight: 1.6 }}>
-            Your prior posture propagates upward.
-            <br />
-            Oversight cross-references the pattern you left behind.
+          <h2 style={title}>VERTICAL TRANSFER</h2>
+          <p style={body}>
+            Oversight reconstructs the pattern you left behind.
           </p>
-
-          <p style={{ marginTop: 10, opacity: 0.9 }}>
+          <p style={{ opacity: 0.9 }}>
             Archetype detected:
             <br />
             <b>{ep1?.profile?.archetype ?? "UNRESOLVED"}</b>
           </p>
-
-          <button
-            onClick={() => setPhase("input")}
-            style={primaryBtn}
-          >
+          <button style={primaryBtn} onClick={() => setPhase("input")}>
             Continue
           </button>
         </>
@@ -222,14 +196,9 @@ export default function EpisodeTwo({
 
       {phase === "input" && (
         <>
-          <h2 style={{ fontSize: 24, fontWeight: 900 }}>
-            ASSIGN DESIGNATION
-          </h2>
-
-          <p style={{ fontSize: 13, opacity: 0.7, lineHeight: 1.6 }}>
-            Upper systems require a stable identifier.
-            <br />
-            This value will persist across all future audits.
+          <h2 style={title}>ASSIGN DESIGNATION</h2>
+          <p style={body}>
+            This identifier will persist across all audits.
           </p>
 
           <input
@@ -242,19 +211,15 @@ export default function EpisodeTwo({
             style={inputStyle}
           />
 
-          {error && (
-            <div style={{ color: "#fca5a5", fontSize: 12, marginTop: 8 }}>
-              {error}
-            </div>
-          )}
+          {error && <div style={errorStyle}>{error}</div>}
 
           <button
-            onClick={commit}
-            disabled={submitting || alreadySet}
             style={{
               ...primaryBtn,
               opacity: submitting || alreadySet ? 0.5 : 1,
             }}
+            disabled={submitting || alreadySet}
+            onClick={commit}
           >
             {submitting ? "CONFIRMING…" : "CONFIRM DESIGNATION"}
           </button>
@@ -262,28 +227,17 @@ export default function EpisodeTwo({
       )}
 
       {phase === "binding" && (
-        <div
-          style={{
-            marginTop: 48,
-            textAlign: "center",
-            fontFamily: "monospace",
-            letterSpacing: 2,
-            opacity: 0.9,
-          }}
-        >
-          IDENTITY LOCKED
-        </div>
+        <div style={mono}>IDENTITY LOCKED</div>
       )}
 
       {phase === "approach" && (
         <>
-          <p style={{ opacity: 0.8, lineHeight: 1.6 }}>
+          <p style={body}>
             Designation accepted.
             <br />
             Oversight now recognizes continuity.
           </p>
-
-          <button onClick={onExit} style={secondaryBtn}>
+          <button style={secondaryBtn} onClick={onExit}>
             Return to hub
           </button>
         </>
@@ -295,6 +249,25 @@ export default function EpisodeTwo({
 /* ────────────────────────────────────────────── */
 /* Styles */
 /* ────────────────────────────────────────────── */
+
+const shell: React.CSSProperties = {
+  borderRadius: 28,
+  padding: 24,
+  color: "white",
+  border: "1px solid rgba(168,85,247,0.35)",
+  background:
+    "linear-gradient(180deg, rgba(2,6,23,0.96), rgba(2,6,23,0.72))",
+  boxShadow: "0 0 80px rgba(168,85,247,0.45)",
+};
+
+const title = { fontSize: 24, fontWeight: 900 };
+const body = { marginTop: 10, opacity: 0.75, lineHeight: 1.6 };
+const mono = {
+  marginTop: 48,
+  textAlign: "center",
+  fontFamily: "monospace",
+  letterSpacing: 2,
+};
 
 const primaryBtn: React.CSSProperties = {
   marginTop: 24,
@@ -327,4 +300,10 @@ const inputStyle: React.CSSProperties = {
   background: "rgba(0,0,0,0.45)",
   border: "1px solid rgba(168,85,247,0.45)",
   color: "white",
+};
+
+const errorStyle = {
+  color: "#fca5a5",
+  fontSize: 12,
+  marginTop: 8,
 };
