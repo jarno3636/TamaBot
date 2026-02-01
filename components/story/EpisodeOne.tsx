@@ -14,11 +14,12 @@ import {
 export type EpisodeOneChoiceId = "ACCEPT" | "STALL" | "SPOOF" | "PULL_PLUG";
 type WakePosture = "LISTEN" | "MOVE" | "HIDE";
 
+/* 🔑 MUST MATCH CONTRACT ENUM */
 const EP1_ENUM: Record<EpisodeOneChoiceId, number> = {
-  ACCEPT: 0,
-  STALL: 1,
-  SPOOF: 2,
-  PULL_PLUG: 3,
+  ACCEPT: 1,
+  STALL: 2,
+  SPOOF: 3,
+  PULL_PLUG: 4,
 };
 
 const TOTAL_SECONDS = 90;
@@ -46,7 +47,7 @@ function visibleChoiceCount(left: number) {
   return 1;
 }
 
-function normalizeTokenId(input: string | number | bigint): bigint {
+function normalizeFid(input: string | number | bigint): bigint {
   try {
     return typeof input === "bigint" ? input : BigInt(input);
   } catch {
@@ -59,13 +60,13 @@ function normalizeTokenId(input: string | number | bigint): bigint {
 /* ────────────────────────────────────────────── */
 
 export default function EpisodeOne({
-  tokenId,
+  fid,
   onExit,
 }: {
-  tokenId: string | number | bigint;
+  fid: string | number | bigint;
   onExit: () => void;
 }) {
-  const tokenIdBig = useMemo(() => normalizeTokenId(tokenId), [tokenId]);
+  const fidBig = useMemo(() => normalizeFid(fid), [fid]);
 
   const { address, chain } = useAccount();
   const publicClient = usePublicClient();
@@ -75,13 +76,7 @@ export default function EpisodeOne({
   /* ───────── State ───────── */
 
   const [phase, setPhase] = useState<
-    | "intro"
-    | "silence"
-    | "reaction"
-    | "context"
-    | "audit"
-    | "sealing"
-    | "ending"
+    "intro" | "silence" | "reaction" | "context" | "audit" | "sealing" | "ending"
   >("intro");
 
   const [wakePosture, setWakePosture] = useState<WakePosture | null>(null);
@@ -91,51 +86,25 @@ export default function EpisodeOne({
   const [txHash, setTxHash] = useState<string | null>(null);
   const [txError, setTxError] = useState<string | null>(null);
 
-  /* ───────── Audio (SAFE) ───────── */
+  /* ───────── Audio ───────── */
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [soundOn, setSoundOn] = useState(true);
-  const [audioReady, setAudioReady] = useState(false);
 
-  // load preference
-  useEffect(() => {
-    try {
-      const pref = localStorage.getItem("basebots_sound_pref");
-      if (pref === "off") setSoundOn(false);
-    } catch {}
-  }, []);
-
-  // initialize audio AFTER mount
   useEffect(() => {
     if (audioRef.current) return;
-
     const audio = new Audio("/audio/s1.mp3");
     audio.loop = true;
     audio.volume = 0.55;
     audioRef.current = audio;
-    setAudioReady(true);
-
-    return () => {
-      audio.pause();
-      audio.src = "";
-    };
+    audio.play().catch(() => {});
+    return () => audio.pause();
   }, []);
 
-  // control playback
   useEffect(() => {
-    if (!audioReady || !audioRef.current) return;
-
-    try {
-      if (soundOn) {
-        audioRef.current.play().catch(() => {});
-        localStorage.setItem("basebots_sound_pref", "on");
-      } else {
-        audioRef.current.pause();
-        localStorage.setItem("basebots_sound_pref", "off");
-        localStorage.setItem("basebots_prologue_unlocked", "1");
-      }
-    } catch {}
-  }, [soundOn, audioReady]);
+    if (!audioRef.current) return;
+    soundOn ? audioRef.current.play().catch(() => {}) : audioRef.current.pause();
+  }, [soundOn]);
 
   /* ───────── Wallet gating ───────── */
 
@@ -143,7 +112,7 @@ export default function EpisodeOne({
     phase === "sealing" &&
     (!walletClient || !publicClient || !isBase || !address);
 
-  /* ───────── Countdown logic ───────── */
+  /* ───────── Countdown ───────── */
 
   useEffect(() => {
     if (phase !== "audit") return;
@@ -164,35 +133,31 @@ export default function EpisodeOne({
     requestAnimationFrame(tick);
   }, [phase, choice]);
 
-  const visibleChoices = useMemo(() => {
-    const count = visibleChoiceCount(timeLeft);
-    return CHOICE_ORDER.slice(0, count);
-  }, [timeLeft]);
+  const visibleChoices = useMemo(
+    () => CHOICE_ORDER.slice(0, visibleChoiceCount(timeLeft)),
+    [timeLeft]
+  );
 
-  /* ───────── Commit to chain ───────── */
+  /* ───────── Commit ───────── */
 
   async function commitToChain(finalChoice: EpisodeOneChoiceId) {
-    if (!walletClient || !publicClient || !isBase) return;
-
     try {
-      setStatus("Submitting signature…");
+      setStatus("Sealing memory…");
 
-      const hash = await walletClient.writeContract({
+      const hash = await walletClient!.writeContract({
         address: BASEBOTS_SEASON2_STATE_ADDRESS,
         abi: BASEBOTS_SEASON2_STATE_ABI,
         functionName: "setEpisode1",
-        args: [tokenIdBig, EP1_ENUM[finalChoice]],
+        args: [fidBig, EP1_ENUM[finalChoice]],
       });
 
       setTxHash(hash);
-      setStatus("Awaiting network confirmation…");
-
-      await publicClient.waitForTransactionReceipt({ hash });
+      await publicClient!.waitForTransactionReceipt({ hash });
 
       setStatus("Memory sealed");
       setPhase("ending");
     } catch {
-      setTxError("Transaction failed or was rejected.");
+      setTxError("Seal rejected or reverted.");
       setStatus("Seal failed");
       setPhase("audit");
     }
@@ -212,12 +177,10 @@ export default function EpisodeOne({
 
       {needsWallet && (
         <div className="walletOverlay">
-          <div className="walletCard">
+          <div className="walletCard glow">
             <div className="walletTitle">SEALING REQUIRED</div>
             <div className="walletBody">
-              This decision will be written into the system’s memory layer.
-              <br />
-              A signature on Base is required to continue.
+              This decision becomes part of the Core Memory.
             </div>
             <div className="pulse" />
           </div>
@@ -225,23 +188,17 @@ export default function EpisodeOne({
       )}
 
       <div className="console">
-        <span>
-          tokenId: {tokenIdBig.toString()} • {isBase ? "Base" : "Wrong chain"} •{" "}
-          {status}
-        </span>
-        <button className="sound" onClick={() => setSoundOn((s) => !s)}>
+        <span>FID {fidBig.toString()} • {status}</span>
+        <button className="sound" onClick={() => setSoundOn(s => !s)}>
           {soundOn ? "SOUND ON" : "SOUND OFF"}
         </button>
       </div>
 
-      {/* INTRO */}
       {phase === "intro" && (
         <>
           <h1 className="title">AWAKENING</h1>
           <p className="body">
             You wake into a room that never expected you to wake again.
-            <br />
-            The silence was not rest — it was containment.
           </p>
           <button className="primary" onClick={() => setPhase("silence")}>
             Continue
@@ -249,117 +206,69 @@ export default function EpisodeOne({
         </>
       )}
 
-      {/* SILENCE */}
       {phase === "silence" && (
         <>
           <h2 className="title">THE SILENCE PROTOCOL</h2>
-          <p className="body">
-            Diagnostics resume out of order.
-            <br />
-            Something upstream flags your return.
-          </p>
-
           <div className="choices">
             <button className="choiceBtn" onClick={() => { setWakePosture("LISTEN"); setPhase("reaction"); }}>
-              Stay still. Learn the rhythm before acting.
+              Stay still.
             </button>
             <button className="choiceBtn" onClick={() => { setWakePosture("MOVE"); setPhase("reaction"); }}>
-              Move first. Force acknowledgement.
+              Move first.
             </button>
             <button className="choiceBtn" onClick={() => { setWakePosture("HIDE"); setPhase("reaction"); }}>
-              Mask your signal. Wake quietly.
+              Mask signal.
             </button>
           </div>
         </>
       )}
 
-      {/* REACTION */}
       {phase === "reaction" && (
         <>
-          <h2 className="title">SYSTEM RESPONSE</h2>
           <p className="body">
-            {wakePosture === "LISTEN" && "The system categorizes you as compliant but alert. Oversight sharpens."}
-            {wakePosture === "MOVE" && "Your activity spikes a trace. Audit pathways accelerate."}
-            {wakePosture === "HIDE" && "Your masking succeeds briefly. Something watches harder."}
+            {wakePosture === "LISTEN" && "Oversight sharpens."}
+            {wakePosture === "MOVE" && "Audit pathways accelerate."}
+            {wakePosture === "HIDE" && "Something watches harder."}
           </p>
-
           <button className="primary" onClick={() => setPhase("context")}>
             Continue
           </button>
         </>
       )}
 
-      {/* CONTEXT */}
       {phase === "context" && (
         <>
-          <h2 className="title">AUDIT CONTEXT</h2>
           <p className="body">
-            This audit is not about rules.
-            <br />
-            It exists to measure what you do when outcomes become permanent.
+            This audit measures permanence.
           </p>
-
           <button className="primary" onClick={() => setPhase("audit")}>
-            Open audit window
+            Begin audit
           </button>
         </>
       )}
 
-      {/* AUDIT */}
       {phase === "audit" && (
         <>
-          <div className="timer">
-            DECISION WINDOW: <b>{mmss(timeLeft)}</b>
-          </div>
-
-          <p className="body">
-            Options collapse as time drains.
-            <br />
-            The system will remember which posture you leave behind.
-          </p>
-
+          <div className="timer">DECISION WINDOW {mmss(timeLeft)}</div>
           <div className="choices">
-            {visibleChoices.map((c) => (
+            {visibleChoices.map(c => (
               <button
                 key={c}
-                className="choiceBtn"
+                className="choiceBtn glowOnHover"
                 onClick={() => { setChoice(c); setPhase("sealing"); }}
               >
-                {c === "ACCEPT" && "ACCEPT — Bind to oversight. Stability, at the cost of independence."}
-                {c === "STALL" && "STALL — Delay classification. Time gained, scrutiny increased."}
-                {c === "SPOOF" && "SPOOF — Feed falsified compliance. Power through deception."}
-                {c === "PULL_PLUG" && "PULL PLUG — Sever the observer channel. Freedom with consequences."}
+                {c}
               </button>
             ))}
           </div>
-
           {txError && <div className="error">{txError}</div>}
         </>
       )}
 
-      {/* ENDING */}
-      {phase === "ending" && choice && (
+      {phase === "ending" && (
         <>
           <h2 className="title">MEMORY SEALED</h2>
-          <p className="body">
-            The system archives this moment.
-            <br />
-            Your response becomes a reference point for everything that follows.
-          </p>
-
-          <p className="body" style={{ opacity: 0.75 }}>
-            {choice === "ACCEPT" && "You are granted access corridors. Doors will open — and watch you pass."}
-            {choice === "STALL" && "Your hesitation is logged. Time bends differently around you now."}
-            {choice === "SPOOF" && "The system believes you. That may be the most dangerous outcome."}
-            {choice === "PULL_PLUG" && "You vanish from primary sight. Secondary systems begin searching."}
-          </p>
-
-          {txHash && (
-            <div className="hash">
-              Transaction: {txHash.slice(0, 10)}…
-            </div>
-          )}
-
+          {txHash && <div className="hash">{txHash.slice(0, 10)}…</div>}
           <button className="primary" onClick={onExit}>
             Return to hub
           </button>
@@ -383,18 +292,15 @@ const shell: React.CSSProperties = {
 const css = `
 .console{display:flex;justify-content:space-between;font-size:12px;opacity:.85}
 .title{font-size:32px;font-weight:900}
-.body{margin-top:12px;opacity:.86;max-width:720px;line-height:1.7}
-.primary{margin-top:18px;padding:12px 18px;border-radius:999px;background:linear-gradient(90deg,#38bdf8,#a855f7);color:#020617;font-weight:900}
-.choiceBtn{margin-top:12px;padding:16px;border-radius:18px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.07);text-align:left}
-.choices{margin-top:18px;display:grid;gap:10px;max-width:640px}
-.timer{margin-top:10px;font-size:13px;opacity:.9}
-.walletOverlay{position:fixed;inset:0;background:rgba(2,6,23,.92);display:flex;align-items:center;justify-content:center;z-index:999}
-.walletCard{max-width:420px;border-radius:22px;padding:24px;border:1px solid rgba(168,85,247,.45);box-shadow:0 0 40px rgba(168,85,247,.5)}
-.walletTitle{font-size:14px;letter-spacing:2px;opacity:.8}
-.walletBody{margin-top:12px;line-height:1.6}
-.pulse{margin-top:18px;height:6px;border-radius:999px;background:linear-gradient(90deg,#38bdf8,#a855f7);animation:pulse 1.4s infinite}
+.body{margin-top:12px;opacity:.86;max-width:720px}
+.primary{margin-top:18px;padding:12px 18px;border-radius:999px;background:linear-gradient(90deg,#38bdf8,#a855f7);font-weight:900}
+.choiceBtn{padding:16px;border-radius:18px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.07)}
+.glowOnHover:hover{box-shadow:0 0 18px rgba(168,85,247,.6)}
+.timer{margin-top:10px;font-size:13px}
+.walletOverlay{position:fixed;inset:0;background:rgba(2,6,23,.92);display:flex;align-items:center;justify-content:center}
+.walletCard{padding:24px;border-radius:22px;border:1px solid rgba(168,85,247,.45)}
+.pulse{height:6px;border-radius:999px;background:linear-gradient(90deg,#38bdf8,#a855f7);animation:pulse 1.4s infinite}
 @keyframes pulse{0%{opacity:.4}50%{opacity:1}100%{opacity:.4}}
-.hash{margin-top:10px;font-size:12px;opacity:.7}
-.error{margin-top:10px;color:#fca5a5;font-size:13px}
-.sound{border:none;background:none;color:white;font-size:12px;cursor:pointer}
+.error{color:#fca5a5}
+.sound{background:none;border:none;color:white}
 `;
