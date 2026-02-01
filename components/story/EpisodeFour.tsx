@@ -36,14 +36,24 @@ function normalizePositiveBigint(
   }
 }
 
+/**
+ * cognitionBias → surface profile enum
+ * 0 = EXECUTOR
+ * 1 = OBSERVER
+ * 2 = OPERATOR
+ * 3 = SENTINEL
+ */
 function biasToProfileEnum(bias: number): number {
   switch (bias) {
-    case 0: return 0; // EXECUTOR
-    case 1: return 1; // OBSERVER
-    case 3: return 3; // SENTINEL
+    case 0:
+      return 0;
+    case 1:
+      return 1;
+    case 3:
+      return 3;
     case 2:
     default:
-      return 2; // OPERATOR
+      return 2;
   }
 }
 
@@ -61,7 +71,7 @@ function profileDescription(profile: number): string {
       return "Assumes hostile conditions. Treats absence of data as signal.";
     case 2:
     default:
-      return "Balances outcome and adaptability. Proceeds despite incomplete information.";
+      return "Balances outcome and adaptability. Operates despite incomplete information.";
   }
 }
 
@@ -81,12 +91,16 @@ export default function EpisodeFour({
     [tokenId]
   );
 
-  const [phase, setPhase] = useState<"intro" | "analysis" | "projection" | "lock">("intro");
+  const [phase, setPhase] = useState<
+    "intro" | "analysis" | "projection" | "lock"
+  >("intro");
+
   const [submitting, setSubmitting] = useState(false);
   const [alreadySet, setAlreadySet] = useState(false);
   const [chainStatus, setChainStatus] = useState("Idle");
 
   const [bias, setBias] = useState<number | null>(null);
+
   const profileEnum = useMemo(
     () => (bias !== null ? biasToProfileEnum(bias) : null),
     [bias]
@@ -121,13 +135,13 @@ export default function EpisodeFour({
 
         if (cancelled) return;
 
-        setBias(Number(state?.[2]));     // cognitionBias
+        setBias(Number(state?.[2])); // cognitionBias
         const ep4Set = Boolean(state?.[11]);
 
         if (ep4Set) {
           setAlreadySet(true);
           setPhase("lock");
-          setChainStatus("Profile already registered");
+          setChainStatus("Surface profile already registered");
         } else {
           setChainStatus("Profile pending");
         }
@@ -185,20 +199,26 @@ export default function EpisodeFour({
   }, [soundOn]);
 
   /* ────────────────────────────────────────────── */
-  /* Commit profile (Episode 2/3 pattern) */
+  /* Commit profile (Ep2 / Ep3 pattern) */
   /* ────────────────────────────────────────────── */
 
   async function commit() {
     if (submitting || alreadySet) return;
+
     if (!resolvedTokenId || resolvedTokenId <= 0n) {
       setChainStatus("Identity not ready");
       return;
     }
+
     if (!address) {
       setChainStatus("Connect wallet to continue");
       return;
     }
-    if (profileEnum === null) return;
+
+    if (profileEnum === null) {
+      setChainStatus("Profile not synthesized");
+      return;
+    }
 
     try {
       setSubmitting(true);
@@ -243,45 +263,94 @@ export default function EpisodeFour({
         </button>
       </div>
 
+      {/* INTRO */}
       {phase === "intro" && (
         <>
           <h2 style={title}>THRESHOLD</h2>
           <p style={body}>
-            Observation concludes. A surface role is required before deployment.
+            Internal cognition has stabilized.
+            <br />
+            Before deployment, the system must decide how you appear when
+            observed.
           </p>
+
           <button style={primaryBtn} onClick={() => setPhase("analysis")}>
             Continue
           </button>
         </>
       )}
 
+      {/* ANALYSIS */}
       {phase === "analysis" && (
         <>
-          <p style={body}>Derived cognition bias:</p>
-          <div style={monoBox}>{bias !== null ? bias : "UNCLASSIFIED"}</div>
+          <p style={body}>
+            Oversight reviews your prior decisions.
+            <br />
+            A dominant cognitive bias has emerged.
+          </p>
+
+          <div style={monoBox}>
+            {bias !== null ? `BIAS :: ${bias}` : "CLASSIFYING…"}
+          </div>
+
+          <p style={{ ...body, fontSize: 13 }}>
+            Bias defines how you think.
+            <br />
+            The next step defines how you operate under observation.
+          </p>
+
           <button style={primaryBtn} onClick={() => setPhase("projection")}>
             Project surface role
           </button>
         </>
       )}
 
-      {phase === "projection" && profileEnum !== null && (
+      {/* PROJECTION (never blank) */}
+      {phase === "projection" && (
         <>
-          <div style={card}>
-            <div style={cardTitle}>{profileLabel(profileEnum)}</div>
-            <div style={cardDesc}>{profileDescription(profileEnum)}</div>
-          </div>
+          <p style={body}>
+            Internal cognition has stabilized.
+            <br />
+            The system now determines your surface posture.
+          </p>
 
-          <button
-            style={primaryBtn}
-            onClick={commit}
-            disabled={submitting}
-          >
-            {submitting ? "AUTHORIZING…" : "Authorize profile"}
-          </button>
+          {profileEnum === null ? (
+            <div style={monoBox}>
+              ▒▒ SYNTHESIZING SURFACE PROFILE ▒▒
+              <div style={{ marginTop: 6, fontSize: 11, opacity: 0.6 }}>
+                correlating bias → posture
+              </div>
+            </div>
+          ) : (
+            <>
+              <div style={card}>
+                <div style={cardTitle}>
+                  {profileLabel(profileEnum)}
+                </div>
+                <div style={cardDesc}>
+                  {profileDescription(profileEnum)}
+                </div>
+              </div>
+
+              <p style={{ ...body, fontSize: 13 }}>
+                This profile governs how you respond when observed.
+                <br />
+                It does not change what you are — only how you act when seen.
+              </p>
+
+              <button
+                style={primaryBtn}
+                onClick={commit}
+                disabled={submitting}
+              >
+                {submitting ? "AUTHORIZING…" : "Authorize surface profile"}
+              </button>
+            </>
+          )}
         </>
       )}
 
+      {/* LOCK */}
       {phase === "lock" && (
         <>
           <p style={locked}>SURFACE PROFILE REGISTERED</p>
@@ -314,7 +383,12 @@ const topRow: CSSProperties = {
 };
 
 const title: CSSProperties = { fontSize: 24, fontWeight: 900 };
-const body: CSSProperties = { marginTop: 12, opacity: 0.78 };
+
+const body: CSSProperties = {
+  marginTop: 12,
+  opacity: 0.78,
+  lineHeight: 1.65,
+};
 
 const primaryBtn: CSSProperties = {
   marginTop: 22,
