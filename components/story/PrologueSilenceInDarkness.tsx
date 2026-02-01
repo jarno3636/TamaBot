@@ -44,6 +44,12 @@ function markPrologueComplete() {
   } catch {}
 }
 
+function reinitializeSubMemory() {
+  try {
+    localStorage.removeItem(PROLOGUE_KEY);
+  } catch {}
+}
+
 function writeHint(h: { code: string; city: string; subnet: string }) {
   try {
     localStorage.setItem(
@@ -310,7 +316,25 @@ export default function PrologueSilenceInDarkness({
             <p className="font-mono text-white/80">CODEWORD: CROWN-12</p>
           </div>
 
-          <div className="mt-5 flex gap-2">
+          <div className="mt-5 flex flex-wrap gap-2">
+            <button
+              onClick={() => {
+                reinitializeSubMemory();
+                setDone(false);
+                setPhase("start");
+              }}
+              className="rounded-full px-5 py-2 text-[12px] font-extrabold"
+              style={{
+                border: "1px solid rgba(168,85,247,0.35)",
+                background:
+                  "linear-gradient(90deg, rgba(168,85,247,0.15), rgba(56,189,248,0.12))",
+                color: "rgba(255,255,255,0.9)",
+                boxShadow: "0 0 18px rgba(168,85,247,0.35)",
+              }}
+            >
+              Reinitialize Sub-Memory
+            </button>
+
             <button
               onClick={() => {
                 markPrologueComplete();
