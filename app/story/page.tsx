@@ -37,6 +37,21 @@ const SOUND_KEY = "basebots_sound";
 const AUDIO_SRC = "/audio/s1.mp3";
 
 /* ────────────────────────────────────────────── */
+/* Episode Images (original assets) */
+
+const IMAGES: Record<Mode, string> = {
+  hub: "",
+  prologue: "/story/prologue.png",
+  ep1: "/story/01-awakening.png",
+  ep2: "/story/ep2.png",
+  ep3: "/story/ep3.png",
+  ep4: "/story/ep4.png",
+  ep5: "/story/ep5.png",
+  bonus: "/story/b1.png",
+  archive: "/story/b2.png",
+};
+
+/* ────────────────────────────────────────────── */
 
 export default function StoryPage() {
   const publicClient = usePublicClient();
@@ -77,14 +92,8 @@ export default function StoryPage() {
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
-    if (soundOn) {
-      a.play().catch(() => {});
-      localStorage.setItem(SOUND_KEY, "on");
-    } else {
-      a.pause();
-      a.currentTime = 0;
-      localStorage.setItem(SOUND_KEY, "off");
-    }
+    soundOn ? a.play().catch(() => {}) : a.pause();
+    localStorage.setItem(SOUND_KEY, soundOn ? "on" : "off");
   }, [soundOn]);
 
   /* ───────── On-chain state ───────── */
@@ -98,14 +107,7 @@ export default function StoryPage() {
 
   const state = useMemo(() => {
     if (!botState) {
-      return {
-        ep1: false,
-        ep2: false,
-        ep3: false,
-        ep4: false,
-        ep5: false,
-        finalized: false,
-      };
+      return { ep1: false, ep2: false, ep3: false, ep4: false, finalized: false };
     }
     const s: any = botState;
     return {
@@ -113,7 +115,6 @@ export default function StoryPage() {
       ep2: s.ep2Set,
       ep3: s.ep3Set,
       ep4: s.ep4Set,
-      ep5: s.ep5Set,
       finalized: s.finalized,
     };
   }, [botState]);
@@ -123,12 +124,12 @@ export default function StoryPage() {
   async function cinematicSync() {
     if (!hasIdentity || syncing) return;
     setSyncing(true);
-    await new Promise((r) => setTimeout(r, 700));
+    await new Promise((r) => setTimeout(r, 650));
     await refetch();
     setSyncing(false);
   }
 
-  /* ───────── Contract event watchers (FIXED) ───────── */
+  /* ───────── Contract event watchers ───────── */
 
   useEffect(() => {
     if (!publicClient || !hasIdentity) return;
@@ -136,13 +137,13 @@ export default function StoryPage() {
     const unwatchEpisode = publicClient.watchContractEvent({
       ...BASEBOTS_S2,
       eventName: "EpisodeSet",
-      onLogs: () => cinematicSync(),
+      onLogs: cinematicSync,
     });
 
     const unwatchFinalized = publicClient.watchContractEvent({
       ...BASEBOTS_S2,
       eventName: "Finalized",
-      onLogs: () => cinematicSync(),
+      onLogs: cinematicSync,
     });
 
     return () => {
@@ -185,10 +186,9 @@ export default function StoryPage() {
       {syncing && <div className="syncOverlay">SYNCING MEMORY…</div>}
 
       <header style={hero}>
-        <h1>Basebots: Core Memory</h1>
-        <p>
-          Memory fragments surface as systems awaken. Completion stabilizes the
-          sequence.
+        <h1 style={{ fontSize: 38 }}>Basebots: Core Memory</h1>
+        <p style={{ opacity: 0.82, maxWidth: 720 }}>
+          Memory fragments surface as systems awaken. Completion stabilizes the sequence.
         </p>
 
         <div style={{ display: "flex", gap: 10 }}>
@@ -202,18 +202,18 @@ export default function StoryPage() {
       </header>
 
       <section style={grid}>
-        <Card title="Prologue" onOpen={() => setMode("prologue")} />
-        <Card title="Episode I" done={state.ep1} onOpen={() => setMode("ep1")} />
-        <Card title="Episode II" locked={!state.ep1} done={state.ep2} onOpen={() => setMode("ep2")} />
-        <Card title="Episode III" locked={!state.ep2} done={state.ep3} onOpen={() => setMode("ep3")} />
-        <Card title="Episode IV" locked={!state.ep3} done={state.ep4} onOpen={() => setMode("ep4")} />
-        <Card title="Final Commit" locked={!state.ep4} done={state.finalized} onOpen={() => setMode("ep5")} />
-        <Card title="Echo Residual" bonus locked={!state.ep3} onOpen={() => setMode("bonus")} />
-        <Card title="Classified Archive" bonus locked={!state.finalized} onOpen={() => setMode("archive")} />
+        <EpisodeCard title="Silence in Darkness" img={IMAGES.prologue} onOpen={() => setMode("prologue")} />
+        <EpisodeCard title="The Handshake" img={IMAGES.ep1} done={state.ep1} onOpen={() => setMode("ep1")} />
+        <EpisodeCard title="The Recall" img={IMAGES.ep2} locked={!state.ep1} done={state.ep2} onOpen={() => setMode("ep2")} />
+        <EpisodeCard title="The Watcher" img={IMAGES.ep3} locked={!state.ep2} done={state.ep3} onOpen={() => setMode("ep3")} />
+        <EpisodeCard title="Drift Protocol" img={IMAGES.ep4} locked={!state.ep3} done={state.ep4} onOpen={() => setMode("ep4")} />
+        <EpisodeCard title="Final Commit" img={IMAGES.ep5} locked={!state.ep4} done={state.finalized} onOpen={() => setMode("ep5")} />
+        <EpisodeCard title="Echo Residual" img={IMAGES.bonus} locked={!state.ep3} bonus onOpen={() => setMode("bonus")} />
+        <EpisodeCard title="Classified Archive" img={IMAGES.archive} locked={!state.finalized} bonus onOpen={() => setMode("archive")} />
       </section>
 
       {state.finalized && (
-        <section style={{ marginTop: 36 }}>
+        <section style={{ marginTop: 40 }}>
           <GlobalStatsPanel />
         </section>
       )}
@@ -222,16 +222,18 @@ export default function StoryPage() {
 }
 
 /* ────────────────────────────────────────────── */
-/* Card */
+/* Episode Card */
 
-function Card({
+function EpisodeCard({
   title,
+  img,
   locked,
   done,
   bonus,
   onOpen,
 }: {
   title: string;
+  img: string;
   locked?: boolean;
   done?: boolean;
   bonus?: boolean;
@@ -239,10 +241,12 @@ function Card({
 }) {
   return (
     <button
-      className={`card ${locked ? "locked" : ""} ${done ? "done" : ""}`}
+      className={`epCard ${locked ? "locked" : ""} ${done ? "done" : ""} ${bonus ? "bonus" : ""}`}
       onClick={() => !locked && onOpen()}
+      style={{ backgroundImage: `url(${img})` }}
     >
-      <div className="title">{title}</div>
+      <div className="shade" />
+      <div className="label">{title}</div>
       {bonus && <div className="tag">BONUS</div>}
       {locked && <div className="lock">LOCKED</div>}
       {done && <div className="doneTag">COMPLETE</div>}
@@ -261,44 +265,64 @@ const shell = {
 };
 
 const hero = {
-  maxWidth: 960,
-  margin: "0 auto 28px",
+  maxWidth: 1100,
+  margin: "0 auto 32px",
 };
 
 const grid = {
-  maxWidth: 960,
+  maxWidth: 1100,
   margin: "0 auto",
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
-  gap: 14,
+  gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))",
+  gap: 18,
 };
 
 const css = `
-.card{
-  height:160px;
-  border-radius:22px;
-  background:rgba(255,255,255,.05);
+.epCard{
+  height:220px;
+  border-radius:26px;
+  background-size:cover;
+  background-position:center;
   border:1px solid rgba(255,255,255,.18);
-  display:flex;
-  align-items:center;
-  justify-content:center;
   position:relative;
-  font-weight:900;
+  overflow:hidden;
   transition:.25s;
 }
-.card:hover{transform:translateY(-2px)}
-.card.locked{opacity:.35}
-.card.done{
+.epCard:hover{transform:translateY(-3px)}
+.epCard.done{
   border-color:#38bdf8;
-  box-shadow:0 0 28px rgba(56,189,248,.55);
+  box-shadow:0 0 36px rgba(56,189,248,.65);
 }
-.tag{position:absolute;top:10px;right:10px;font-size:11px}
-.lock,.doneTag{position:absolute;bottom:10px;font-size:11px}
+.epCard.locked{
+  filter:grayscale(1) blur(.4px);
+  opacity:.35;
+}
+.epCard.bonus:not(.locked){
+  box-shadow:0 0 30px rgba(168,85,247,.65);
+}
+.shade{
+  position:absolute; inset:0;
+  background:linear-gradient(180deg,transparent,rgba(2,6,23,.92));
+}
+.label{
+  position:absolute;
+  bottom:16px; left:16px;
+  font-weight:900;
+  font-size:16px;
+}
+.tag{
+  position:absolute; top:12px; right:12px;
+  font-size:11px;
+}
+.lock,.doneTag{
+  position:absolute; bottom:12px; right:12px;
+  font-size:11px;
+}
 .syncOverlay{
-  position:fixed;inset:0;
+  position:fixed; inset:0;
   background:rgba(2,6,23,.9);
-  display:flex;align-items:center;justify-content:center;
-  font-size:22px;font-weight:900;
+  display:flex; align-items:center; justify-content:center;
+  font-size:22px; font-weight:900;
   z-index:999;
 }
 `;
