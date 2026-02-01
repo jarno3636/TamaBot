@@ -11,6 +11,7 @@ import {
 import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 import {
   bytesToString,
+  hexToBytes,
   isHex,
   pad,
   stringToHex,
@@ -82,8 +83,8 @@ function encodeDesignationBytes7(desig: string): Hex {
 function decodeBytes7ToString(v: unknown): string {
   try {
     if (typeof v === "string" && isHex(v)) {
-      // bytesToString will stop at 0x00 by default-ish, but we also trim.
-      return bytesToString(v as Hex).replace(/\u0000/g, "").trim();
+      const bytes = hexToBytes(v);
+      return bytesToString(bytes).replace(/\u0000/g, "").trim();
     }
     return "";
   } catch {
