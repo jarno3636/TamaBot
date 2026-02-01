@@ -43,7 +43,10 @@ export default function StoryPage() {
   const { fid } = useFid();
 
   const hasIdentity = typeof fid === "number" && fid > 0;
-  const fidBigInt = useMemo(() => (hasIdentity ? BigInt(fid) : 0n), [fid, hasIdentity]);
+  const fidBigInt = useMemo(
+    () => (hasIdentity ? BigInt(fid) : 0n),
+    [fid, hasIdentity]
+  );
 
   const [mode, setMode] = useState<Mode>("hub");
   const [syncing, setSyncing] = useState(false);
@@ -95,7 +98,14 @@ export default function StoryPage() {
 
   const state = useMemo(() => {
     if (!botState) {
-      return { ep1: false, ep2: false, ep3: false, ep4: false, ep5: false, finalized: false };
+      return {
+        ep1: false,
+        ep2: false,
+        ep3: false,
+        ep4: false,
+        ep5: false,
+        finalized: false,
+      };
     }
     const s: any = botState;
     return {
@@ -108,31 +118,38 @@ export default function StoryPage() {
     };
   }, [botState]);
 
-  /* ───────── Sync orchestration ───────── */
+  /* ───────── Cinematic sync ───────── */
 
   async function cinematicSync() {
     if (!hasIdentity || syncing) return;
     setSyncing(true);
-    await new Promise((r) => setTimeout(r, 900));
+    await new Promise((r) => setTimeout(r, 700));
     await refetch();
     setSyncing(false);
   }
 
-  useEffect(() => {
-    const fn = () => cinematicSync();
-    window.addEventListener("basebots-progress-updated", fn);
-    return () => window.removeEventListener("basebots-progress-updated", fn);
-  }, []);
+  /* ───────── Contract event watchers (FIXED) ───────── */
 
   useEffect(() => {
     if (!publicClient || !hasIdentity) return;
-    const unwatch = publicClient.watchContractEvent({
+
+    const unwatchEpisode = publicClient.watchContractEvent({
       ...BASEBOTS_S2,
-      eventName: ["EpisodeSet", "Finalized"],
+      eventName: "EpisodeSet",
       onLogs: () => cinematicSync(),
     });
-    return () => unwatch();
-  }, [publicClient, fidBigInt, hasIdentity]);
+
+    const unwatchFinalized = publicClient.watchContractEvent({
+      ...BASEBOTS_S2,
+      eventName: "Finalized",
+      onLogs: () => cinematicSync(),
+    });
+
+    return () => {
+      unwatchEpisode();
+      unwatchFinalized();
+    };
+  }, [publicClient, hasIdentity, fidBigInt]);
 
   /* ───────── Routing ───────── */
 
@@ -140,14 +157,22 @@ export default function StoryPage() {
 
   if (mode !== "hub") {
     switch (mode) {
-      case "prologue": return <PrologueSilenceInDarkness onExit={exit} />;
-      case "ep1": return <EpisodeOne fid={fid} onExit={exit} />;
-      case "ep2": return <EpisodeTwo fid={fid} onExit={exit} />;
-      case "ep3": return <EpisodeThree fid={fid} onExit={exit} />;
-      case "ep4": return <EpisodeFour fid={fid} onExit={exit} />;
-      case "ep5": return <EpisodeFive fid={fid} onExit={exit} />;
-      case "bonus": return state.ep3 ? <BonusEcho onExit={exit} /> : null;
-      case "archive": return state.finalized ? <BonusEchoArchive onExit={exit} /> : null;
+      case "prologue":
+        return <PrologueSilenceInDarkness onExit={exit} />;
+      case "ep1":
+        return <EpisodeOne fid={fid} onExit={exit} />;
+      case "ep2":
+        return <EpisodeTwo fid={fid} onExit={exit} />;
+      case "ep3":
+        return <EpisodeThree fid={fid} onExit={exit} />;
+      case "ep4":
+        return <EpisodeFour fid={fid} onExit={exit} />;
+      case "ep5":
+        return <EpisodeFive fid={fid} onExit={exit} />;
+      case "bonus":
+        return state.ep3 ? <BonusEcho onExit={exit} /> : null;
+      case "archive":
+        return state.finalized ? <BonusEchoArchive onExit={exit} /> : null;
     }
   }
 
@@ -161,7 +186,10 @@ export default function StoryPage() {
 
       <header style={hero}>
         <h1>Basebots: Core Memory</h1>
-        <p>Fragments stabilize only when the full sequence is complete.</p>
+        <p>
+          Memory fragments surface as systems awaken. Completion stabilizes the
+          sequence.
+        </p>
 
         <div style={{ display: "flex", gap: 10 }}>
           <button onClick={cinematicSync} disabled={!hasIdentity || syncing}>
@@ -175,17 +203,17 @@ export default function StoryPage() {
 
       <section style={grid}>
         <Card title="Prologue" onOpen={() => setMode("prologue")} />
-        <Card title="Episode I" locked={!hasIdentity} done={state.ep1} onOpen={() => setMode("ep1")} />
+        <Card title="Episode I" done={state.ep1} onOpen={() => setMode("ep1")} />
         <Card title="Episode II" locked={!state.ep1} done={state.ep2} onOpen={() => setMode("ep2")} />
         <Card title="Episode III" locked={!state.ep2} done={state.ep3} onOpen={() => setMode("ep3")} />
         <Card title="Episode IV" locked={!state.ep3} done={state.ep4} onOpen={() => setMode("ep4")} />
         <Card title="Final Commit" locked={!state.ep4} done={state.finalized} onOpen={() => setMode("ep5")} />
-        <Card title="Echo Residual" locked={!state.ep3} bonus onOpen={() => setMode("bonus")} />
-        <Card title="Archive" locked={!state.finalized} bonus onOpen={() => setMode("archive")} />
+        <Card title="Echo Residual" bonus locked={!state.ep3} onOpen={() => setMode("bonus")} />
+        <Card title="Classified Archive" bonus locked={!state.finalized} onOpen={() => setMode("archive")} />
       </section>
 
       {state.finalized && (
-        <section style={{ marginTop: 40 }}>
+        <section style={{ marginTop: 36 }}>
           <GlobalStatsPanel />
         </section>
       )}
@@ -194,7 +222,7 @@ export default function StoryPage() {
 }
 
 /* ────────────────────────────────────────────── */
-/* Components */
+/* Card */
 
 function Card({
   title,
@@ -214,7 +242,7 @@ function Card({
       className={`card ${locked ? "locked" : ""} ${done ? "done" : ""}`}
       onClick={() => !locked && onOpen()}
     >
-      <div className="label">{title}</div>
+      <div className="title">{title}</div>
       {bonus && <div className="tag">BONUS</div>}
       {locked && <div className="lock">LOCKED</div>}
       {done && <div className="doneTag">COMPLETE</div>}
@@ -247,23 +275,28 @@ const grid = {
 
 const css = `
 .card{
-  height:150px;
-  border-radius:20px;
-  background:rgba(255,255,255,.04);
-  border:1px solid rgba(255,255,255,.14);
+  height:160px;
+  border-radius:22px;
+  background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.18);
   display:flex;
   align-items:center;
   justify-content:center;
   position:relative;
   font-weight:900;
+  transition:.25s;
 }
+.card:hover{transform:translateY(-2px)}
 .card.locked{opacity:.35}
-.card.done{border-color:#38bdf8}
+.card.done{
+  border-color:#38bdf8;
+  box-shadow:0 0 28px rgba(56,189,248,.55);
+}
 .tag{position:absolute;top:10px;right:10px;font-size:11px}
 .lock,.doneTag{position:absolute;bottom:10px;font-size:11px}
 .syncOverlay{
   position:fixed;inset:0;
-  background:rgba(2,6,23,.88);
+  background:rgba(2,6,23,.9);
   display:flex;align-items:center;justify-content:center;
   font-size:22px;font-weight:900;
   z-index:999;
