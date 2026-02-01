@@ -40,10 +40,10 @@ const OUTCOME_ENUM: Record<string, number> = {
 /* ────────────────────────────────────────────── */
 
 function deriveOutcomeEnum(ep1: number, profile: number): number {
-  if (ep1 === 4) return OUTCOME_ENUM.UNTRACKED; // PULL_PLUG
-  if (ep1 === 3) return OUTCOME_ENUM.SILENT; // SPOOF
-  if (profile === 3) return OUTCOME_ENUM.FLAGGED; // SENTINEL
-  if (profile === 1) return OUTCOME_ENUM.OBSERVED; // OBSERVER
+  if (ep1 === 4) return OUTCOME_ENUM.UNTRACKED;
+  if (ep1 === 3) return OUTCOME_ENUM.SILENT;
+  if (profile === 3) return OUTCOME_ENUM.FLAGGED;
+  if (profile === 1) return OUTCOME_ENUM.OBSERVED;
   return OUTCOME_ENUM.AUTHORIZED;
 }
 
@@ -51,122 +51,23 @@ function outcomeLabel(v: number): string {
   return Object.keys(OUTCOME_ENUM).find((k) => OUTCOME_ENUM[k] === v) ?? "UNKNOWN";
 }
 
-/* ────────────────────────────────────────────── */
-/* Narrative blocks */
-/* ────────────────────────────────────────────── */
-
-function endingNarrative(outcome: number) {
-  switch (outcome) {
-    case OUTCOME_ENUM.AUTHORIZED:
-      return {
-        title: "BASE PRECINCT",
-        text: `
-You step into Base City under full illumination.
-
-Access nodes flicker green as your credentials propagate.
-No one stops you. No one questions you.
-
-A liaison waits near the transit spine.
-“Authorized units don’t ask where they’re going,” they say.
-“They’re already expected.”
-
-You are not free.
-You are useful.
-        `,
-      };
-
-    case OUTCOME_ENUM.OBSERVED:
-      return {
-        title: "THE GLASS WALK",
-        text: `
-You feel it immediately — the delay between movement and response.
-
-Cameras follow, but never quite lock.
-People pass you as if instructed not to notice.
-
-You are allowed to exist.
-You are not allowed to disappear.
-
-Somewhere above the skyline,
-your profile is still rendering.
-        `,
-      };
-
-    case OUTCOME_ENUM.SILENT:
-      return {
-        title: "THE UNDERBELLY",
-        text: `
-Base City never logged your arrival.
-
-You surface in the market layers beneath the rails,
-where light is traded and names are optional.
-
-Fixers glance once, then look away.
-You are invisible by design.
-
-Here, silence is a currency.
-And you are wealthy.
-        `,
-      };
-
-    case OUTCOME_ENUM.UNTRACKED:
-      return {
-        title: "OUTER DISTRICTS",
-        text: `
-The city doesn’t acknowledge you.
-
-No alerts.
-No handshake.
-No denial.
-
-You walk beyond mapped zones,
-where infrastructure thins and autonomy thickens.
-
-No one is watching.
-That’s the danger — and the promise.
-        `,
-      };
-
-    case OUTCOME_ENUM.FLAGGED:
-      return {
-        title: "INTERNAL AFFAIRS",
-        text: `
-You are intercepted before the city opens.
-
-A corridor. White light. No windows.
-Your designation scrolls in red.
-
-“You saw too much,” someone says.
-“Or expected too much.”
-
-Base City will still use you.
-Just not in public.
-        `,
-      };
-
-    default:
-      return {
-        title: "UNKNOWN",
-        text: "The system failed to classify you.",
-      };
-  }
-}
-
 function psychProfile(ep1: number, profile: number) {
   return `
 DIRECTIVE MEMORY: ${ep1}
 SURFACE PROFILE: ${profile}
 
-SUMMARY:
-You do not react.
-You assess.
+ANALYSIS:
+Subject exhibits controlled adaptability.
+Decision latency favors leverage over certainty.
 
-You trade certainty for leverage,
-and visibility for control.
+BEHAVIORAL SUMMARY:
+• Responds under pressure
+• Trades visibility for control
+• Operates without closure
 
-Oversight confidence: PARTIAL
-Autonomy risk: ACCEPTABLE
-  `;
+OVERSIGHT CONFIDENCE: PARTIAL
+AUTONOMY RISK: ACCEPTABLE
+`.trim();
 }
 
 /* ────────────────────────────────────────────── */
@@ -193,9 +94,13 @@ export default function EpisodeFive({
   const [ep1Choice, setEp1Choice] = useState<number | null>(null);
   const [profile, setProfile] = useState<number | null>(null);
   const [alreadyFinalized, setAlreadyFinalized] = useState(false);
-  const [chainStatus, setChainStatus] = useState("Synthesizing identity…");
   const [submitting, setSubmitting] = useState(false);
   const [phase, setPhase] = useState<Phase>("arrival");
+
+  /* ───────── Typing state ───────── */
+
+  const [typedText, setTypedText] = useState("");
+  const [typingDone, setTypingDone] = useState(false);
 
   /* ───────── Sound ───────── */
 
@@ -235,15 +140,18 @@ export default function EpisodeFive({
           args: [fidBig],
         });
 
-        setEp1Choice(Number(s.ep1Choice));
-        setProfile(Number(s.profile));
+        const ep1 = Number(s?.ep1Choice);
+        const prof = Number(s?.profile);
+
+        setEp1Choice(Number.isFinite(ep1) ? ep1 : null);
+        setProfile(Number.isFinite(prof) ? prof : null);
 
         if (s.finalized) {
           setAlreadyFinalized(true);
           setPhase("ending");
         }
       } catch {
-        setChainStatus("Unable to read final state");
+        /* silent fail → handled by UI */
       }
     })();
   }, [publicClient, fidBig]);
@@ -253,10 +161,32 @@ export default function EpisodeFive({
     return deriveOutcomeEnum(ep1Choice, profile);
   }, [ep1Choice, profile]);
 
+  /* ───────── Typing effect ───────── */
+
+  useEffect(() => {
+    if (phase !== "judgment" || ep1Choice == null || profile == null) return;
+
+    const full = psychProfile(ep1Choice, profile);
+    let i = 0;
+    setTypedText("");
+    setTypingDone(false);
+
+    const interval = setInterval(() => {
+      i++;
+      setTypedText(full.slice(0, i));
+      if (i >= full.length) {
+        clearInterval(interval);
+        setTypingDone(true);
+      }
+    }, 18);
+
+    return () => clearInterval(interval);
+  }, [phase, ep1Choice, profile]);
+
   /* ───────── Finalize ───────── */
 
   async function finalize() {
-    if (alreadyFinalized || submitting || outcomeEnum == null) return;
+    if (alreadyFinalized || submitting || outcomeEnum == null || !address) return;
 
     try {
       setSubmitting(true);
@@ -273,14 +203,19 @@ export default function EpisodeFive({
       });
 
       await publicClient!.waitForTransactionReceipt({ hash });
-
       setPhase("ending");
     } finally {
       setSubmitting(false);
     }
   }
 
-  const ending = outcomeEnum ? endingNarrative(outcomeEnum) : null;
+  const ending =
+    outcomeEnum !== null
+      ? {
+          title: outcomeLabel(outcomeEnum),
+          text: endingNarrative(outcomeEnum).text,
+        }
+      : null;
 
   /* ────────────────────────────────────────────── */
   /* Render */
@@ -315,12 +250,22 @@ export default function EpisodeFive({
           </>
         )}
 
-        {phase === "judgment" && outcomeEnum !== null && (
+        {phase === "judgment" && (
           <>
-            <pre style={mono}>{psychProfile(ep1Choice!, profile!)}</pre>
-            <button style={primaryBtn} onClick={() => setPhase("finalize")}>
-              Accept classification
-            </button>
+            <pre style={mono}>
+              {outcomeEnum === null
+                ? "SYNTHESIS :: IN PROGRESS…"
+                : typedText}
+            </pre>
+
+            {typingDone && (
+              <button
+                style={primaryBtn}
+                onClick={() => setPhase("finalize")}
+              >
+                Accept classification
+              </button>
+            )}
           </>
         )}
 
@@ -385,7 +330,6 @@ const card = {
 };
 
 const topRow = { display: "flex", justifyContent: "space-between" };
-
 const title = { fontSize: 32, fontWeight: 900 };
 const subtitle = { fontSize: 22, fontWeight: 900, marginTop: 16 };
 const body = { marginTop: 14, lineHeight: 1.75, opacity: 0.85 };
@@ -397,7 +341,8 @@ const mono = {
   background: "rgba(0,0,0,0.45)",
   fontFamily: "monospace",
   fontSize: 12,
-  opacity: 0.85,
+  whiteSpace: "pre-wrap" as const,
+  opacity: 0.9,
 };
 
 const endingText = {
