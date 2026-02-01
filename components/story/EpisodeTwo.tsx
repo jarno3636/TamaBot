@@ -9,6 +9,13 @@ import {
   useWriteContract,
 } from "wagmi";
 import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
+import {
+  bytesToString,
+  isHex,
+  pad,
+  stringToHex,
+  type Hex,
+} from "viem";
 
 /* ────────────────────────────────────────────── */
 /* Constants */
@@ -59,6 +66,31 @@ function normalizeTokenId(input: string | number | bigint): bigint | null {
   }
 }
 
+/**
+ * Contract expects bytes7 (NOT string).
+ * Encode 7-char A–Z/0–9 -> bytes7 (right padded with 0x00).
+ */
+function encodeDesignationBytes7(desig: string): Hex {
+  // stringToHex uses UTF-8; for A–Z/0–9 it is deterministic 1 byte per char.
+  return pad(stringToHex(desig), { size: 7 });
+}
+
+/**
+ * Decode bytes7 -> string (trim nulls).
+ * Useful for showing existing designation if already set.
+ */
+function decodeBytes7ToString(v: unknown): string {
+  try {
+    if (typeof v === "string" && isHex(v)) {
+      // bytesToString will stop at 0x00 by default-ish, but we also trim.
+      return bytesToString(v as Hex).replace(/\u0000/g, "").trim();
+    }
+    return "";
+  } catch {
+    return "";
+  }
+}
+
 /* ────────────────────────────────────────────── */
 /* Component */
 /* ────────────────────────────────────────────── */
@@ -77,6 +109,7 @@ export default function EpisodeTwo({
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [alreadySet, setAlreadySet] = useState(false);
+  const [existingDesignation, setExistingDesignation] = useState<string>("");
   const [chainStatus, setChainStatus] = useState("Idle");
   const [submitting, setSubmitting] = useState(false);
 
@@ -146,7 +179,7 @@ export default function EpisodeTwo({
   }, [soundOn]);
 
   /* ────────────────────────────────────────────── */
-  /* Read EP2 state */
+  /* Read EP2 state (real ABI: ep2Set is state[9], designation is state[0]) */
   /* ────────────────────────────────────────────── */
 
   useEffect(() => {
@@ -165,20 +198,29 @@ export default function EpisodeTwo({
           args: [tokenIdBig!],
         });
 
-        const ep2Set =
-          state?.ep2Set ??
-          state?.episode2Set ??
-          (Array.isArray(state) ? state[2] : false);
+        // ABI outputs:
+        // [0]=designation(bytes7), [9]=ep2Set(bool)
+        const desig = decodeBytes7ToString(state?.[0]);
+        const ep2Set = Boolean(state?.[9]);
 
-        if (!cancelled && ep2Set) {
+        if (cancelled) return;
+
+        setExistingDesignation(desig);
+
+        if (ep2Set) {
           setAlreadySet(true);
           setPhase("approach");
-          setChainStatus("Designation already bound");
-        } else if (!cancelled) {
+          setChainStatus(desig ? `Designation bound: ${desig}` : "Designation already bound");
+        } else {
           setChainStatus("Awaiting designation");
         }
-      } catch {
-        if (!cancelled) setChainStatus("Chain read failed");
+      } catch (e: any) {
+        if (cancelled) return;
+
+        // If your contract reverts due to NotTokenOwner or similar on reads,
+        // bubble something human-readable.
+        const msg = e?.shortMessage || e?.message || "Chain read failed";
+        setChainStatus(msg.includes("execution reverted") ? "Chain read failed" : msg);
       }
     })();
 
@@ -188,7 +230,7 @@ export default function EpisodeTwo({
   }, [readyToRead, publicClient, tokenIdBig]);
 
   /* ────────────────────────────────────────────── */
-  /* Commit designation */
+  /* Commit designation (FIXED: bytes7 encoding) */
   /* ────────────────────────────────────────────── */
 
   async function commit() {
@@ -196,22 +238,26 @@ export default function EpisodeTwo({
 
     setError(null);
 
-    if (!tokenIdBig) {
+    if (!tokenIdBig || tokenIdBig <= 0n) {
       setError("INVALID TOKEN ID");
       return;
     }
 
-    const err = validateDesignation(value);
+    const cleaned = value.trim().toUpperCase();
+    const err = validateDesignation(cleaned);
     if (err) {
       setError(err);
       return;
     }
 
     if (!readyToWrite) {
-      // This is the only “connect” gate now — address is the truth.
+      // Address is the truth (Farcaster can show “Connected” with no address yet)
       setError("CONNECT WALLET TO CONTINUE");
       return;
     }
+
+    // Encode BEFORE we do anything else so we never pass a string to bytes7.
+    const designationBytes7 = encodeDesignationBytes7(cleaned);
 
     try {
       setSubmitting(true);
@@ -222,7 +268,6 @@ export default function EpisodeTwo({
         try {
           await switchChainAsync({ chainId: BASE_CHAIN_ID });
         } catch {
-          // Some wallets block programmatic switching; user must do it.
           setError("SWITCH TO BASE IN WALLET TO CONTINUE");
           setChainStatus("Wrong network");
           return;
@@ -235,7 +280,7 @@ export default function EpisodeTwo({
         address: BASEBOTS_S2.address,
         abi: BASEBOTS_S2.abi,
         functionName: "setEpisode2Designation",
-        args: [tokenIdBig, value],
+        args: [tokenIdBig, designationBytes7],
         account: address!,
       });
 
@@ -249,12 +294,26 @@ export default function EpisodeTwo({
 
       window.dispatchEvent(new Event("basebots-progress-updated"));
 
-      setChainStatus("Designation committed");
+      setExistingDesignation(cleaned);
+      setChainStatus(`Designation committed: ${cleaned}`);
       setPhase("binding");
       setTimeout(() => setPhase("approach"), 1400);
     } catch (e: any) {
-      setError(e?.shortMessage || e?.message || "TRANSACTION REJECTED");
-      setChainStatus("Transaction failed");
+      const msg = e?.shortMessage || e?.message || "TRANSACTION REJECTED";
+      setError(msg);
+
+      // Helpful status for common cases
+      if (String(msg).toLowerCase().includes("nottokenowner")) {
+        setChainStatus("You must own this Basebot to bind designation");
+      } else if (String(msg).toLowerCase().includes("designationalreadyset")) {
+        setChainStatus("Designation already set");
+        setAlreadySet(true);
+        setPhase("approach");
+      } else if (String(msg).toLowerCase().includes("sequenc")) {
+        setChainStatus("Sequence violation (complete previous steps)");
+      } else {
+        setChainStatus("Transaction failed");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -325,6 +384,9 @@ export default function EpisodeTwo({
             maxLength={7}
             style={inputStyle}
             placeholder="XXXXXXX"
+            inputMode="text"
+            autoCapitalize="characters"
+            autoCorrect="off"
           />
 
           <div style={hintRow}>
@@ -335,6 +397,12 @@ export default function EpisodeTwo({
               Network: <b>{isBase ? "Base" : "Not Base"}</b>
             </span>
           </div>
+
+          {!!existingDesignation && (
+            <div style={existingRow}>
+              Existing on-chain: <b>{existingDesignation}</b>
+            </div>
+          )}
 
           {error && <div style={errorStyle}>{error}</div>}
 
@@ -368,9 +436,19 @@ export default function EpisodeTwo({
         <>
           <h2 style={title}>RECOGNIZED</h2>
           <p style={body}>
-            Designation accepted.
-            <br />
-            Oversight now recognizes continuity.
+            {existingDesignation ? (
+              <>
+                Designation accepted: <b>{existingDesignation}</b>.
+                <br />
+                Oversight now recognizes continuity.
+              </>
+            ) : (
+              <>
+                Designation accepted.
+                <br />
+                Oversight now recognizes continuity.
+              </>
+            )}
           </p>
 
           <button style={primaryBtn} onClick={onExit}>
@@ -452,6 +530,12 @@ const hintRow: CSSProperties = {
   fontSize: 12,
 };
 
+const existingRow: CSSProperties = {
+  marginTop: 10,
+  fontSize: 12,
+  opacity: 0.8,
+};
+
 const mono: CSSProperties = {
   marginTop: 48,
   textAlign: "center",
@@ -466,7 +550,8 @@ const primaryBtn: CSSProperties = {
   padding: "14px 18px",
   borderRadius: 999,
   fontWeight: 900,
-  background: "linear-gradient(90deg, rgba(56,189,248,0.9), rgba(168,85,247,0.9))",
+  background:
+    "linear-gradient(90deg, rgba(56,189,248,0.9), rgba(168,85,247,0.9))",
   color: "#020617",
   boxShadow: "0 0 24px rgba(168,85,247,0.6)",
 };
