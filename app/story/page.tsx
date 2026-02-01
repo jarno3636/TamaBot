@@ -169,10 +169,6 @@ export default function StoryPage() {
   const [syncing, setSyncing] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
 
-  const [mode, setMode] = useState<Mode>("hub");
-  const [syncing, setSyncing] = useState(false);
-  const [showDiagnostics, setShowDiagnostics] = useState(false);
-
   /* ───────── Sound ───────── */
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [soundOn, setSoundOn] = useState(() => {
