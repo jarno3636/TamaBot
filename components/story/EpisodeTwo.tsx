@@ -1,18 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAccount, usePublicClient, useWalletClient } from "wagmi";
-
 import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 
-/* ──────────────────────────────────────────────
- * Storage keys
- * ────────────────────────────────────────────── */
+/* ────────────────────────────────────────────── */
+/* Storage */
+/* ────────────────────────────────────────────── */
 
 const EP1_KEY = "basebots_story_save_v1";
-const SOUND_KEY = "basebots_ep2_sound";
-
-/* ────────────────────────────────────────────── */
 
 type Ep1Save = {
   choiceId: "ACCEPT" | "STALL" | "SPOOF" | "PULL_PLUG";
@@ -67,7 +63,7 @@ export default function EpisodeTwo({
   const [alreadySet, setAlreadySet] = useState(false);
   const [chainStatus, setChainStatus] = useState("Idle");
 
-  /* ───────── wagmi ───────── */
+  /* wagmi */
   const { address, chain } = useAccount();
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
@@ -78,13 +74,13 @@ export default function EpisodeTwo({
   const ready =
     Boolean(address && walletClient && publicClient && isBase && tokenIdBig);
 
-  /* ───────── read ep2 state ───────── */
+  /* ───────── read chain state ───────── */
   useEffect(() => {
     if (!publicClient || !tokenIdBig) return;
 
     (async () => {
       try {
-        setChainStatus("Reading chain…");
+        setChainStatus("Reading designation state…");
 
         const state: any = await publicClient.readContract({
           address: BASEBOTS_S2.address,
@@ -100,7 +96,7 @@ export default function EpisodeTwo({
           setPhase("approach");
           setChainStatus("Designation already bound");
         } else {
-          setChainStatus("Awaiting designation");
+          setChainStatus("Designation unassigned");
         }
       } catch {
         setChainStatus("Chain read failed");
@@ -108,9 +104,14 @@ export default function EpisodeTwo({
     })();
   }, [publicClient, tokenIdBig]);
 
-  /* ───────── commit designation (FIXED) ───────── */
+  /* ───────── commit designation ───────── */
   async function commit() {
-    if (!ready || submitting || alreadySet) return;
+    if (submitting || alreadySet) return;
+
+    if (!ready) {
+      setError("WALLET NOT READY ON BASE");
+      return;
+    }
 
     const err = validateDesignation(value);
     if (err) {
@@ -120,6 +121,7 @@ export default function EpisodeTwo({
 
     try {
       setSubmitting(true);
+      setError(null);
       setChainStatus("Simulating commitment…");
 
       const { request } = await publicClient!.simulateContract({
@@ -143,7 +145,6 @@ export default function EpisodeTwo({
       setTimeout(() => setPhase("approach"), 1400);
       setChainStatus("Designation committed");
     } catch (e: any) {
-      console.error(e);
       setError(
         e?.shortMessage ||
           e?.message ||
@@ -161,32 +162,50 @@ export default function EpisodeTwo({
     <section
       style={{
         borderRadius: 28,
-        padding: 22,
+        padding: 24,
         color: "white",
-        border: "1px solid rgba(255,255,255,0.12)",
+        border: "1px solid rgba(168,85,247,0.35)",
         background:
           "linear-gradient(180deg, rgba(2,6,23,0.96), rgba(2,6,23,0.72))",
-        boxShadow: "0 40px 160px rgba(0,0,0,0.85)",
+        boxShadow: "0 0 60px rgba(168,85,247,0.35)",
       }}
     >
-      <div style={{ fontSize: 11, opacity: 0.7 }}>
-        Status: <b>{chainStatus}</b>
+      <div style={{ fontSize: 11, opacity: 0.75 }}>
+        {chainStatus}
       </div>
 
       {phase === "descent" && (
         <>
-          <h2>VERTICAL TRANSFER</h2>
-          <p>
-            Prior classification propagates:{" "}
+          <h2 style={{ fontSize: 22, fontWeight: 900 }}>
+            VERTICAL TRANSFER
+          </h2>
+          <p style={{ opacity: 0.75 }}>
+            Prior posture propagates upward:
+            <br />
             <b>{ep1?.profile?.archetype ?? "UNRESOLVED"}</b>
           </p>
-          <button onClick={() => setPhase("input")}>Continue</button>
+
+          <button
+            onClick={() => setPhase("input")}
+            style={primaryBtn}
+          >
+            Continue
+          </button>
         </>
       )}
 
       {phase === "input" && (
         <>
-          <h2>ASSIGN DESIGNATION</h2>
+          <h2 style={{ fontSize: 22, fontWeight: 900 }}>
+            ASSIGN DESIGNATION
+          </h2>
+
+          <p style={{ fontSize: 13, opacity: 0.7 }}>
+            Upper systems require a stable identifier.
+            <br />
+            This value will persist.
+          </p>
+
           <input
             value={value}
             onChange={(e) => {
@@ -194,29 +213,90 @@ export default function EpisodeTwo({
               setValue(e.target.value.toUpperCase());
             }}
             maxLength={7}
-            style={{ letterSpacing: 4, textAlign: "center" }}
+            style={inputStyle}
           />
 
-          {error && <div style={{ color: "#f87171" }}>{error}</div>}
+          {error && (
+            <div style={{ color: "#fca5a5", fontSize: 12 }}>
+              {error}
+            </div>
+          )}
 
-          <button onClick={commit} disabled={submitting || alreadySet}>
+          <button
+            onClick={commit}
+            disabled={submitting || alreadySet}
+            style={{
+              ...primaryBtn,
+              opacity: submitting || alreadySet ? 0.5 : 1,
+            }}
+          >
             {submitting ? "CONFIRMING…" : "CONFIRM DESIGNATION"}
           </button>
         </>
       )}
 
       {phase === "binding" && (
-        <div style={{ fontFamily: "monospace" }}>
+        <div
+          style={{
+            textAlign: "center",
+            fontFamily: "monospace",
+            letterSpacing: 2,
+            marginTop: 40,
+          }}
+        >
           IDENTITY LOCKED
         </div>
       )}
 
       {phase === "approach" && (
         <>
-          <p>Designation accepted.</p>
-          <button onClick={onExit}>Return to hub</button>
+          <p style={{ opacity: 0.8 }}>
+            Designation accepted.
+            <br />
+            Oversight now recognizes you.
+          </p>
+
+          <button onClick={onExit} style={secondaryBtn}>
+            Return to hub
+          </button>
         </>
       )}
     </section>
   );
 }
+
+/* ────────────────────────────────────────────── */
+/* Styles */
+/* ────────────────────────────────────────────── */
+
+const primaryBtn: React.CSSProperties = {
+  marginTop: 20,
+  padding: "12px 20px",
+  borderRadius: 999,
+  fontWeight: 900,
+  background:
+    "linear-gradient(90deg, rgba(56,189,248,0.9), rgba(168,85,247,0.9))",
+  color: "#020617",
+};
+
+const secondaryBtn: React.CSSProperties = {
+  marginTop: 24,
+  padding: "10px 18px",
+  borderRadius: 999,
+  background: "rgba(255,255,255,0.08)",
+  border: "1px solid rgba(255,255,255,0.18)",
+  color: "white",
+};
+
+const inputStyle: React.CSSProperties = {
+  marginTop: 16,
+  width: "100%",
+  padding: "12px",
+  textAlign: "center",
+  fontSize: 18,
+  letterSpacing: 4,
+  borderRadius: 14,
+  background: "rgba(0,0,0,0.4)",
+  border: "1px solid rgba(168,85,247,0.45)",
+  color: "white",
+};
