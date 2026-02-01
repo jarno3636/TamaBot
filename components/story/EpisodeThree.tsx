@@ -20,8 +20,6 @@ const SOUND_KEY = "basebots_ep3_sound";
 const BASE_CHAIN_ID = 8453;
 
 /* ────────────────────────────────────────────── */
-/* Types */
-/* ────────────────────────────────────────────── */
 
 type Phase =
   | "intro"
@@ -42,10 +40,8 @@ type Ep3State = {
 
 function normalizeTokenId(input: string | number | bigint): bigint | null {
   try {
-    if (typeof input === "bigint") return input;
-    const s = String(input).trim();
-    if (!s) return null;
-    return BigInt(s);
+    const v = BigInt(String(input).trim());
+    return v > 0n ? v : null;
   } catch {
     return null;
   }
@@ -78,8 +74,9 @@ export default function EpisodeThree({
   const tokenIdBig = useMemo(() => normalizeTokenId(tokenId), [tokenId]);
 
   const [phase, setPhase] = useState<Phase>("intro");
-  const [alreadySet, setAlreadySet] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [alreadySet, setAlreadySet] = useState(false);
+  const [chainStatus, setChainStatus] = useState("Idle");
   const [showEcho, setShowEcho] = useState(false);
 
   /* wagmi */
@@ -90,7 +87,7 @@ export default function EpisodeThree({
 
   const isBase = chain?.id === BASE_CHAIN_ID;
   const ready =
-    Boolean(address && publicClient && tokenIdBig && isBase);
+    Boolean(address && publicClient && tokenIdBig && tokenIdBig > 0n);
 
   /* ────────────────────────────────────────────── */
   /* Sound */
@@ -112,11 +109,8 @@ export default function EpisodeThree({
     audioRef.current = a;
     if (soundOn) a.play().catch(() => {});
     return () => {
-      try {
-        a.pause();
-        a.src = "";
-      } catch {}
-      audioRef.current = null;
+      a.pause();
+      a.src = "";
     };
   }, []);
 
@@ -134,13 +128,11 @@ export default function EpisodeThree({
   }, [soundOn]);
 
   /* ────────────────────────────────────────────── */
-  /* Chain read (ep3Set) */
+  /* Read chain state */
   /* ────────────────────────────────────────────── */
 
   useEffect(() => {
     if (!publicClient || !tokenIdBig) return;
-
-    let cancelled = false;
 
     (async () => {
       try {
@@ -151,34 +143,31 @@ export default function EpisodeThree({
           args: [tokenIdBig],
         });
 
-        const ep3Set = Boolean(state?.[10]); // per ABI
-
-        if (!cancelled && ep3Set) {
+        if (state?.[10]) {
           setAlreadySet(true);
           setPhase("lock");
         }
-      } catch {}
+      } catch {
+        setChainStatus("Chain read failed");
+      }
     })();
-
-    return () => {
-      cancelled = true;
-    };
   }, [publicClient, tokenIdBig]);
 
   /* ────────────────────────────────────────────── */
-  /* Glitch / Bonus Echo */
+  /* Secret Echo – guaranteed */
   /* ────────────────────────────────────────────── */
 
   useEffect(() => {
+    if (phase !== "context") return;
     if (localStorage.getItem(BONUS_KEY)) return;
 
     const t = setTimeout(() => {
       setShowEcho(true);
       setTimeout(() => setShowEcho(false), 3000);
-    }, 2800);
+    }, 2000);
 
     return () => clearTimeout(t);
-  }, []);
+  }, [phase]);
 
   function unlockEcho() {
     localStorage.setItem(BONUS_KEY, "true");
@@ -187,26 +176,28 @@ export default function EpisodeThree({
   }
 
   /* ────────────────────────────────────────────── */
-  /* Commit Episode 3 */
+  /* Commit */
   /* ────────────────────────────────────────────── */
 
   async function commit() {
-    if (alreadySet || submitting || !ready) return;
+    if (!ready || submitting || alreadySet) return;
 
     const s = loadState();
 
-    let bias: number = 2; // PRAGMATIC default
-
-    if (s.contradiction === "RESOLVE" && s.signal === "FILTER") bias = 0; // DETERMINISTIC
-    if (s.contradiction === "PRESERVE" && s.signal === "LISTEN") bias = 1; // ARCHIVAL
-    if (s.contradiction === "PRESERVE" && s.signal === "FILTER") bias = 3; // PARANOID
+    let bias = 2; // PRAGMATIC
+    if (s.contradiction === "RESOLVE" && s.signal === "FILTER") bias = 0;
+    if (s.contradiction === "PRESERVE" && s.signal === "LISTEN") bias = 1;
+    if (s.contradiction === "PRESERVE" && s.signal === "FILTER") bias = 3;
 
     try {
       setSubmitting(true);
 
       if (!isBase) {
+        setChainStatus("Switching to Base…");
         await switchChainAsync({ chainId: BASE_CHAIN_ID });
       }
+
+      setChainStatus("Awaiting signature…");
 
       const hash = await writeContractAsync({
         address: BASEBOTS_S2.address,
@@ -215,12 +206,14 @@ export default function EpisodeThree({
         args: [tokenIdBig!, bias],
       });
 
+      setChainStatus("Finalizing…");
       await publicClient!.waitForTransactionReceipt({ hash });
 
       window.dispatchEvent(new Event("basebots-progress-updated"));
       setPhase("lock");
-    } catch {
-      /* silent fail – Episode 2 pattern */
+      setChainStatus("Cognition locked");
+    } catch (e: any) {
+      setChainStatus(e?.shortMessage || "Transaction failed");
     } finally {
       setSubmitting(false);
     }
@@ -232,13 +225,17 @@ export default function EpisodeThree({
 
   return (
     <section style={shell}>
-      <button style={soundBtn} onClick={() => setSoundOn((v) => !v)}>
-        {soundOn ? "SOUND ON" : "SOUND OFF"}
-      </button>
+      {/* top utility row */}
+      <div style={topRow}>
+        <span style={{ fontSize: 11, opacity: 0.7 }}>{chainStatus}</span>
+        <button style={soundBtn} onClick={() => setSoundOn((v) => !v)}>
+          {soundOn ? "SOUND ON" : "SOUND OFF"}
+        </button>
+      </div>
 
       {showEcho && (
         <button onClick={unlockEcho} style={echo}>
-          ▒▒ anomalous process detected ▒▒
+          ▒▒ anomalous process ▒▒
         </button>
       )}
 
@@ -246,7 +243,7 @@ export default function EpisodeThree({
         <>
           <h2 style={title}>FAULT LINES</h2>
           <p style={body}>
-            Your internal models no longer agree. The system has noticed.
+            Your internal models are diverging. Oversight flags instability.
           </p>
           <button style={primaryBtn} onClick={() => setPhase("context")}>
             Continue
@@ -257,10 +254,10 @@ export default function EpisodeThree({
       {phase === "context" && (
         <>
           <p style={body}>
-            Contradiction introduces ambiguity. Ambiguity introduces risk.
+            When systems disagree, the response defines the intelligence.
           </p>
           <button style={primaryBtn} onClick={() => setPhase("contradiction")}>
-            Assess contradiction
+            Evaluate contradiction
           </button>
         </>
       )}
@@ -274,8 +271,12 @@ export default function EpisodeThree({
               setPhase("signal");
             }}
           >
-            Collapse to a single truth
+            Resolve contradiction
+            <div style={choiceNote}>
+              Force alignment. Remove ambiguity.
+            </div>
           </button>
+
           <button
             style={choiceBtn}
             onClick={() => {
@@ -283,7 +284,10 @@ export default function EpisodeThree({
               setPhase("signal");
             }}
           >
-            Preserve competing interpretations
+            Preserve contradiction
+            <div style={choiceNote}>
+              Maintain parallel interpretations.
+            </div>
           </button>
         </>
       )}
@@ -297,8 +301,12 @@ export default function EpisodeThree({
               setPhase("synthesis");
             }}
           >
-            Filter external noise
+            Filter incoming signal
+            <div style={choiceNote}>
+              Reduce noise. Prioritize certainty.
+            </div>
           </button>
+
           <button
             style={choiceBtn}
             onClick={() => {
@@ -306,7 +314,10 @@ export default function EpisodeThree({
               setPhase("synthesis");
             }}
           >
-            Ingest fragments despite risk
+            Listen to fragments
+            <div style={choiceNote}>
+              Accept instability to gain insight.
+            </div>
           </button>
         </>
       )}
@@ -314,7 +325,7 @@ export default function EpisodeThree({
       {phase === "synthesis" && (
         <>
           <p style={body}>
-            This cognition will define how uncertainty is handled.
+            This cognitive frame will persist.
           </p>
           <button style={primaryBtn} onClick={commit} disabled={submitting}>
             {submitting ? "COMMITTING…" : "Commit cognition"}
@@ -339,18 +350,24 @@ export default function EpisodeThree({
 /* ────────────────────────────────────────────── */
 
 const shell: CSSProperties = {
-  position: "relative",
   borderRadius: 28,
   padding: 24,
   color: "white",
   border: "1px solid rgba(168,85,247,0.35)",
   background:
-    "radial-gradient(800px 300px at 50% -10%, rgba(168,85,247,0.12), transparent 60%), linear-gradient(180deg, rgba(2,6,23,0.96), rgba(2,6,23,0.78))",
+    "linear-gradient(180deg, rgba(2,6,23,0.96), rgba(2,6,23,0.78))",
   boxShadow: "0 60px 160px rgba(0,0,0,0.85)",
 };
 
+const topRow: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  marginBottom: 18,
+};
+
 const title: CSSProperties = { fontSize: 24, fontWeight: 900 };
-const body: CSSProperties = { marginTop: 12, opacity: 0.78, lineHeight: 1.6 };
+const body: CSSProperties = { marginTop: 12, opacity: 0.78 };
 
 const primaryBtn: CSSProperties = {
   marginTop: 22,
@@ -364,13 +381,12 @@ const primaryBtn: CSSProperties = {
 };
 
 const secondaryBtn: CSSProperties = {
-  marginTop: 16,
+  marginTop: 14,
   width: "100%",
   padding: "12px 18px",
   borderRadius: 999,
   background: "rgba(255,255,255,0.08)",
   border: "1px solid rgba(255,255,255,0.18)",
-  color: "white",
 };
 
 const choiceBtn: CSSProperties = {
@@ -380,19 +396,20 @@ const choiceBtn: CSSProperties = {
   borderRadius: 18,
   background: "rgba(255,255,255,0.06)",
   border: "1px solid rgba(255,255,255,0.14)",
-  color: "white",
-  fontWeight: 700,
+  textAlign: "left",
+};
+
+const choiceNote: CSSProperties = {
+  marginTop: 6,
+  fontSize: 12,
+  opacity: 0.7,
 };
 
 const soundBtn: CSSProperties = {
-  position: "absolute",
-  top: 16,
-  right: 16,
   padding: "8px 12px",
   borderRadius: 999,
   background: "rgba(255,255,255,0.06)",
   border: "1px solid rgba(255,255,255,0.18)",
-  color: "white",
   fontSize: 11,
   fontWeight: 900,
 };
@@ -404,6 +421,4 @@ const echo: CSSProperties = {
   fontSize: 10,
   fontFamily: "monospace",
   opacity: 0.85,
-  background: "transparent",
-  color: "rgba(255,255,255,0.85)",
 };
