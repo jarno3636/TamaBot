@@ -5,10 +5,11 @@ import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 
 /* ────────────────────────────────────────────── */
-/* Storage */
+/* Constants */
 /* ────────────────────────────────────────────── */
 
 const EP1_KEY = "basebots_story_save_v1";
+const BASE_CHAIN_ID = 8453;
 
 /* ────────────────────────────────────────────── */
 /* Types */
@@ -76,15 +77,29 @@ export default function EpisodeTwo({
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
 
-  const isBase = chain?.id === 8453;
+  /* IMPORTANT: mirror Episode One */
+  const ready = Boolean(address && publicClient && tokenIdBig);
 
-  // IMPORTANT FIX: do NOT require walletClient here
-  const ready =
-    Boolean(address && publicClient && isBase && tokenIdBig);
+  /* ───────── auto Base switch (SAFE) ───────── */
+  async function ensureBaseChain() {
+    if (!walletClient) return false;
+    if (chain?.id === BASE_CHAIN_ID) return true;
 
-  /* ───────── read EP2 state ───────── */
+    try {
+      setChainStatus("Requesting Base network…");
+      await walletClient.switchChain({ id: BASE_CHAIN_ID });
+      return true;
+    } catch {
+      setError("PLEASE SWITCH TO BASE TO CONTINUE");
+      return false;
+    }
+  }
+
+  /* ───────── read EP2 state (READS NEVER BLOCKED) ───────── */
   useEffect(() => {
     if (!publicClient || !tokenIdBig) return;
+
+    let cancelled = false;
 
     (async () => {
       try {
@@ -102,27 +117,34 @@ export default function EpisodeTwo({
           state?.episode2Set ??
           (Array.isArray(state) ? state[2] : false);
 
-        if (ep2Set) {
+        if (!cancelled && ep2Set) {
           setAlreadySet(true);
           setPhase("approach");
           setChainStatus("Designation already bound");
-        } else {
+        } else if (!cancelled) {
           setChainStatus("Awaiting designation");
         }
       } catch {
-        setChainStatus("Chain read failed");
+        if (!cancelled) setChainStatus("Chain read failed");
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [publicClient, tokenIdBig]);
 
-  /* ───────── commit designation ───────── */
+  /* ───────── commit designation (FIXED) ───────── */
   async function commit() {
     if (submitting || alreadySet) return;
 
-    if (!ready) {
-      setError("CONNECT WALLET ON BASE");
+    if (!ready || !walletClient) {
+      setError("CONNECT WALLET TO CONTINUE");
       return;
     }
+
+    const onBase = await ensureBaseChain();
+    if (!onBase) return;
 
     const err = validateDesignation(value);
     if (err) {
@@ -135,7 +157,6 @@ export default function EpisodeTwo({
       setError(null);
       setChainStatus("Preparing transaction…");
 
-      // simulate FIRST (forces gas estimation)
       const { request } = await publicClient!.simulateContract({
         address: BASEBOTS_S2.address,
         abi: BASEBOTS_S2.abi,
@@ -146,8 +167,7 @@ export default function EpisodeTwo({
 
       setChainStatus("Awaiting wallet signature…");
 
-      // walletClient may resolve lazily here — this is OK
-      const hash = await walletClient!.writeContract(request);
+      const hash = await walletClient.writeContract(request);
 
       setChainStatus("Finalizing on-chain…");
       await publicClient!.waitForTransactionReceipt({ hash });
@@ -171,7 +191,7 @@ export default function EpisodeTwo({
 
   /* ────────────────────────────────────────────── */
   /* Render */
-  /* ────────────────────────────────────────────── */
+/* ────────────────────────────────────────────── */
 
   return (
     <section style={shell}>
@@ -260,9 +280,15 @@ const shell: React.CSSProperties = {
   boxShadow: "0 0 80px rgba(168,85,247,0.45)",
 };
 
-const title = { fontSize: 24, fontWeight: 900 };
-const body = { marginTop: 10, opacity: 0.75, lineHeight: 1.6 };
-const mono = {
+const title: React.CSSProperties = { fontSize: 24, fontWeight: 900 };
+
+const body: React.CSSProperties = {
+  marginTop: 10,
+  opacity: 0.75,
+  lineHeight: 1.6,
+};
+
+const mono: React.CSSProperties = {
   marginTop: 48,
   textAlign: "center",
   fontFamily: "monospace",
@@ -302,7 +328,7 @@ const inputStyle: React.CSSProperties = {
   color: "white",
 };
 
-const errorStyle = {
+const errorStyle: React.CSSProperties = {
   color: "#fca5a5",
   fontSize: 12,
   marginTop: 8,
