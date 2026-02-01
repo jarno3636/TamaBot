@@ -20,6 +20,8 @@ const SOUND_KEY = "basebots_ep3_sound";
 const BASE_CHAIN_ID = 8453;
 
 /* ────────────────────────────────────────────── */
+/* Types */
+/* ────────────────────────────────────────────── */
 
 type Phase =
   | "intro"
@@ -86,8 +88,6 @@ export default function EpisodeThree({
   const { switchChainAsync } = useSwitchChain();
 
   const isBase = chain?.id === BASE_CHAIN_ID;
-  const ready =
-    Boolean(address && publicClient && tokenIdBig && tokenIdBig > 0n);
 
   /* ────────────────────────────────────────────── */
   /* Sound */
@@ -105,12 +105,15 @@ export default function EpisodeThree({
   useEffect(() => {
     const a = new Audio("/audio/s3.mp3");
     a.loop = true;
-    a.volume = 0.55;
+    a.volume = 0.5;
     audioRef.current = a;
     if (soundOn) a.play().catch(() => {});
     return () => {
-      a.pause();
-      a.src = "";
+      try {
+        a.pause();
+        a.src = "";
+      } catch {}
+      audioRef.current = null;
     };
   }, []);
 
@@ -128,7 +131,7 @@ export default function EpisodeThree({
   }, [soundOn]);
 
   /* ────────────────────────────────────────────── */
-  /* Read chain state */
+  /* Read chain (ep3Set) */
   /* ────────────────────────────────────────────── */
 
   useEffect(() => {
@@ -154,20 +157,19 @@ export default function EpisodeThree({
   }, [publicClient, tokenIdBig]);
 
   /* ────────────────────────────────────────────── */
-  /* Secret Echo – guaranteed */
+  /* Guaranteed Secret Echo */
   /* ────────────────────────────────────────────── */
 
   useEffect(() => {
-    if (phase !== "context") return;
     if (localStorage.getItem(BONUS_KEY)) return;
 
     const t = setTimeout(() => {
       setShowEcho(true);
       setTimeout(() => setShowEcho(false), 3000);
-    }, 2000);
+    }, 1600);
 
     return () => clearTimeout(t);
-  }, [phase]);
+  }, []);
 
   function unlockEcho() {
     localStorage.setItem(BONUS_KEY, "true");
@@ -176,11 +178,13 @@ export default function EpisodeThree({
   }
 
   /* ────────────────────────────────────────────── */
-  /* Commit */
+  /* Commit — FIXED (simulate → write) */
   /* ────────────────────────────────────────────── */
 
   async function commit() {
-    if (!ready || submitting || alreadySet) return;
+    if (submitting || alreadySet) return;
+    if (!tokenIdBig || tokenIdBig <= 0n) return;
+    if (!address || !publicClient) return;
 
     const s = loadState();
 
@@ -197,21 +201,26 @@ export default function EpisodeThree({
         await switchChainAsync({ chainId: BASE_CHAIN_ID });
       }
 
-      setChainStatus("Awaiting signature…");
+      setChainStatus("Preparing cognition…");
 
-      const hash = await writeContractAsync({
+      const { request } = await publicClient.simulateContract({
         address: BASEBOTS_S2.address,
         abi: BASEBOTS_S2.abi,
         functionName: "setEpisode3",
-        args: [tokenIdBig!, bias],
+        args: [tokenIdBig, bias],
+        account: address,
       });
 
-      setChainStatus("Finalizing…");
-      await publicClient!.waitForTransactionReceipt({ hash });
+      setChainStatus("Awaiting signature…");
+
+      const hash = await writeContractAsync(request);
+
+      setChainStatus("Finalizing cognition…");
+      await publicClient.waitForTransactionReceipt({ hash });
 
       window.dispatchEvent(new Event("basebots-progress-updated"));
       setPhase("lock");
-      setChainStatus("Cognition locked");
+      setChainStatus("Cognitive frame locked");
     } catch (e: any) {
       setChainStatus(e?.shortMessage || "Transaction failed");
     } finally {
@@ -225,7 +234,7 @@ export default function EpisodeThree({
 
   return (
     <section style={shell}>
-      {/* top utility row */}
+      {/* utility row */}
       <div style={topRow}>
         <span style={{ fontSize: 11, opacity: 0.7 }}>{chainStatus}</span>
         <button style={soundBtn} onClick={() => setSoundOn((v) => !v)}>
@@ -235,7 +244,7 @@ export default function EpisodeThree({
 
       {showEcho && (
         <button onClick={unlockEcho} style={echo}>
-          ▒▒ anomalous process ▒▒
+          ▒▒ anomalous process detected ▒▒
         </button>
       )}
 
@@ -243,7 +252,7 @@ export default function EpisodeThree({
         <>
           <h2 style={title}>FAULT LINES</h2>
           <p style={body}>
-            Your internal models are diverging. Oversight flags instability.
+            Internal models diverge. Oversight flags instability.
           </p>
           <button style={primaryBtn} onClick={() => setPhase("context")}>
             Continue
@@ -254,7 +263,7 @@ export default function EpisodeThree({
       {phase === "context" && (
         <>
           <p style={body}>
-            When systems disagree, the response defines the intelligence.
+            When interpretations conflict, intelligence is revealed by response.
           </p>
           <button style={primaryBtn} onClick={() => setPhase("contradiction")}>
             Evaluate contradiction
@@ -273,7 +282,7 @@ export default function EpisodeThree({
           >
             Resolve contradiction
             <div style={choiceNote}>
-              Force alignment. Remove ambiguity.
+              Collapse uncertainty into a single coherent model.
             </div>
           </button>
 
@@ -286,7 +295,7 @@ export default function EpisodeThree({
           >
             Preserve contradiction
             <div style={choiceNote}>
-              Maintain parallel interpretations.
+              Maintain parallel interpretations despite tension.
             </div>
           </button>
         </>
@@ -303,7 +312,7 @@ export default function EpisodeThree({
           >
             Filter incoming signal
             <div style={choiceNote}>
-              Reduce noise. Prioritize certainty.
+              Reject noise. Optimize for certainty.
             </div>
           </button>
 
@@ -316,7 +325,7 @@ export default function EpisodeThree({
           >
             Listen to fragments
             <div style={choiceNote}>
-              Accept instability to gain insight.
+              Accept instability to gain deeper insight.
             </div>
           </button>
         </>
@@ -325,7 +334,7 @@ export default function EpisodeThree({
       {phase === "synthesis" && (
         <>
           <p style={body}>
-            This cognitive frame will persist.
+            This cognitive frame will persist across future evaluations.
           </p>
           <button style={primaryBtn} onClick={commit} disabled={submitting}>
             {submitting ? "COMMITTING…" : "Commit cognition"}
@@ -350,6 +359,7 @@ export default function EpisodeThree({
 /* ────────────────────────────────────────────── */
 
 const shell: CSSProperties = {
+  position: "relative",
   borderRadius: 28,
   padding: 24,
   color: "white",
