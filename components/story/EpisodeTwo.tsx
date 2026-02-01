@@ -373,84 +373,75 @@ export default function EpisodeTwo({
   /* ────────────────────────────────────────────── */
 
   async function commit() {
-    if (submitting || alreadySet) return;
+  if (submitting || alreadySet) return;
 
-    setError(null);
+  setError(null);
 
-    if (!resolvedTokenId || resolvedTokenId <= 0n) {
-      setError("INVALID TOKEN ID (FID NOT READY)");
-      return;
-    }
-
-    const cleaned = value.trim().toUpperCase();
-    const err = validateDesignation(cleaned);
-    if (err) {
-      setError(err);
-      return;
-    }
-
-    if (!readyToWrite) {
-      setError("CONNECT WALLET TO CONTINUE");
-      return;
-    }
-
-    const designationBytes7 = encodeDesignationBytes7(cleaned);
-
-    try {
-      setSubmitting(true);
-
-      if (!isBase) {
-        setChainStatus("Switching to Base…");
-        try {
-          await switchChainAsync({ chainId: BASE_CHAIN_ID });
-        } catch {
-          setError("SWITCH TO BASE IN WALLET TO CONTINUE");
-          setChainStatus("Wrong network");
-          return;
-        }
-      }
-
-      setChainStatus("Preparing transaction…");
-      const { request } = await publicClient!.simulateContract({
-        address: BASEBOTS_S2.address,
-        abi: BASEBOTS_S2.abi,
-        functionName: "setEpisode2Designation",
-        args: [resolvedTokenId, designationBytes7],
-        account: address!,
-      });
-
-      setChainStatus("Awaiting signature…");
-      const hash = await writeContractAsync(request as any);
-
-      setChainStatus("Finalizing on-chain…");
-      await publicClient!.waitForTransactionReceipt({ hash });
-
-      window.dispatchEvent(new Event("basebots-progress-updated"));
-
-      setExistingDesignation(cleaned);
-      setChainStatus(`Designation committed: ${cleaned}`);
-      setPhase("binding");
-      setTimeout(() => setPhase("approach"), 1400);
-    } catch (e: any) {
-      const msg = e?.shortMessage || e?.message || "TRANSACTION REJECTED";
-      setError(msg);
-
-      const low = String(msg).toLowerCase();
-      if (low.includes("nottokenowner")) {
-        setChainStatus("You must own this Basebot to bind designation");
-      } else if (low.includes("designationalreadyset")) {
-        setChainStatus("Designation already set");
-        setAlreadySet(true);
-        setPhase("approach");
-      } else if (low.includes("sequenc")) {
-        setChainStatus("Sequence violation (complete previous steps)");
-      } else {
-        setChainStatus("Transaction failed");
-      }
-    } finally {
-      setSubmitting(false);
-    }
+  if (!resolvedTokenId || resolvedTokenId <= 0n) {
+    setError("INVALID TOKEN ID (FID NOT READY)");
+    return;
   }
+
+  const cleaned = value.trim().toUpperCase();
+  const err = validateDesignation(cleaned);
+  if (err) {
+    setError(err);
+    return;
+  }
+
+  if (!readyToWrite) {
+    setError("CONNECT WALLET TO CONTINUE");
+    return;
+  }
+
+  const designationBytes7 = encodeDesignationBytes7(cleaned);
+
+  try {
+    setSubmitting(true);
+
+    if (!isBase) {
+      setChainStatus("Switching to Base…");
+      await switchChainAsync({ chainId: BASE_CHAIN_ID });
+    }
+
+    setChainStatus("Awaiting signature…");
+
+    const hash = await writeContractAsync({
+      address: BASEBOTS_S2.address,
+      abi: BASEBOTS_S2.abi,
+      functionName: "setEpisode2Designation",
+      args: [resolvedTokenId, designationBytes7],
+    });
+
+    setChainStatus("Finalizing on-chain…");
+    await publicClient!.waitForTransactionReceipt({ hash });
+
+    window.dispatchEvent(new Event("basebots-progress-updated"));
+
+    setExistingDesignation(cleaned);
+    setChainStatus(`Designation committed: ${cleaned}`);
+    setPhase("binding");
+    setTimeout(() => setPhase("approach"), 1400);
+  } catch (e: any) {
+    const msg = e?.shortMessage || e?.message || "TRANSACTION REJECTED";
+    setError(msg);
+
+    const low = msg.toLowerCase();
+    if (low.includes("nottokenowner")) {
+      setChainStatus("You must own this Basebot to bind designation");
+    } else if (low.includes("designationalreadyset")) {
+      setAlreadySet(true);
+      setPhase("approach");
+      setChainStatus("Designation already set");
+    } else if (low.includes("sequence")) {
+      setChainStatus("Sequence violation");
+    } else {
+      setChainStatus("Transaction failed");
+    }
+  } finally {
+    setSubmitting(false);
+  }
+}
 
   /* ────────────────────────────────────────────── */
   /* Render */
