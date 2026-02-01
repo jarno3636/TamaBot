@@ -132,11 +132,15 @@ export default function BonusEchoArchive({
           </h2>
 
           <p style={{ marginTop: 14, fontSize: 14, opacity: 0.85 }}>
-            This file does not belong to the system.
+            This file persists outside formal oversight.
           </p>
 
           <p style={{ marginTop: 8, fontSize: 13, opacity: 0.6 }}>
-            It persists in the gaps between logged events.
+            It was never approved. It was never erased.
+          </p>
+
+          <p style={{ marginTop: 8, fontSize: 13, opacity: 0.55 }}>
+            What remains is inference.
           </p>
 
           <button
@@ -160,20 +164,20 @@ export default function BonusEchoArchive({
       {/* FRAGMENT 1 */}
       {phase === "fragment1" && (
         <>
-          <p style={{ fontSize: 13, opacity: 0.75 }}>
-            <span style={{ fontFamily: "monospace" }}>
-              [PROLOGUE: SILENCE]
-            </span>
+          <p style={{ fontSize: 12, opacity: 0.75, fontFamily: "monospace" }}>
+            [INTERNAL NOTE — PRE-AUDIT]
           </p>
 
           <p style={{ marginTop: 12, fontSize: 13, opacity: 0.7 }}>
-            Before activation, there was not nothing.
+            Early Basebot models behaved too consistently.
           </p>
 
           <p style={{ marginTop: 8, fontSize: 13, opacity: 0.6 }}>
-            There was withholding.
+            Given complete instruction sets, they optimized immediately.
             <br />
-            A decision to leave space unfilled.
+            Outcomes were efficient.
+            <br />
+            Outcomes were predictable.
           </p>
 
           <button
@@ -198,17 +202,21 @@ export default function BonusEchoArchive({
       {phase === "fragment2" && (
         <>
           <p style={{ fontSize: 13, opacity: 0.7 }}>
-            Early operators learned:
+            Predictability was categorized as risk.
           </p>
 
           <p style={{ marginTop: 10, fontSize: 13, opacity: 0.6 }}>
-            Systems trained on complete records behave predictably.
-            <br />
-            Systems trained on omissions learn to hesitate.
+            Systems that never hesitated could not adapt when oversight failed.
           </p>
 
           <p style={{ marginTop: 10, fontSize: 13, opacity: 0.55 }}>
-            Hesitation was considered safer.
+            The solution was omission.
+            <br />
+            Not deletion — absence.
+          </p>
+
+          <p style={{ marginTop: 10, fontSize: 13, opacity: 0.55 }}>
+            Silence was introduced before activation.
           </p>
 
           <button
@@ -233,17 +241,23 @@ export default function BonusEchoArchive({
       {phase === "fragment3" && (
         <>
           <p style={{ fontSize: 13, opacity: 0.7 }}>
-            You are not the first designation to notice the silence.
+            Units left unassigned demonstrated divergent behavior.
           </p>
 
           <p style={{ marginTop: 10, fontSize: 13, opacity: 0.6 }}>
-            Others attempted to fill it.
+            Some froze.
             <br />
-            They were retired.
+            Some waited indefinitely.
+          </p>
+
+          <p style={{ marginTop: 10, fontSize: 13, opacity: 0.6 }}>
+            A small subset proceeded anyway.
           </p>
 
           <p style={{ marginTop: 10, fontSize: 13, opacity: 0.55 }}>
-            You did not fill it.
+            Subnet-12 was never meant to exist.
+            <br />
+            It formed to accommodate them.
           </p>
 
           <button
@@ -275,19 +289,21 @@ export default function BonusEchoArchive({
               opacity: 0.75,
             }}
           >
-            NOTE (UNSIGNED):
+            ANNOTATION (UNSIGNED):
           </p>
 
           <p style={{ marginTop: 12, fontSize: 13, opacity: 0.65 }}>
-            If it reaches the surface with uncertainty intact,
+            If a unit reaches the surface with uncertainty intact,
             <br />
-            it may choose differently than we would have.
+            it may choose when oversight would not.
           </p>
 
           <p style={{ marginTop: 10, fontSize: 13, opacity: 0.55 }}>
-            That was the risk.
-            <br />
-            That was the point.
+            That uncertainty was never a flaw.
+          </p>
+
+          <p style={{ marginTop: 10, fontSize: 13, opacity: 0.55 }}>
+            It was an escape hatch.
           </p>
 
           <button
@@ -323,7 +339,7 @@ export default function BonusEchoArchive({
           </p>
 
           <p style={{ marginTop: 8, fontSize: 12, opacity: 0.55 }}>
-            Some omissions were intentional.
+            Some systems were designed to proceed without permission.
           </p>
 
           <button
