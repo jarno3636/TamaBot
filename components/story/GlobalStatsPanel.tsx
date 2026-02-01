@@ -36,39 +36,49 @@ export default function GlobalStatsPanel() {
     abi: BASEBOTS_S2.abi,
     functionName: "getGlobalStats",
     args: [],
+    chainId: 8453, // 🔒 force Base
     query: { enabled: true },
   });
 
-  // data shape:
-  // [ totalFinalized, ep1Counts[5], biasCounts[5], profileCounts[5], outcomeCounts[6] ]
+  /**
+   * data shape:
+   * [
+   *  totalFinalized,
+   *  ep1Counts[5],
+   *  biasCounts[5],
+   *  profileCounts[5],
+   *  outcomeCounts[6]
+   * ]
+   */
   const parsed = useMemo(() => {
     const arr = Array.isArray(data) ? data : [];
-    const totalFinalizedRaw = arr[0] as unknown;
 
     const totalFinalized =
-      typeof totalFinalizedRaw === "bigint"
-        ? totalFinalizedRaw
+      typeof arr[0] === "bigint"
+        ? arr[0]
         : (() => {
             try {
-              return BigInt(String(totalFinalizedRaw ?? 0));
+              return BigInt(String(arr[0] ?? 0));
             } catch {
               return 0n;
             }
           })();
 
-    const ep1Counts = asBigintArray(arr[1], 5);
-    const biasCounts = asBigintArray(arr[2], 5);
-    const profileCounts = asBigintArray(arr[3], 5);
-    const outcomeCounts = asBigintArray(arr[4], 6);
-
-    return { totalFinalized, ep1Counts, biasCounts, profileCounts, outcomeCounts };
+    return {
+      totalFinalized,
+      ep1Counts: asBigintArray(arr[1], 5),
+      biasCounts: asBigintArray(arr[2], 5),
+      profileCounts: asBigintArray(arr[3], 5),
+      outcomeCounts: asBigintArray(arr[4], 6),
+    };
   }, [data]);
 
+  /* ✅ ENUM-ACCURATE LABELS */
   const labels = {
     ep1: ["ACCEPT", "STALL", "SPOOF", "PULL_PLUG", "OTHER"],
     bias: ["DETERMINISM", "NOVELTY", "OBEDIENCE", "ADAPTATION", "OTHER"],
-    profile: ["CORE", "OBSERVER", "SENTINEL", "GHOST", "OTHER"],
-    outcome: ["AUTHORIZED", "OBSERVED", "SILENT", "UNTRACKED", "FLAGGED", "OTHER"],
+    profile: ["EXECUTOR", "OBSERVER", "OPERATOR", "SENTINEL", "OTHER"],
+    outcome: ["NONE", "AUTHORIZED", "OBSERVED", "SILENT", "UNTRACKED", "FLAGGED"],
   };
 
   return (
@@ -82,7 +92,15 @@ export default function GlobalStatsPanel() {
         overflow: "hidden",
       }}
     >
-      <div style={{ padding: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+      <div
+        style={{
+          padding: 16,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+        }}
+      >
         <div>
           <div style={{ fontSize: 11, fontWeight: 950, letterSpacing: 1.4, opacity: 0.85 }}>
             LIVE AGGREGATION
@@ -94,8 +112,8 @@ export default function GlobalStatsPanel() {
             </span>
           </div>
           {isError && (
-            <div style={{ marginTop: 6, fontSize: 12, color: "#fb7185", opacity: 0.95 }}>
-              Stats read failed (RPC / ABI mismatch / network).
+            <div style={{ marginTop: 6, fontSize: 12, color: "#fb7185" }}>
+              Stats read failed (RPC / ABI / network).
             </div>
           )}
         </div>
@@ -131,17 +149,29 @@ export default function GlobalStatsPanel() {
           gap: 14,
         }}
       >
-        <StatGroup title="EP1 DIRECTIVE COUNTS" items={labels.ep1} values={parsed.ep1Counts} />
-        <StatGroup title="COGNITION BIAS COUNTS" items={labels.bias} values={parsed.biasCounts} />
-        <StatGroup title="PROFILE COUNTS" items={labels.profile} values={parsed.profileCounts} />
-        <StatGroup title="OUTCOME COUNTS" items={labels.outcome} values={parsed.outcomeCounts} />
+        <StatGroup title="EP1 DIRECTIVES" items={labels.ep1} values={parsed.ep1Counts} />
+        <StatGroup title="COGNITION BIASES" items={labels.bias} values={parsed.biasCounts} />
+        <StatGroup title="SURFACE PROFILES" items={labels.profile} values={parsed.profileCounts} />
+        <StatGroup title="FINAL OUTCOMES" items={labels.outcome} values={parsed.outcomeCounts} />
       </div>
     </div>
   );
 }
 
-function StatGroup({ title, items, values }: { title: string; items: string[]; values: bigint[] }) {
-  const rows = items.map((label, i) => ({ label, value: values[i] ?? 0n }));
+function StatGroup({
+  title,
+  items,
+  values,
+}: {
+  title: string;
+  items: string[];
+  values: bigint[];
+}) {
+  const rows = items.map((label, i) => ({
+    label,
+    value: values[i] ?? 0n,
+  }));
+
   const total = rows.reduce((a, r) => a + r.value, 0n);
 
   return (
@@ -159,13 +189,30 @@ function StatGroup({ title, items, values }: { title: string; items: string[]; v
 
       <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
         {rows.map((r) => {
-          const pct = total > 0n ? Number((r.value * 10000n) / total) / 100 : 0;
+          const pct =
+            total > 0n ? Number((r.value * 10000n) / total) / 100 : 0;
+
+          const isOther = r.label === "OTHER" || r.label === "NONE";
+
           return (
-            <div key={r.label} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, alignItems: "center" }}>
-              <div style={{ fontSize: 12, opacity: 0.78 }}>{r.label}</div>
-              <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.92 }}>
+            <div
+              key={r.label}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr auto",
+                gap: 10,
+                alignItems: "center",
+                opacity: isOther ? 0.55 : 1,
+              }}
+            >
+              <div style={{ fontSize: 12 }}>{r.label}</div>
+              <div style={{ fontSize: 12, fontWeight: 900 }}>
                 {fmt(r.value)}{" "}
-                <span style={{ fontSize: 11, opacity: 0.6 }}>{total > 0n ? `(${pct.toFixed(1)}%)` : ""}</span>
+                {total > 0n && (
+                  <span style={{ fontSize: 11, opacity: 0.6 }}>
+                    ({pct.toFixed(1)}%)
+                  </span>
+                )}
               </div>
             </div>
           );
