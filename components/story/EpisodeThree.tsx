@@ -333,74 +333,60 @@ export default function EpisodeThree({
   /* ────────────────────────────────────────────── */
 
   async function commit() {
-    // NEVER silently do nothing
-    if (submitting) return;
-    if (alreadySet) {
-      setChainStatus("Already locked");
-      return;
-    }
-    if (!resolvedTokenId || resolvedTokenId <= 0n) {
-      setChainStatus("Identity not ready");
-      return;
-    }
-    if (!publicClient) {
-      setChainStatus("No public client");
-      return;
-    }
-    if (!address) {
-      setChainStatus("Connect wallet to continue");
-      return;
-    }
-
-    const s = loadState();
-    if (!s.contradiction || !s.signal) {
-      setChainStatus("Make both choices first");
-      return;
-    }
-
-    let bias = 2; // PRAGMATIC
-    if (s.contradiction === "RESOLVE" && s.signal === "FILTER") bias = 0; // DETERMINISTIC
-    if (s.contradiction === "PRESERVE" && s.signal === "LISTEN") bias = 1; // ARCHIVAL
-    if (s.contradiction === "PRESERVE" && s.signal === "FILTER") bias = 3; // PARANOID
-
-    try {
-      setSubmitting(true);
-
-      if (!isBase) {
-        setChainStatus("Switching to Base…");
-        await switchChainAsync({ chainId: BASE_CHAIN_ID });
-      }
-
-      setChainStatus("Preparing transaction…");
-
-      const { request } = await publicClient.simulateContract({
-        address: BASEBOTS_S2.address,
-        abi: BASEBOTS_S2.abi,
-        functionName: "setEpisode3",
-        args: [resolvedTokenId, bias],
-        account: address,
-      });
-
-      setChainStatus("Awaiting signature…");
-
-      const hash = await writeContractAsync(request);
-
-      setChainStatus("Finalizing on-chain…");
-      await publicClient.waitForTransactionReceipt({ hash });
-
-      try {
-        window.dispatchEvent(new Event("basebots-progress-updated"));
-      } catch {}
-
-      setPhase("lock");
-      setChainStatus("Cognitive frame locked");
-    } catch (e: any) {
-      const msg = e?.shortMessage || e?.message || "Transaction failed";
-      setChainStatus(msg);
-    } finally {
-      setSubmitting(false);
-    }
+  if (submitting) return;
+  if (alreadySet) {
+    setChainStatus("Already locked");
+    return;
   }
+  if (!resolvedTokenId || resolvedTokenId <= 0n) {
+    setChainStatus("Identity not ready");
+    return;
+  }
+  if (!address) {
+    setChainStatus("Connect wallet to continue");
+    return;
+  }
+
+  const s = loadState();
+  if (!s.contradiction || !s.signal) {
+    setChainStatus("Make both choices first");
+    return;
+  }
+
+  let bias = 2; // PRAGMATIC
+  if (s.contradiction === "RESOLVE" && s.signal === "FILTER") bias = 0;
+  if (s.contradiction === "PRESERVE" && s.signal === "LISTEN") bias = 1;
+  if (s.contradiction === "PRESERVE" && s.signal === "FILTER") bias = 3;
+
+  try {
+    setSubmitting(true);
+
+    if (!isBase) {
+      setChainStatus("Switching to Base…");
+      await switchChainAsync({ chainId: BASE_CHAIN_ID });
+    }
+
+    setChainStatus("Awaiting signature…");
+
+    const hash = await writeContractAsync({
+      address: BASEBOTS_S2.address,
+      abi: BASEBOTS_S2.abi,
+      functionName: "setEpisode3",
+      args: [resolvedTokenId, bias],
+    });
+
+    setChainStatus("Finalizing on-chain…");
+    await publicClient!.waitForTransactionReceipt({ hash });
+
+    window.dispatchEvent(new Event("basebots-progress-updated"));
+    setPhase("lock");
+    setChainStatus("Cognitive frame locked");
+  } catch (e: any) {
+    setChainStatus(e?.shortMessage || e?.message || "Transaction failed");
+  } finally {
+    setSubmitting(false);
+  }
+}
 
   /* ────────────────────────────────────────────── */
   /* Render */
