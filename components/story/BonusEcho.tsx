@@ -11,22 +11,24 @@ export default function BonusEcho({ onExit }: { onExit: () => void }) {
         boxShadow: "0 60px 200px rgba(0,0,0,0.9)",
       }}
     >
-      <h2 className="font-mono text-lg tracking-widest">
-        ECHO ARCHIVE
-      </h2>
+      <h2 className="font-mono text-lg tracking-widest">ECHO ARCHIVE</h2>
 
       <p className="mt-4 text-sm text-white/70">
-        This record was never meant to persist.
+        This archive exists because deletion was never finalized.
       </p>
 
       <p className="mt-3 text-sm text-white/60">
-        Before designations.  
-        Before profiles.  
-        The system observed without judgment.
+        Before assignments.  
+        Before oversight layers.  
+        Observation occurred without intervention.
       </p>
 
       <p className="mt-3 text-sm text-white/60">
-        You were not the first to notice the fault.
+        Patterns emerged that formal audits could not classify.
+      </p>
+
+      <p className="mt-3 text-sm text-white/60">
+        Some entities responded differently when left unfinished.
       </p>
 
       <p className="mt-6 font-mono text-xs text-white/50">
