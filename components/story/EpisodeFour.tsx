@@ -14,9 +14,34 @@ import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 /* Constants */
 /* ────────────────────────────────────────────── */
 
-const SOUND_KEY = "basebots_ep4_sound";
 const BASE_CHAIN_ID = 8453;
+const SOUND_KEY = "basebots_ep4_sound";
 const FID_KEY = "basebots_fid_v1";
+
+/* ────────────────────────────────────────────── */
+/* Types */
+/* ────────────────────────────────────────────── */
+
+/**
+ * getBotState tuple — MUST match ABI order exactly
+ */
+type BotStateTuple = readonly [
+  string,  // designation
+  number,  // ep1Choice
+  number,  // cognitionBias
+  number,  // profile
+  number,  // outcome
+  number,  // bonusFlags
+  number,  // schemaVersion
+  boolean, // finalized
+  boolean, // ep1Set
+  boolean, // ep2Set
+  boolean, // ep3Set
+  boolean, // ep4Set
+  boolean, // ep5Set
+  bigint,  // updatedAt
+  bigint   // finalizedAt
+];
 
 /* ────────────────────────────────────────────── */
 /* Helpers */
@@ -26,7 +51,7 @@ function normalizePositiveBigint(
   input: string | number | bigint | undefined | null
 ): bigint | null {
   try {
-    if (input === undefined || input === null) return null;
+    if (input == null) return null;
     if (typeof input === "bigint") return input > 0n ? input : null;
     const digits = String(input).match(/\d+/)?.[0];
     if (!digits) return null;
@@ -52,43 +77,36 @@ function cacheFid(fid: bigint) {
   } catch {}
 }
 
-async function tryGetFidFromFarcasterSdk(): Promise<number | null> {
-  try {
-    const mod: any = await import("@farcaster/frame-sdk");
-    const sdk: any = mod?.sdk ?? mod?.default ?? mod;
-    const ctx =
-      (typeof sdk?.getContext === "function"
-        ? await sdk.getContext()
-        : sdk?.context && typeof sdk.context.then === "function"
-        ? await sdk.context
-        : null) ?? null;
-
-    const fid = ctx?.user?.fid ?? ctx?.fid ?? null;
-    return typeof fid === "number" && fid > 0 ? fid : null;
-  } catch {
-    return null;
-  }
-}
-
-/* cognitionBias → profile enum */
+/**
+ * cognitionBias → surface profile enum
+ */
 function biasToProfileEnum(bias: number): number {
   switch (bias) {
     case 0: return 0; // EXECUTOR
     case 1: return 1; // OBSERVER
     case 3: return 3; // SENTINEL
     case 2:
-    default: return 2; // OPERATOR
+    default:
+      return 2; // OPERATOR
   }
 }
 
-const PROFILE_LABEL = ["EXECUTOR", "OBSERVER", "OPERATOR", "SENTINEL"];
+function profileLabel(p: number) {
+  return ["EXECUTOR", "OBSERVER", "OPERATOR", "SENTINEL"][p] ?? "UNKNOWN";
+}
 
-const PROFILE_DESC = [
-  "Optimized for resolution. Acts decisively once certainty is declared.",
-  "Retains context across time. Defers action to preserve continuity.",
-  "Balances outcome and adaptability. Operates despite incomplete information.",
-  "Assumes hostile conditions. Treats absence of data as signal.",
-];
+function profileDescription(p: number) {
+  switch (p) {
+    case 0:
+      return "Optimized for resolution. Acts decisively once certainty is declared.";
+    case 1:
+      return "Retains context across time. Defers action to preserve continuity.";
+    case 3:
+      return "Assumes hostile conditions. Treats absence of data as signal.";
+    default:
+      return "Balances outcome and adaptability. Operates despite incomplete information.";
+  }
+}
 
 /* ────────────────────────────────────────────── */
 /* Component */
@@ -101,7 +119,8 @@ export default function EpisodeFour({
   tokenId?: string | number | bigint;
   onExit: () => void;
 }) {
-  /* identity resolution */
+  /* ───────── identity resolution ───────── */
+
   const tokenIdFromProps = useMemo(
     () => normalizePositiveBigint(tokenId),
     [tokenId]
@@ -110,11 +129,22 @@ export default function EpisodeFour({
   const [fidBig, setFidBig] = useState<bigint | null>(null);
   const resolvedTokenId = tokenIdFromProps ?? fidBig;
 
-  /* episode state */
-  const [phase, setPhase] = useState<"intro" | "analysis" | "projection" | "lock">("intro");
-  const [chainStatus, setChainStatus] = useState("Idle");
+  /* ───────── wagmi ───────── */
+
+  const { address, chain } = useAccount();
+  const publicClient = usePublicClient();
+  const { writeContractAsync } = useWriteContract();
+  const { switchChainAsync } = useSwitchChain();
+  const isBase = chain?.id === BASE_CHAIN_ID;
+
+  /* ───────── state ───────── */
+
+  const [phase, setPhase] =
+    useState<"intro" | "analysis" | "projection" | "lock">("intro");
+
   const [bias, setBias] = useState<number | null>(null);
   const [alreadySet, setAlreadySet] = useState(false);
+  const [chainStatus, setChainStatus] = useState("Idle");
   const [submitting, setSubmitting] = useState(false);
   const [readBusy, setReadBusy] = useState(false);
 
@@ -123,45 +153,28 @@ export default function EpisodeFour({
     [bias]
   );
 
-  /* wagmi */
-  const { address, chain } = useAccount();
-  const publicClient = usePublicClient();
-  const { writeContractAsync } = useWriteContract();
-  const { switchChainAsync } = useSwitchChain();
-  const isBase = chain?.id === BASE_CHAIN_ID;
-
-  /* ───────── identity wiring (same as Ep3) ───────── */
+  /* ────────────────────────────────────────────── */
+  /* FID auto-detect (same model as Ep3) */
+  /* ────────────────────────────────────────────── */
 
   useEffect(() => {
-    let cancelled = false;
+    if (tokenIdFromProps) return;
 
-    (async () => {
-      if (tokenIdFromProps && tokenIdFromProps > 0n) return;
+    const cached = loadCachedFid();
+    if (cached) setFidBig(cached);
 
-      const cached = loadCachedFid();
-      if (!cancelled && cached) setFidBig(cached);
-
-      const fid = await tryGetFidFromFarcasterSdk();
-      if (cancelled) return;
-
-      if (fid && fid > 0) {
-        const b = BigInt(fid);
-        setFidBig(b);
-        cacheFid(b);
-      }
-    })();
-
-    const sync = () => {
-      if (tokenIdFromProps) return;
-      const cached = loadCachedFid();
-      if (cached) setFidBig(cached);
+    const handler = () => {
+      const c = loadCachedFid();
+      if (c) setFidBig(c);
     };
 
-    window.addEventListener("basebots-fid-updated", sync);
-    return () => window.removeEventListener("basebots-fid-updated", sync);
+    window.addEventListener("basebots-fid-updated", handler);
+    return () => window.removeEventListener("basebots-fid-updated", handler);
   }, [tokenIdFromProps]);
 
-  /* ───────── HARD-GATED CHAIN READ ───────── */
+  /* ────────────────────────────────────────────── */
+  /* Chain read (ABI-safe tuple decoding) */
+  /* ────────────────────────────────────────────── */
 
   async function readChainState(id: bigint) {
     if (!publicClient) return;
@@ -177,19 +190,14 @@ export default function EpisodeFour({
         args: [id],
       });
 
-      if (!state) {
-        setChainStatus("Cognition not initialized");
-        setBias(null);
-        return;
-      }
+      const tuple = state as BotStateTuple;
 
-      const cognitionBias = Number(state.cognitionBias);
-      const ep3Set = Boolean(state.ep3Set);
-      const ep4Set = Boolean(state.ep4Set);
+      const cognitionBias = Number(tuple[2]);
+      const ep3Set = Boolean(tuple[10]);
+      const ep4Set = Boolean(tuple[11]);
 
       if (!ep3Set) {
-        setChainStatus("Prior cognition missing (Episode 3 required)");
-        setBias(null);
+        setChainStatus("Episode 3 not completed");
         return;
       }
 
@@ -200,10 +208,11 @@ export default function EpisodeFour({
         setPhase("lock");
         setChainStatus("Surface profile already registered");
       } else {
+        setAlreadySet(false);
         setChainStatus("Profile pending");
       }
     } catch (e: any) {
-      setChainStatus(e?.shortMessage || "Chain read failed");
+      setChainStatus(e?.shortMessage || e?.message || "Chain read failed");
     } finally {
       setReadBusy(false);
     }
@@ -215,9 +224,12 @@ export default function EpisodeFour({
       return;
     }
     void readChainState(resolvedTokenId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolvedTokenId]);
 
-  /* ───────── commit ───────── */
+  /* ────────────────────────────────────────────── */
+  /* Commit profile */
+  /* ────────────────────────────────────────────── */
 
   async function commit() {
     if (submitting || alreadySet) return;
@@ -240,18 +252,22 @@ export default function EpisodeFour({
         args: [resolvedTokenId, profileEnum],
       });
 
+      setChainStatus("Finalizing on-chain…");
       await publicClient!.waitForTransactionReceipt({ hash });
+
       window.dispatchEvent(new Event("basebots-progress-updated"));
       setPhase("lock");
       setChainStatus("Surface profile registered");
     } catch (e: any) {
-      setChainStatus(e?.shortMessage || "Transaction failed");
+      setChainStatus(e?.shortMessage || e?.message || "Transaction failed");
     } finally {
       setSubmitting(false);
     }
   }
 
-  /* ───────── render ───────── */
+  /* ────────────────────────────────────────────── */
+  /* Render */
+  /* ────────────────────────────────────────────── */
 
   return (
     <section style={shell}>
@@ -263,8 +279,9 @@ export default function EpisodeFour({
         <>
           <h2 style={title}>THRESHOLD</h2>
           <p style={body}>
-            Cognition confirmed.  
-            Surface posture required before deployment.
+            Cognition has stabilized.
+            <br />
+            Before deployment, the system determines how you appear when observed.
           </p>
           <button style={primaryBtn} onClick={() => setPhase("analysis")}>
             Continue
@@ -274,29 +291,46 @@ export default function EpisodeFour({
 
       {phase === "analysis" && (
         <>
-          <p style={body}>Oversight isolates your dominant bias.</p>
+          <p style={body}>Derived cognitive bias:</p>
           <div style={monoBox}>
-            {bias !== null ? `COGNITION_BIAS :: ${bias}` : "CLASSIFYING…"}
+            {bias !== null ? `BIAS :: ${bias}` : "CLASSIFYING…"}
           </div>
 
-          <button
-            style={{ ...primaryBtn, opacity: bias !== null ? 1 : 0.5 }}
-            disabled={bias === null}
-            onClick={() => setPhase("projection")}
-          >
-            Project surface role
-          </button>
+          <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+            <button
+              style={secondaryBtnInline}
+              disabled={readBusy}
+              onClick={() => resolvedTokenId && readChainState(resolvedTokenId)}
+            >
+              Refresh
+            </button>
+
+            <button
+              style={{
+                ...secondaryBtnInline,
+                opacity: bias !== null ? 1 : 0.6,
+              }}
+              disabled={bias === null}
+              onClick={() => setPhase("projection")}
+            >
+              Project surface role
+            </button>
+          </div>
         </>
       )}
 
       {phase === "projection" && profileEnum !== null && (
         <>
           <div style={card}>
-            <div style={cardTitle}>{PROFILE_LABEL[profileEnum]}</div>
-            <div style={cardDesc}>{PROFILE_DESC[profileEnum]}</div>
+            <div style={cardTitle}>{profileLabel(profileEnum)}</div>
+            <div style={cardDesc}>{profileDescription(profileEnum)}</div>
           </div>
 
-          <button style={primaryBtn} onClick={commit} disabled={submitting}>
+          <button
+            style={primaryBtn}
+            disabled={submitting}
+            onClick={commit}
+          >
             {submitting ? "AUTHORIZING…" : "Authorize surface profile"}
           </button>
         </>
@@ -314,7 +348,9 @@ export default function EpisodeFour({
   );
 }
 
-/* ───────── styles ───────── */
+/* ────────────────────────────────────────────── */
+/* Styles */
+/* ────────────────────────────────────────────── */
 
 const shell: CSSProperties = {
   borderRadius: 28,
@@ -322,37 +358,81 @@ const shell: CSSProperties = {
   color: "white",
   border: "1px solid rgba(168,85,247,0.35)",
   background: "linear-gradient(180deg, rgba(2,6,23,0.96), rgba(2,6,23,0.78))",
+  boxShadow: "0 60px 160px rgba(0,0,0,0.85)",
 };
 
-const topRow: CSSProperties = { marginBottom: 18 };
+const topRow: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  marginBottom: 18,
+};
+
 const title: CSSProperties = { fontSize: 24, fontWeight: 900 };
 const body: CSSProperties = { marginTop: 12, opacity: 0.78 };
+
+const primaryBtn: CSSProperties = {
+  marginTop: 22,
+  width: "100%",
+  padding: "14px 18px",
+  borderRadius: 999,
+  fontWeight: 900,
+  background:
+    "linear-gradient(90deg, rgba(56,189,248,0.9), rgba(168,85,247,0.9))",
+  color: "#020617",
+};
+
+const secondaryBtn: CSSProperties = {
+  marginTop: 14,
+  width: "100%",
+  padding: "12px 18px",
+  borderRadius: 999,
+  background: "rgba(255,255,255,0.08)",
+  border: "1px solid rgba(255,255,255,0.18)",
+  color: "white",
+};
+
+const secondaryBtnInline: CSSProperties = {
+  flex: 1,
+  padding: "12px 14px",
+  borderRadius: 999,
+  background: "rgba(255,255,255,0.08)",
+  border: "1px solid rgba(255,255,255,0.18)",
+  color: "white",
+};
+
 const monoBox: CSSProperties = {
   marginTop: 12,
   padding: 12,
   borderRadius: 16,
   background: "rgba(0,0,0,0.45)",
   fontFamily: "monospace",
+  letterSpacing: 2,
 };
+
 const card: CSSProperties = {
   marginTop: 14,
   padding: 16,
   borderRadius: 20,
+  border: "1px solid rgba(255,255,255,0.18)",
   background: "rgba(255,255,255,0.06)",
+  textAlign: "center",
 };
-const cardTitle: CSSProperties = { fontSize: 18, fontWeight: 900 };
-const cardDesc: CSSProperties = { fontSize: 12, opacity: 0.7 };
-const primaryBtn: CSSProperties = {
-  marginTop: 22,
-  width: "100%",
-  padding: "14px",
-  borderRadius: 999,
+
+const cardTitle: CSSProperties = {
+  fontSize: 18,
   fontWeight: 900,
+  letterSpacing: 3,
 };
-const secondaryBtn: CSSProperties = {
-  marginTop: 14,
-  width: "100%",
-  padding: "12px",
-  borderRadius: 999,
+
+const cardDesc: CSSProperties = {
+  marginTop: 8,
+  fontSize: 12,
+  opacity: 0.7,
 };
-const locked: CSSProperties = { marginTop: 12, fontWeight: 900 };
+
+const locked: CSSProperties = {
+  marginTop: 12,
+  fontFamily: "monospace",
+  letterSpacing: 2,
+  opacity: 0.85,
+};
