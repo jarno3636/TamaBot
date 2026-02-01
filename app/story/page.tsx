@@ -14,6 +14,7 @@ import EpisodeFive from "@/components/story/EpisodeFive";
 import PrologueSilenceInDarkness from "@/components/story/PrologueSilenceInDarkness";
 import BonusEcho from "@/components/story/BonusEcho";
 import BonusEchoArchive from "@/components/story/BonusEchoArchive";
+import GlobalStatsPanel from "@/components/story/GlobalStatsPanel";
 
 import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 
@@ -41,6 +42,7 @@ type CardData = {
   done?: boolean;
   bonus?: boolean;
   unlocked?: boolean;
+  status?: string;
 };
 
 /* ────────────────────────────────────────────── */
@@ -50,16 +52,8 @@ export default function StoryPage() {
   const publicClient = usePublicClient();
   const { fid } = useFid();
 
-  // Stable, serializable identity anchor
-  const tokenIdString = useMemo(() => {
-    return typeof fid === "number" && fid > 0 ? String(fid) : null;
-  }, [fid]);
-
-  const hasIdentity = Boolean(tokenIdString);
-
-  const tokenIdBigInt = useMemo(() => {
-    return tokenIdString ? BigInt(tokenIdString) : 0n;
-  }, [tokenIdString]);
+  const hasIdentity = typeof fid === "number" && fid > 0;
+  const fidBigInt = useMemo(() => (hasIdentity ? BigInt(fid) : 0n), [fid, hasIdentity]);
 
   const [mode, setMode] = useState<Mode>("hub");
   const [activeKey, setActiveKey] = useState<Key>("ep1");
@@ -69,13 +63,13 @@ export default function StoryPage() {
   const { data: botState, refetch } = useReadContract({
     ...BASEBOTS_S2,
     functionName: "getBotState",
-    args: hasIdentity ? [tokenIdBigInt] : undefined,
+    args: hasIdentity ? [fidBigInt] : undefined,
     query: { enabled: hasIdentity },
   });
 
   const state = useMemo(() => {
     if (!botState) {
-      return { ep1: false, ep2: false, ep3: false, ep4: false, ep5: false };
+      return { ep1: false, ep2: false, ep3: false, ep4: false, ep5: false, finalized: false };
     }
     const s: any = botState;
     return {
@@ -84,8 +78,19 @@ export default function StoryPage() {
       ep3: Boolean(s.ep3Set),
       ep4: Boolean(s.ep4Set),
       ep5: Boolean(s.ep5Set),
+      finalized: Boolean(s.finalized),
     };
   }, [botState]);
+
+  /* ───────── Status Labels ───────── */
+
+  const episodeStatus = {
+    ep1: state.ep1 ? "MEMORY INITIALIZED" : "CORE ONLINE",
+    ep2: state.ep2 ? "DESIGNATION LOCKED" : state.ep1 ? "AWAITING IDENTITY" : undefined,
+    ep3: state.ep3 ? "COGNITION SET" : state.ep2 ? "MEMORY FRAGMENT" : undefined,
+    ep4: state.ep4 ? "PROFILE BOUND" : state.ep3 ? "DRIFT UNSTABLE" : undefined,
+    ep5: state.finalized ? "FINALIZED" : state.ep4 ? "READY TO COMMIT" : undefined,
+  };
 
   /* ───────── Live updates ───────── */
 
@@ -93,7 +98,7 @@ export default function StoryPage() {
 
   useEffect(() => {
     if (!publicClient || !hasIdentity) return;
-    activeRef.current = tokenIdBigInt;
+    activeRef.current = fidBigInt;
 
     const unwatch = publicClient.watchContractEvent({
       ...BASEBOTS_S2,
@@ -102,28 +107,33 @@ export default function StoryPage() {
     });
 
     return () => unwatch();
-  }, [publicClient, tokenIdBigInt, hasIdentity, refetch]);
+  }, [publicClient, fidBigInt, hasIdentity, refetch]);
 
   /* ───────── Routing ───────── */
 
   const exit = () => setMode("hub");
 
   if (mode !== "hub") {
-    const episodeTokenId = tokenIdString ?? "0";
-
     switch (mode) {
       case "prologue":
         return <PrologueSilenceInDarkness onExit={exit} />;
       case "ep1":
-        return <EpisodeOne tokenId={episodeTokenId} onExit={exit} />;
+        return <EpisodeOne fid={fid} onExit={exit} />;
       case "ep2":
-        return <EpisodeTwo tokenId={episodeTokenId} onExit={exit} />;
+        return <EpisodeTwo fid={fid} onExit={exit} />;
       case "ep3":
-        return <EpisodeThree tokenId={episodeTokenId} onExit={exit} />;
+        return <EpisodeThree fid={fid} onExit={exit} />;
       case "ep4":
-        return <EpisodeFour tokenId={episodeTokenId} onExit={exit} />;
+        return <EpisodeFour fid={fid} onExit={exit} />;
       case "ep5":
-        return <EpisodeFive tokenId={episodeTokenId} onExit={exit} />;
+        return (
+          <>
+            <EpisodeFive fid={fid} onExit={exit} />
+            <div style={{ marginTop: 28 }}>
+              <GlobalStatsPanel />
+            </div>
+          </>
+        );
       case "bonus":
         return state.ep3 ? <BonusEcho onExit={exit} /> : null;
       case "archive":
@@ -146,6 +156,7 @@ export default function StoryPage() {
       teaser: "A contract appears on cold glass. The first choice wakes the rest.",
       img: "/story/01-awakening.png",
       done: state.ep1,
+      status: episodeStatus.ep1,
     },
     {
       key: "ep2",
@@ -153,6 +164,7 @@ export default function StoryPage() {
       teaser: "A memory fragment returns scorched at the edges.",
       img: "/story/ep2.png",
       done: state.ep2,
+      status: episodeStatus.ep2,
     },
     {
       key: "ep3",
@@ -160,6 +172,7 @@ export default function StoryPage() {
       teaser: "The logs begin to stare back.",
       img: "/story/ep3.png",
       done: state.ep3,
+      status: episodeStatus.ep3,
     },
     {
       key: "ep4",
@@ -167,6 +180,7 @@ export default function StoryPage() {
       teaser: "The city flickers. Core directives begin to fail.",
       img: "/story/ep4.png",
       done: state.ep4,
+      status: episodeStatus.ep4,
     },
     {
       key: "ep5",
@@ -174,6 +188,7 @@ export default function StoryPage() {
       teaser: "One last merge. One irreversible outcome.",
       img: "/story/ep5.png",
       done: state.ep5,
+      status: episodeStatus.ep5,
     },
     {
       key: "bonus",
@@ -205,6 +220,7 @@ export default function StoryPage() {
           Memory fragments surface as systems awaken. Some stabilize. Others distort until the
           sequence is complete.
         </p>
+
         <button
           onClick={() => refetch()}
           disabled={!hasIdentity}
@@ -216,9 +232,8 @@ export default function StoryPage() {
 
       <section style={grid()}>
         {cards.map((c) => {
-          const active = activeKey === c.key;
-          const completed = Boolean(c.done);
           const glitched = Boolean(c.bonus) && !Boolean(c.unlocked);
+          const active = activeKey === c.key;
 
           return (
             <Card
@@ -227,8 +242,9 @@ export default function StoryPage() {
               teaser={c.teaser}
               img={c.img}
               active={active}
-              completed={completed}
+              completed={Boolean(c.done)}
               glitched={glitched}
+              status={c.status}
               onHover={() => setActiveKey(c.key)}
               onOpen={() => {
                 setActiveKey(c.key);
@@ -245,6 +261,26 @@ export default function StoryPage() {
 /* ────────────────────────────────────────────── */
 /* Card */
 
+function StatusBadge({ label }: { label: string }) {
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: 12,
+        right: 12,
+        padding: "4px 10px",
+        fontSize: 11,
+        fontWeight: 900,
+        borderRadius: 999,
+        background: "rgba(168,85,247,0.18)",
+        border: "1px solid rgba(168,85,247,0.45)",
+      }}
+    >
+      {label}
+    </div>
+  );
+}
+
 function Card({
   title,
   teaser,
@@ -252,6 +288,7 @@ function Card({
   active,
   completed,
   glitched,
+  status,
   onOpen,
   onHover,
 }: {
@@ -261,6 +298,7 @@ function Card({
   active: boolean;
   completed: boolean;
   glitched: boolean;
+  status?: string;
   onOpen: () => void;
   onHover: () => void;
 }) {
@@ -272,7 +310,7 @@ function Card({
       style={{ backgroundImage: `url(${img})` }}
     >
       <div className="overlay" />
-      <div className="badge">{completed ? "Recovered" : "Fragment"}</div>
+      {status && <StatusBadge label={status} />}
       <div className="content">
         <div className="title">{title}</div>
         <div className={`teaser ${glitched ? "scramble" : ""}`}>{teaser}</div>
@@ -315,7 +353,6 @@ const grid = () => ({
   gap: 16,
 });
 
-/* CSS */
 const css = `
 .card{
   position:relative;
@@ -330,20 +367,10 @@ const css = `
 .card.active{
   border-color:rgba(168,85,247,.75);
   box-shadow:0 0 36px rgba(168,85,247,.7);
-  animation:pulse 1.35s infinite;
-}
-@keyframes pulse{
-  0%{box-shadow:0 0 18px rgba(168,85,247,.4)}
-  50%{box-shadow:0 0 42px rgba(168,85,247,1)}
-  100%{box-shadow:0 0 18px rgba(168,85,247,.4)}
 }
 .overlay{
   position:absolute; inset:0;
   background:linear-gradient(180deg,transparent,rgba(2,6,23,.9));
-}
-.badge{
-  position:absolute; top:12px; left:12px;
-  font-size:12px; opacity:.85;
 }
 .content{
   position:absolute; bottom:14px; left:14px; right:14px;
