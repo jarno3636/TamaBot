@@ -160,7 +160,7 @@ function decodeBotState(botState: any): ChainState {
 
 export default function StoryPage() {
   const publicClient = usePublicClient();
-  const { fid } = useFid();
+  const { fid, fidNum } = useFid();
 
   const hasIdentity = typeof fid === "number" && fid > 0;
   const fidBigInt = useMemo(() => (hasIdentity ? BigInt(fid) : 0n), [fid, hasIdentity]);
