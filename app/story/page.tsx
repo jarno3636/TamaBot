@@ -19,6 +19,8 @@ import GlobalStatsPanel from "@/components/story/GlobalStatsPanel";
 import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 
 /* ────────────────────────────────────────────── */
+/* Types */
+/* ────────────────────────────────────────────── */
 
 type Mode =
   | "hub"
@@ -49,11 +51,12 @@ type ChainState = {
 };
 
 /* ────────────────────────────────────────────── */
+/* Constants */
+/* ────────────────────────────────────────────── */
 
 const SOUND_KEY = "basebots_sound";
 const AUDIO_SRC = "/audio/s1.mp3";
 
-/* Episode Images */
 const IMAGES: Record<Mode, string> = {
   hub: "",
   prologue: "/story/prologue.png",
@@ -66,28 +69,19 @@ const IMAGES: Record<Mode, string> = {
   archive: "/story/b2.png",
 };
 
+/* ────────────────────────────────────────────── */
+/* Helpers */
+/* ────────────────────────────────────────────── */
+
 function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
 }
 
 function fmtTs(ts?: number) {
   if (!ts) return "—";
-  // contract uses uint40 seconds, assume seconds
-  const ms = ts * 1000;
-  try {
-    return new Date(ms).toLocaleString();
-  } catch {
-    return String(ts);
-  }
+  return new Date(ts * 1000).toLocaleString();
 }
 
-/**
- * Robust tuple decoding:
- * wagmi/viem sometimes returns named object, sometimes array-like tuple.
- * ABI order (per your ABI):
- * 0 designation, 1 ep1Choice, 2 cognitionBias, 3 profile, 4 outcome, 5 schemaVersion,
- * 6 finalized, 7 ep1Set, 8 ep2Set, 9 ep3Set, 10 ep4Set, 11 ep5Set, 12 updatedAt, 13 finalizedAt
- */
 function decodeBotState(botState: any): ChainState {
   const empty: ChainState = {
     finalized: false,
@@ -100,62 +94,30 @@ function decodeBotState(botState: any): ChainState {
   if (!botState) return empty;
 
   const s: any = botState;
-
-  // If it’s array-like tuple
-  const isTupleArray = Array.isArray(s);
-
-  const get = (key: string, idx: number) => {
-    if (!s) return undefined;
-    if (!isTupleArray && typeof s === "object" && key in s) return s[key];
-    if (isTupleArray) return s[idx];
-    // viem sometimes returns array with named props too—try both:
-    return (s as any)[key] ?? (s as any)[idx];
-  };
-
-  const designation = get("designation", 0);
-  const ep1Choice = get("ep1Choice", 1);
-  const cognitionBias = get("cognitionBias", 2);
-  const profile = get("profile", 3);
-  const outcome = get("outcome", 4);
-  const schemaVersion = get("schemaVersion", 5);
-
-  const finalized = Boolean(get("finalized", 6));
-  const ep1 = Boolean(get("ep1Set", 7));
-  const ep2 = Boolean(get("ep2Set", 8));
-  const ep3 = Boolean(get("ep3Set", 9));
-  const ep4 = Boolean(get("ep4Set", 10));
-  const ep5 = Boolean(get("ep5Set", 11));
-
-  const updatedAtRaw = get("updatedAt", 12);
-  const finalizedAtRaw = get("finalizedAt", 13);
-
-  const updatedAt = updatedAtRaw != null ? Number(updatedAtRaw) : undefined;
-  const finalizedAt = finalizedAtRaw != null ? Number(finalizedAtRaw) : undefined;
-
-  // bytes7 -> nice string-ish if needed
-  const designationStr =
-    typeof designation === "string"
-      ? designation
-      : designation?.toString?.() ?? undefined;
+  const isArr = Array.isArray(s);
+  const get = (k: string, i: number) =>
+    !isArr && k in s ? s[k] : s[i];
 
   return {
-    designation: designationStr,
-    ep1Choice: ep1Choice != null ? Number(ep1Choice) : undefined,
-    cognitionBias: cognitionBias != null ? Number(cognitionBias) : undefined,
-    profile: profile != null ? Number(profile) : undefined,
-    outcome: outcome != null ? Number(outcome) : undefined,
-    schemaVersion: schemaVersion != null ? Number(schemaVersion) : undefined,
-    finalized,
-    ep1,
-    ep2,
-    ep3,
-    ep4,
-    ep5,
-    updatedAt,
-    finalizedAt,
+    designation: get("designation", 0)?.toString?.(),
+    ep1Choice: Number(get("ep1Choice", 1)),
+    cognitionBias: Number(get("cognitionBias", 2)),
+    profile: Number(get("profile", 3)),
+    outcome: Number(get("outcome", 4)),
+    schemaVersion: Number(get("schemaVersion", 5)),
+    finalized: Boolean(get("finalized", 6)),
+    ep1: Boolean(get("ep1Set", 7)),
+    ep2: Boolean(get("ep2Set", 8)),
+    ep3: Boolean(get("ep3Set", 9)),
+    ep4: Boolean(get("ep4Set", 10)),
+    ep5: Boolean(get("ep5Set", 11)),
+    updatedAt: Number(get("updatedAt", 12)) || undefined,
+    finalizedAt: Number(get("finalizedAt", 13)) || undefined,
   };
 }
 
+/* ────────────────────────────────────────────── */
+/* Page */
 /* ────────────────────────────────────────────── */
 
 export default function StoryPage() {
@@ -173,6 +135,7 @@ export default function StoryPage() {
   const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   /* ───────── Sound ───────── */
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [soundOn, setSoundOn] = useState(() => {
     try {
@@ -188,11 +151,7 @@ export default function StoryPage() {
     a.volume = 0.45;
     audioRef.current = a;
     if (soundOn) a.play().catch(() => {});
-    return () => {
-      a.pause();
-      a.src = "";
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => a.pause();
   }, []);
 
   useEffect(() => {
@@ -206,135 +165,91 @@ export default function StoryPage() {
 
   /* ───────── On-chain state ───────── */
 
-  const {
-    data: botState,
-    refetch,
-    isFetching,
-    isLoading,
-    error,
-  } = useReadContract({
+  const { data, refetch, isFetching, isLoading, error } = useReadContract({
     ...BASEBOTS_S2,
     functionName: "getBotState",
     args: hasIdentity ? [fidBigInt] : undefined,
-    query: {
-      enabled: hasIdentity,
-      // helps with miniapp webviews being “sticky”
-      refetchOnWindowFocus: true,
-      refetchOnReconnect: true,
-      staleTime: 0,
-    },
+    query: { enabled: hasIdentity, staleTime: 0 },
   });
 
-  const state = useMemo<ChainState>(() => decodeBotState(botState), [botState]);
+  const state = useMemo(() => decodeBotState(data), [data]);
 
-  // Progress: prologue + ep1..ep5 + bonus? (bonus not required)
-  const progressCount = useMemo(() => {
-    const count =
-      (state.ep1 ? 1 : 0) +
-      (state.ep2 ? 1 : 0) +
-      (state.ep3 ? 1 : 0) +
-      (state.ep4 ? 1 : 0) +
-      (state.ep5 ? 1 : 0) +
-      (state.finalized ? 1 : 0);
-    // cap to 6 steps (ep1-ep5 + finalize)
-    return clamp(count, 0, 6);
-  }, [state]);
+  const progressCount =
+    (state.ep1 ? 1 : 0) +
+    (state.ep2 ? 1 : 0) +
+    (state.ep3 ? 1 : 0) +
+    (state.ep4 ? 1 : 0) +
+    (state.ep5 ? 1 : 0) +
+    (state.finalized ? 1 : 0);
 
-  const progressPct = useMemo(() => Math.round((progressCount / 6) * 100), [progressCount]);
+  const progressPct = Math.round((clamp(progressCount, 0, 6) / 6) * 100);
 
-  /* ───────── Cinematic sync ───────── */
+  /* ───────── Sync ───────── */
 
   async function cinematicSync() {
     if (!hasIdentity || syncing) return;
     setSyncing(true);
-    // short “cinematic” pause
-    await new Promise((r) => setTimeout(r, 550));
+    await new Promise((r) => setTimeout(r, 500));
     try {
       await refetch();
     } catch {}
     setSyncing(false);
   }
 
-  // When fid becomes available, fetch immediately
   useEffect(() => {
-    if (!hasIdentity) return;
-    cinematicSync();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (hasIdentity) cinematicSync();
   }, [hasIdentity, fidBigInt]);
 
-  // Refetch on tab visibility change (miniapps often need this)
-  useEffect(() => {
-    if (!hasIdentity) return;
-    const onVis = () => {
-      if (document.visibilityState === "visible") cinematicSync();
-    };
-    window.addEventListener("visibilitychange", onVis);
-    return () => window.removeEventListener("visibilitychange", onVis);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasIdentity]);
+  /* ───────── SAFE EVENT WATCHERS (NO FILTERS) ───────── */
 
-  /* ───────── Contract event watchers ───────── */
   useEffect(() => {
-    if (!publicClient || !hasIdentity) return;
+    if (!publicClient || !hasIdentity || fidBigInt <= 0n) return;
 
-    // Important: your EpisodeSet and Finalized events are indexed by fid.
-    // Filtering by args reduces noise + ensures fast updates.
-    const unwatchEpisode = publicClient.watchContractEvent({
+    const unwatch1 = publicClient.watchContractEvent({
       ...BASEBOTS_S2,
       eventName: "EpisodeSet",
-      args: { fid: fidBigInt },
       onLogs: cinematicSync,
     });
 
-    const unwatchFinalized = publicClient.watchContractEvent({
+    const unwatch2 = publicClient.watchContractEvent({
       ...BASEBOTS_S2,
       eventName: "Finalized",
-      args: { fid: fidBigInt },
       onLogs: cinematicSync,
     });
 
-    const unwatchRespec = publicClient.watchContractEvent({
+    const unwatch3 = publicClient.watchContractEvent({
       ...BASEBOTS_S2,
       eventName: "Respec",
-      args: { fid: fidBigInt },
       onLogs: cinematicSync,
     });
 
     return () => {
-      unwatchEpisode();
-      unwatchFinalized();
-      unwatchRespec();
+      unwatch1();
+      unwatch2();
+      unwatch3();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [publicClient, hasIdentity, fidBigInt]);
 
   /* ───────── Routing ───────── */
 
   const exit = () => {
     setMode("hub");
-    // ensure hub view reflects latest state
     cinematicSync();
   };
 
   if (mode !== "hub") {
-    switch (mode) {
-      case "prologue":
-        return <PrologueSilenceInDarkness onExit={exit} />;
-      case "ep1":
-        return <EpisodeOne fid={fid} onExit={exit} />;
-      case "ep2":
-        return <EpisodeTwo fid={fid} onExit={exit} />;
-      case "ep3":
-        return <EpisodeThree fid={fid} onExit={exit} />;
-      case "ep4":
-        return <EpisodeFour fid={fid} onExit={exit} />;
-      case "ep5":
-        return <EpisodeFive fid={fid} onExit={exit} />;
-      case "bonus":
-        return state.ep3 ? <BonusEcho onExit={exit} /> : null;
-      case "archive":
-        return state.finalized ? <BonusEchoArchive onExit={exit} /> : null;
-    }
+    const map = {
+      prologue: <PrologueSilenceInDarkness onExit={exit} />,
+      ep1: <EpisodeOne fid={fid} onExit={exit} />,
+      ep2: <EpisodeTwo fid={fid} onExit={exit} />,
+      ep3: <EpisodeThree fid={fid} onExit={exit} />,
+      ep4: <EpisodeFour fid={fid} onExit={exit} />,
+      ep5: <EpisodeFive fid={fid} onExit={exit} />,
+      bonus: state.ep3 ? <BonusEcho onExit={exit} /> : null,
+      archive: state.finalized ? <BonusEchoArchive onExit={exit} /> : null,
+    } as const;
+
+    return map[mode];
   }
 
   /* ───────── Premium Inline UI ───────── */
