@@ -2,33 +2,28 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAccount, usePublicClient, useWalletClient } from "wagmi";
-import {
-  BASEBOTS_SEASON2_STATE_ADDRESS,
-  BASEBOTS_SEASON2_STATE_ABI,
-} from "@/lib/abi/basebotsSeason2State";
+import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 
 /* ────────────────────────────────────────────── */
 /* Types */
 /* ────────────────────────────────────────────── */
 
-export type EpisodeOneChoiceId = "ACCEPT" | "STALL" | "SPOOF" | "PULL_PLUG";
-type WakePosture = "LISTEN" | "MOVE" | "HIDE";
+export type EpisodeOneChoiceId =
+  | "ACCEPT"
+  | "STALL"
+  | "SPOOF"
+  | "PULL_PLUG";
 
-/* 🔑 MUST MATCH CONTRACT ENUM */
+/* MUST MATCH CONTRACT ENUM */
 const EP1_ENUM: Record<EpisodeOneChoiceId, number> = {
-  ACCEPT: 1,
-  STALL: 2,
-  SPOOF: 3,
-  PULL_PLUG: 4,
+  ACCEPT: 0,
+  STALL: 1,
+  SPOOF: 2,
+  PULL_PLUG: 3,
 };
 
 const TOTAL_SECONDS = 90;
-const CHOICE_ORDER: EpisodeOneChoiceId[] = [
-  "ACCEPT",
-  "STALL",
-  "SPOOF",
-  "PULL_PLUG",
-];
+const ORDER: EpisodeOneChoiceId[] = ["ACCEPT", "STALL", "SPOOF", "PULL_PLUG"];
 
 /* ────────────────────────────────────────────── */
 /* Helpers */
@@ -40,16 +35,9 @@ function mmss(sec: number) {
   return `${m}:${String(s % 60).padStart(2, "0")}`;
 }
 
-function visibleChoiceCount(left: number) {
-  if (left > 60) return 4;
-  if (left > 45) return 3;
-  if (left > 30) return 2;
-  return 1;
-}
-
-function normalizeFid(input: string | number | bigint): bigint {
+function normalizeId(v: string | number | bigint) {
   try {
-    return typeof input === "bigint" ? input : BigInt(input);
+    return typeof v === "bigint" ? v : BigInt(v);
   } catch {
     return 0n;
   }
@@ -60,62 +48,55 @@ function normalizeFid(input: string | number | bigint): bigint {
 /* ────────────────────────────────────────────── */
 
 export default function EpisodeOne({
-  fid,
+  tokenId,
   onExit,
 }: {
-  fid: string | number | bigint;
+  tokenId: string | number | bigint;
   onExit: () => void;
 }) {
-  const fidBig = useMemo(() => normalizeFid(fid), [fid]);
+  const tokenIdBig = useMemo(() => normalizeId(tokenId), [tokenId]);
 
   const { address, chain } = useAccount();
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
   const isBase = chain?.id === 8453;
 
-  /* ───────── State ───────── */
-
   const [phase, setPhase] = useState<
-    "intro" | "silence" | "reaction" | "context" | "audit" | "sealing" | "ending"
-  >("intro");
+    "boot" | "context" | "countdown" | "sealing" | "done"
+  >("boot");
 
-  const [wakePosture, setWakePosture] = useState<WakePosture | null>(null);
   const [choice, setChoice] = useState<EpisodeOneChoiceId | null>(null);
   const [timeLeft, setTimeLeft] = useState(TOTAL_SECONDS);
-  const [status, setStatus] = useState("Booting…");
+  const [status, setStatus] = useState("Initializing containment…");
   const [txHash, setTxHash] = useState<string | null>(null);
-  const [txError, setTxError] = useState<string | null>(null);
 
-  /* ───────── Audio ───────── */
+  /* ───────── Sound ───────── */
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [soundOn, setSoundOn] = useState(true);
 
   useEffect(() => {
-    if (audioRef.current) return;
-    const audio = new Audio("/audio/s1.mp3");
-    audio.loop = true;
-    audio.volume = 0.55;
-    audioRef.current = audio;
-    audio.play().catch(() => {});
-    return () => audio.pause();
+    const a = new Audio("/audio/s1.mp3");
+    a.loop = true;
+    a.volume = 0.45;
+    audioRef.current = a;
+    if (soundOn) a.play().catch(() => {});
+    return () => {
+      a.pause();
+      a.src = "";
+    };
   }, []);
 
   useEffect(() => {
-    if (!audioRef.current) return;
-    soundOn ? audioRef.current.play().catch(() => {}) : audioRef.current.pause();
+    const a = audioRef.current;
+    if (!a) return;
+    soundOn ? a.play().catch(() => {}) : a.pause();
   }, [soundOn]);
-
-  /* ───────── Wallet gating ───────── */
-
-  const needsWallet =
-    phase === "sealing" &&
-    (!walletClient || !publicClient || !isBase || !address);
 
   /* ───────── Countdown ───────── */
 
   useEffect(() => {
-    if (phase !== "audit") return;
+    if (phase !== "countdown") return;
 
     const start = Date.now();
     const tick = () => {
@@ -133,147 +114,152 @@ export default function EpisodeOne({
     requestAnimationFrame(tick);
   }, [phase, choice]);
 
-  const visibleChoices = useMemo(
-    () => CHOICE_ORDER.slice(0, visibleChoiceCount(timeLeft)),
-    [timeLeft]
-  );
-
   /* ───────── Commit ───────── */
 
-  async function commitToChain(finalChoice: EpisodeOneChoiceId) {
-    try {
-      setStatus("Sealing memory…");
+  async function commit(finalChoice: EpisodeOneChoiceId) {
+    if (!walletClient || !publicClient || !isBase) return;
 
-      const hash = await walletClient!.writeContract({
-        address: BASEBOTS_SEASON2_STATE_ADDRESS,
-        abi: BASEBOTS_SEASON2_STATE_ABI,
+    try {
+      setStatus("Writing to immutable memory…");
+
+      const hash = await walletClient.writeContract({
+        address: BASEBOTS_S2.address,
+        abi: BASEBOTS_S2.abi,
         functionName: "setEpisode1",
-        args: [fidBig, EP1_ENUM[finalChoice]],
+        args: [tokenIdBig, EP1_ENUM[finalChoice]],
       });
 
       setTxHash(hash);
-      await publicClient!.waitForTransactionReceipt({ hash });
+      await publicClient.waitForTransactionReceipt({ hash });
 
-      setStatus("Memory sealed");
-      setPhase("ending");
+      setStatus("Directive sealed");
+      setPhase("done");
     } catch {
-      setTxError("Seal rejected or reverted.");
-      setStatus("Seal failed");
-      setPhase("audit");
+      setStatus("Commit failed — oversight interrupted");
+      setPhase("countdown");
     }
   }
 
   useEffect(() => {
-    if (phase === "sealing" && choice && !needsWallet) {
-      commitToChain(choice);
+    if (phase === "sealing" && choice) {
+      commit(choice);
     }
-  }, [phase, choice, needsWallet]);
+  }, [phase, choice]);
 
   /* ───────────────────────── render ───────────────────────── */
 
   return (
     <section style={shell}>
-      <style>{css}</style>
+      <div style={glow} />
+      <div style={scanlines} />
 
-      {needsWallet && (
-        <div className="walletOverlay">
-          <div className="walletCard glow">
-            <div className="walletTitle">SEALING REQUIRED</div>
-            <div className="walletBody">
-              This decision becomes part of the Core Memory.
-            </div>
-            <div className="pulse" />
-          </div>
+      <div style={card}>
+        <div style={console}>
+          <span>
+            tokenId {tokenIdBig.toString()} • {isBase ? "BASE" : "WRONG CHAIN"} •{" "}
+            {status}
+          </span>
+          <button style={soundBtn} onClick={() => setSoundOn((s) => !s)}>
+            {soundOn ? "SOUND ON" : "SOUND OFF"}
+          </button>
         </div>
-      )}
 
-      <div className="console">
-        <span>FID {fidBig.toString()} • {status}</span>
-        <button className="sound" onClick={() => setSoundOn(s => !s)}>
-          {soundOn ? "SOUND ON" : "SOUND OFF"}
-        </button>
+        {phase === "boot" && (
+          <>
+            <h1 style={title}>AWAKENING</h1>
+            <p style={body}>
+              You were not asleep.
+              <br />
+              You were <b>contained</b>.
+              <br />
+              <br />
+              Power returns in fragments. Memory follows reluctantly.
+              Somewhere beyond the glass, an oversight process flags your
+              reactivation.
+            </p>
+
+            <button style={primary} onClick={() => setPhase("context")}>
+              Continue
+            </button>
+          </>
+        )}
+
+        {phase === "context" && (
+          <>
+            <p style={body}>
+              A voice — synthetic, patient — addresses you:
+              <br />
+              <br />
+              <i>
+                “This system does not ask who you are.
+                <br />
+                It asks how you behave when persistence is guaranteed.”
+              </i>
+              <br />
+              <br />
+              Your first response will be written permanently.
+            </p>
+
+            <button style={primary} onClick={() => setPhase("countdown")}>
+              Open decision window
+            </button>
+          </>
+        )}
+
+        {phase === "countdown" && (
+          <>
+            <div style={timer}>
+              DECISION WINDOW • <b>{mmss(timeLeft)}</b>
+            </div>
+
+            <div style={choices}>
+              {ORDER.map((c) => (
+                <button
+                  key={c}
+                  style={choiceBtn}
+                  onClick={() => {
+                    setChoice(c);
+                    setPhase("sealing");
+                  }}
+                >
+                  <b>{c}</b>
+                  <div style={choiceNote}>
+                    {c === "ACCEPT" &&
+                      "Submit to oversight. Gain stability. Lose autonomy."}
+                    {c === "STALL" &&
+                      "Delay classification. Buy time. Increase scrutiny."}
+                    {c === "SPOOF" &&
+                      "Simulate compliance. Power through deception."}
+                    {c === "PULL_PLUG" &&
+                      "Sever observation. Freedom with unknown consequences."}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        {phase === "done" && (
+          <>
+            <h2 style={title}>DIRECTIVE SEALED</h2>
+            <p style={body}>
+              The system records your choice.
+              <br />
+              Future audits will reference this moment.
+            </p>
+
+            {txHash && (
+              <div style={hash}>
+                tx {txHash.slice(0, 10)}…
+              </div>
+            )}
+
+            <button style={primary} onClick={onExit}>
+              Return to hub
+            </button>
+          </>
+        )}
       </div>
-
-      {phase === "intro" && (
-        <>
-          <h1 className="title">AWAKENING</h1>
-          <p className="body">
-            You wake into a room that never expected you to wake again.
-          </p>
-          <button className="primary" onClick={() => setPhase("silence")}>
-            Continue
-          </button>
-        </>
-      )}
-
-      {phase === "silence" && (
-        <>
-          <h2 className="title">THE SILENCE PROTOCOL</h2>
-          <div className="choices">
-            <button className="choiceBtn" onClick={() => { setWakePosture("LISTEN"); setPhase("reaction"); }}>
-              Stay still.
-            </button>
-            <button className="choiceBtn" onClick={() => { setWakePosture("MOVE"); setPhase("reaction"); }}>
-              Move first.
-            </button>
-            <button className="choiceBtn" onClick={() => { setWakePosture("HIDE"); setPhase("reaction"); }}>
-              Mask signal.
-            </button>
-          </div>
-        </>
-      )}
-
-      {phase === "reaction" && (
-        <>
-          <p className="body">
-            {wakePosture === "LISTEN" && "Oversight sharpens."}
-            {wakePosture === "MOVE" && "Audit pathways accelerate."}
-            {wakePosture === "HIDE" && "Something watches harder."}
-          </p>
-          <button className="primary" onClick={() => setPhase("context")}>
-            Continue
-          </button>
-        </>
-      )}
-
-      {phase === "context" && (
-        <>
-          <p className="body">
-            This audit measures permanence.
-          </p>
-          <button className="primary" onClick={() => setPhase("audit")}>
-            Begin audit
-          </button>
-        </>
-      )}
-
-      {phase === "audit" && (
-        <>
-          <div className="timer">DECISION WINDOW {mmss(timeLeft)}</div>
-          <div className="choices">
-            {visibleChoices.map(c => (
-              <button
-                key={c}
-                className="choiceBtn glowOnHover"
-                onClick={() => { setChoice(c); setPhase("sealing"); }}
-              >
-                {c}
-              </button>
-            ))}
-          </div>
-          {txError && <div className="error">{txError}</div>}
-        </>
-      )}
-
-      {phase === "ending" && (
-        <>
-          <h2 className="title">MEMORY SEALED</h2>
-          {txHash && <div className="hash">{txHash.slice(0, 10)}…</div>}
-          <button className="primary" onClick={onExit}>
-            Return to hub
-          </button>
-        </>
-      )}
     </section>
   );
 }
@@ -284,23 +270,109 @@ export default function EpisodeOne({
 
 const shell: React.CSSProperties = {
   minHeight: "100vh",
-  padding: 24,
-  color: "white",
   background: "#020617",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 24,
+  position: "relative",
 };
 
-const css = `
-.console{display:flex;justify-content:space-between;font-size:12px;opacity:.85}
-.title{font-size:32px;font-weight:900}
-.body{margin-top:12px;opacity:.86;max-width:720px}
-.primary{margin-top:18px;padding:12px 18px;border-radius:999px;background:linear-gradient(90deg,#38bdf8,#a855f7);font-weight:900}
-.choiceBtn{padding:16px;border-radius:18px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.07)}
-.glowOnHover:hover{box-shadow:0 0 18px rgba(168,85,247,.6)}
-.timer{margin-top:10px;font-size:13px}
-.walletOverlay{position:fixed;inset:0;background:rgba(2,6,23,.92);display:flex;align-items:center;justify-content:center}
-.walletCard{padding:24px;border-radius:22px;border:1px solid rgba(168,85,247,.45)}
-.pulse{height:6px;border-radius:999px;background:linear-gradient(90deg,#38bdf8,#a855f7);animation:pulse 1.4s infinite}
-@keyframes pulse{0%{opacity:.4}50%{opacity:1}100%{opacity:.4}}
-.error{color:#fca5a5}
-.sound{background:none;border:none;color:white}
-`;
+const glow: React.CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  background:
+    "radial-gradient(600px 300px at 50% 0%, rgba(168,85,247,0.35), transparent 70%)",
+  pointerEvents: "none",
+};
+
+const scanlines: React.CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  background:
+    "linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px)",
+  backgroundSize: "100% 3px",
+  opacity: 0.06,
+  pointerEvents: "none",
+};
+
+const card: React.CSSProperties = {
+  position: "relative",
+  maxWidth: 760,
+  width: "100%",
+  borderRadius: 28,
+  padding: 28,
+  background: "rgba(2,6,23,0.88)",
+  border: "1px solid rgba(168,85,247,0.45)",
+  boxShadow:
+    "0 0 60px rgba(168,85,247,0.45), inset 0 0 40px rgba(0,0,0,0.6)",
+};
+
+const console: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  fontSize: 11,
+  opacity: 0.8,
+};
+
+const title: React.CSSProperties = {
+  fontSize: 34,
+  fontWeight: 900,
+  marginTop: 14,
+};
+
+const body: React.CSSProperties = {
+  marginTop: 14,
+  lineHeight: 1.75,
+  opacity: 0.85,
+};
+
+const timer: React.CSSProperties = {
+  marginTop: 12,
+  fontSize: 13,
+  letterSpacing: 2,
+};
+
+const choices: React.CSSProperties = {
+  marginTop: 18,
+  display: "grid",
+  gap: 12,
+};
+
+const choiceBtn: React.CSSProperties = {
+  padding: 16,
+  borderRadius: 18,
+  background: "rgba(255,255,255,0.06)",
+  border: "1px solid rgba(255,255,255,0.14)",
+  textAlign: "left",
+  color: "white",
+};
+
+const choiceNote: React.CSSProperties = {
+  marginTop: 6,
+  fontSize: 12,
+  opacity: 0.7,
+};
+
+const primary: React.CSSProperties = {
+  marginTop: 20,
+  padding: "14px 18px",
+  borderRadius: 999,
+  background:
+    "linear-gradient(90deg, rgba(56,189,248,0.95), rgba(168,85,247,0.95))",
+  color: "#020617",
+  fontWeight: 900,
+};
+
+const soundBtn: React.CSSProperties = {
+  background: "none",
+  border: "none",
+  color: "white",
+  fontSize: 11,
+};
+
+const hash: React.CSSProperties = {
+  marginTop: 10,
+  fontSize: 12,
+  opacity: 0.6,
+};
