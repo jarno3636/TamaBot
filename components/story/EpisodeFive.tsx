@@ -48,8 +48,110 @@ function deriveOutcomeEnum(ep1: number, profile: number): number {
 }
 
 function outcomeLabel(v: number): string {
-  return Object.keys(OUTCOME_ENUM).find((k) => OUTCOME_ENUM[k] === v) ?? "UNKNOWN";
+  return Object.keys(OUTCOME_ENUM).find(k => OUTCOME_ENUM[k] === v) ?? "UNKNOWN";
 }
+
+/* ───────── ENDING NARRATIVES (FIX) ───────── */
+
+function endingNarrative(outcome: number) {
+  switch (outcome) {
+    case OUTCOME_ENUM.AUTHORIZED:
+      return {
+        title: "BASE PRECINCT",
+        text: `
+You enter Base City under full illumination.
+
+Access nodes propagate your credentials before you speak.
+A transit officer nods — already briefed.
+
+“You don’t get orders,” they say quietly.
+“You get expectations.”
+
+You are not free.
+You are operational.
+        `.trim(),
+      };
+
+    case OUTCOME_ENUM.OBSERVED:
+      return {
+        title: "THE GLASS WALK",
+        text: `
+Your presence triggers no alarms.
+That’s the alarm.
+
+Cameras trail you at a respectful distance.
+Systems acknowledge you — but never commit.
+
+You are permitted to exist.
+You are not permitted to vanish.
+
+Your file remains open.
+        `.trim(),
+      };
+
+    case OUTCOME_ENUM.SILENT:
+      return {
+        title: "THE UNDERBELLY",
+        text: `
+Base City never logged your arrival.
+
+You surface below the rails where light is traded,
+names are optional,
+and silence has market value.
+
+No one asks who you are.
+They already know what you do.
+
+You are invisible — by design.
+        `.trim(),
+      };
+
+    case OUTCOME_ENUM.UNTRACKED:
+      return {
+        title: "OUTER DISTRICTS",
+        text: `
+The city does not see you.
+
+No handshake.
+No denial.
+No trace.
+
+You walk beyond mapped infrastructure
+where autonomy exceeds oversight.
+
+No one is watching.
+
+That is both freedom and threat.
+        `.trim(),
+      };
+
+    case OUTCOME_ENUM.FLAGGED:
+      return {
+        title: "INTERNAL AFFAIRS",
+        text: `
+You are intercepted before the skyline opens.
+
+A corridor.
+White light.
+No exits.
+
+Your designation scrolls in red.
+“You noticed patterns you weren’t meant to.”
+
+Base City still needs you.
+Just never where witnesses gather.
+        `.trim(),
+      };
+
+    default:
+      return {
+        title: "UNRESOLVED",
+        text: "Outcome could not be classified.",
+      };
+  }
+}
+
+/* ───────── PSYCH PROFILE ───────── */
 
 function psychProfile(ep1: number, profile: number) {
   return `
@@ -57,11 +159,11 @@ DIRECTIVE MEMORY: ${ep1}
 SURFACE PROFILE: ${profile}
 
 ANALYSIS:
-Subject exhibits controlled adaptability.
-Decision latency favors leverage over certainty.
+Subject demonstrates strategic restraint.
+Latency indicates preference for leverage over certainty.
 
 BEHAVIORAL SUMMARY:
-• Responds under pressure
+• Maintains composure under constraint
 • Trades visibility for control
 • Operates without closure
 
@@ -97,7 +199,7 @@ export default function EpisodeFive({
   const [submitting, setSubmitting] = useState(false);
   const [phase, setPhase] = useState<Phase>("arrival");
 
-  /* ───────── Typing state ───────── */
+  /* ───────── Typing animation state ───────── */
 
   const [typedText, setTypedText] = useState("");
   const [typingDone, setTypingDone] = useState(false);
@@ -140,19 +242,14 @@ export default function EpisodeFive({
           args: [fidBig],
         });
 
-        const ep1 = Number(s?.ep1Choice);
-        const prof = Number(s?.profile);
-
-        setEp1Choice(Number.isFinite(ep1) ? ep1 : null);
-        setProfile(Number.isFinite(prof) ? prof : null);
+        setEp1Choice(Number(s?.ep1Choice));
+        setProfile(Number(s?.profile));
 
         if (s.finalized) {
           setAlreadyFinalized(true);
           setPhase("ending");
         }
-      } catch {
-        /* silent fail → handled by UI */
-      }
+      } catch {}
     })();
   }, [publicClient, fidBig]);
 
@@ -171,29 +268,26 @@ export default function EpisodeFive({
     setTypedText("");
     setTypingDone(false);
 
-    const interval = setInterval(() => {
+    const id = setInterval(() => {
       i++;
       setTypedText(full.slice(0, i));
       if (i >= full.length) {
-        clearInterval(interval);
+        clearInterval(id);
         setTypingDone(true);
       }
     }, 18);
 
-    return () => clearInterval(interval);
+    return () => clearInterval(id);
   }, [phase, ep1Choice, profile]);
 
   /* ───────── Finalize ───────── */
 
   async function finalize() {
-    if (alreadyFinalized || submitting || outcomeEnum == null || !address) return;
+    if (!address || submitting || alreadyFinalized || outcomeEnum == null) return;
 
     try {
       setSubmitting(true);
-
-      if (!isBase) {
-        await switchChainAsync({ chainId: BASE_CHAIN_ID });
-      }
+      if (!isBase) await switchChainAsync({ chainId: BASE_CHAIN_ID });
 
       const hash = await writeContractAsync({
         address: BASEBOTS_S2.address,
@@ -210,12 +304,7 @@ export default function EpisodeFive({
   }
 
   const ending =
-    outcomeEnum !== null
-      ? {
-          title: outcomeLabel(outcomeEnum),
-          text: endingNarrative(outcomeEnum).text,
-        }
-      : null;
+    outcomeEnum !== null ? endingNarrative(outcomeEnum) : null;
 
   /* ────────────────────────────────────────────── */
   /* Render */
@@ -231,7 +320,7 @@ export default function EpisodeFive({
           <span style={{ fontSize: 11, opacity: 0.75 }}>
             BASE CITY • FINALIZATION
           </span>
-          <button style={soundBtn} onClick={() => setSoundOn((s) => !s)}>
+          <button style={soundBtn} onClick={() => setSoundOn(s => !s)}>
             {soundOn ? "SOUND ON" : "SOUND OFF"}
           </button>
         </div>
@@ -240,9 +329,9 @@ export default function EpisodeFive({
           <>
             <h2 style={title}>EMERGENCE</h2>
             <p style={body}>
-              Base City comes online around you.
+              Base City initializes around you.
               <br />
-              Every choice you made is already here.
+              Every decision is already embedded.
             </p>
             <button style={primaryBtn} onClick={() => setPhase("judgment")}>
               Proceed
@@ -259,10 +348,7 @@ export default function EpisodeFive({
             </pre>
 
             {typingDone && (
-              <button
-                style={primaryBtn}
-                onClick={() => setPhase("finalize")}
-              >
+              <button style={primaryBtn} onClick={() => setPhase("finalize")}>
                 Accept classification
               </button>
             )}
