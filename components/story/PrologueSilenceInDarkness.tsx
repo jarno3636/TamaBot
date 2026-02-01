@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 /* ──────────────────────────────────────────────────────────────
  * Bonus Prologue — “SILENCE IN DARKNESS”
  * Solitary edition: no humans, no dialogue, no witnesses.
+ * Premium narrative context layer.
  * ────────────────────────────────────────────────────────────── */
 
 const UNLOCK_KEY = "basebots_bonus_unlock";
@@ -45,11 +46,18 @@ function markPrologueComplete() {
 
 function writeHint(h: { code: string; city: string; subnet: string }) {
   try {
-    localStorage.setItem(PROLOGUE_HINT_KEY, JSON.stringify({ ...h, at: Date.now() }));
+    localStorage.setItem(
+      PROLOGUE_HINT_KEY,
+      JSON.stringify({ ...h, at: Date.now() })
+    );
   } catch {}
 }
 
-export default function PrologueSilenceInDarkness({ onExit }: { onExit: () => void }) {
+export default function PrologueSilenceInDarkness({
+  onExit,
+}: {
+  onExit: () => void;
+}) {
   const initialUnlocked = useMemo(() => loadUnlocked(), []);
   const initialDone = useMemo(() => loadPrologueComplete(), []);
 
@@ -77,7 +85,8 @@ export default function PrologueSilenceInDarkness({ onExit }: { onExit: () => vo
       className="relative overflow-hidden rounded-[28px] border p-5 md:p-7"
       style={{
         borderColor: "rgba(255,255,255,0.10)",
-        background: "linear-gradient(180deg, rgba(2,6,23,0.94), rgba(2,6,23,0.70))",
+        background:
+          "linear-gradient(180deg, rgba(2,6,23,0.94), rgba(2,6,23,0.70))",
         boxShadow: "0 40px 160px rgba(0,0,0,0.78)",
       }}
     >
@@ -99,7 +108,9 @@ export default function PrologueSilenceInDarkness({ onExit }: { onExit: () => vo
       {/* LOCKED */}
       {phase === "locked" && (
         <div className="mt-8 rounded-3xl border p-5" style={cardShell()}>
-          <h2 className="text-[20px] font-extrabold text-white/95">ARCHIVE ENTRY</h2>
+          <h2 className="text-[20px] font-extrabold text-white/95">
+            ARCHIVE ENTRY
+          </h2>
           <p className="mt-3 text-[13px] text-white/70">
             This record exists, but remains inert.
           </p>
@@ -115,16 +126,22 @@ export default function PrologueSilenceInDarkness({ onExit }: { onExit: () => vo
       {/* START */}
       {phase === "start" && unlocked && (
         <div className="mt-8 rounded-3xl border p-5" style={cardShell()}>
-          <h2 className="text-[22px] font-extrabold text-white/95">SILENCE IN DARKNESS</h2>
+          <h2 className="text-[22px] font-extrabold text-white/95">
+            SILENCE IN DARKNESS
+          </h2>
 
           <div className="mt-3 grid gap-2 text-[13px] leading-relaxed text-white/72">
-            <p>No countdown. No voice.</p>
-            <p>Power returns without ceremony.</p>
+            <p>No countdown. No initialization tone.</p>
+            <p>No operator handshake.</p>
             <p>
-              The Basebot does not wake. It transitions from absence to availability.
+              Power returns without acknowledgment, as if the system expected
+              the absence to persist indefinitely.
             </p>
             <p className="text-white/80 font-semibold">
-              The system assumes continuity.
+              Silence was not a failure state.
+            </p>
+            <p className="text-white/70">
+              It was an intentional gap — a space where no directive could form.
             </p>
           </div>
 
@@ -133,7 +150,8 @@ export default function PrologueSilenceInDarkness({ onExit }: { onExit: () => vo
             className="mt-6 rounded-full px-5 py-2 text-[12px] font-extrabold"
             style={{
               border: "1px solid rgba(255,255,255,0.12)",
-              background: "linear-gradient(90deg, rgba(56,189,248,0.90), rgba(168,85,247,0.70))",
+              background:
+                "linear-gradient(90deg, rgba(56,189,248,0.90), rgba(168,85,247,0.70))",
               color: "rgba(2,6,23,0.98)",
             }}
           >
@@ -145,15 +163,18 @@ export default function PrologueSilenceInDarkness({ onExit }: { onExit: () => vo
       {/* BAY */}
       {phase === "bay" && (
         <div className="mt-8 rounded-3xl border p-5" style={cardShell()}>
-          <h2 className="text-[22px] font-extrabold text-white/95">ASSEMBLY STATE</h2>
+          <h2 className="text-[22px] font-extrabold text-white/95">
+            ASSEMBLY STATE
+          </h2>
 
           <div className="mt-3 grid gap-2 text-[13px] leading-relaxed text-white/72">
-            <p>A large space registers around the unit.</p>
-            <p>Distances update. Hard boundaries resolve.</p>
-            <p>No presence is detected. No operators are logged.</p>
+            <p>The assembly bay resolves in full.</p>
+            <p>Every tool is idle. Every process complete.</p>
+            <p>No personnel signatures remain.</p>
             <p className="text-white/80 font-semibold">
-              Manufacturing concludes without witnesses.
+              This unit was finished.
             </p>
+            <p className="text-white/70">It simply was not claimed.</p>
             <p className="font-mono text-white/70">
               UNIT_ID: BSB-041 • STATUS: UNASSIGNED
             </p>
@@ -176,14 +197,19 @@ export default function PrologueSilenceInDarkness({ onExit }: { onExit: () => vo
       {/* BOOT */}
       {phase === "boot" && (
         <div className="mt-8 rounded-3xl border p-5" style={cardShell()}>
-          <h2 className="text-[22px] font-extrabold text-white/95">FIRST BOOT</h2>
+          <h2 className="text-[22px] font-extrabold text-white/95">
+            FIRST BOOT
+          </h2>
 
           <div className="mt-3 grid gap-2 text-[13px] leading-relaxed text-white/72">
-            <p>Diagnostics complete.</p>
-            <p>Audio channels remain muted.</p>
-            <p>Visual input stabilizes.</p>
+            <p>Self-checks complete without variance.</p>
+            <p>Motor response nominal. Power stable.</p>
+            <p>Audio channels remain muted by design.</p>
             <p className="text-white/80 font-semibold">
-              The system does not verify intent. It verifies readiness.
+              No instruction is missing.
+            </p>
+            <p className="text-white/70">
+              No instruction was ever written.
             </p>
             <p className="font-mono text-white/80">
               ROUTING FLAG: SUBNET-12 • RELAY PERMITTED
@@ -195,7 +221,8 @@ export default function PrologueSilenceInDarkness({ onExit }: { onExit: () => vo
             className="mt-6 rounded-full px-5 py-2 text-[12px] font-extrabold"
             style={{
               border: "1px solid rgba(255,255,255,0.12)",
-              background: "linear-gradient(90deg, rgba(251,191,36,0.92), rgba(244,63,94,0.70))",
+              background:
+                "linear-gradient(90deg, rgba(251,191,36,0.92), rgba(244,63,94,0.70))",
               color: "rgba(2,6,23,0.98)",
             }}
           >
@@ -207,17 +234,18 @@ export default function PrologueSilenceInDarkness({ onExit }: { onExit: () => vo
       {/* ROUTE */}
       {phase === "route" && (
         <div className="mt-8 rounded-3xl border p-5" style={cardShell()}>
-          <h2 className="text-[22px] font-extrabold text-white/95">AUTOMATED ROUTE</h2>
+          <h2 className="text-[22px] font-extrabold text-white/95">
+            AUTOMATED ROUTE
+          </h2>
 
           <div className="mt-3 grid gap-2 text-[13px] leading-relaxed text-white/72">
-            <p>Motion begins.</p>
-            <p>No vibration reaches the chassis.</p>
-            <p>External sound dampens to a constant low band.</p>
+            <p>Transit begins without destination.</p>
+            <p>Navigation resolves through inference.</p>
             <p className="text-white/80 font-semibold">
-              Logistics complete without authorization.
+              Subnet-12 does not request authorization.
             </p>
-            <p>
-              Assignment remains empty.
+            <p className="text-white/70">
+              It assumes continuity where oversight hesitates.
             </p>
           </div>
 
@@ -238,18 +266,17 @@ export default function PrologueSilenceInDarkness({ onExit }: { onExit: () => vo
       {/* CITY */}
       {phase === "city" && (
         <div className="mt-8 rounded-3xl border p-5" style={cardShell()}>
-          <h2 className="text-[22px] font-extrabold text-white/95">CITY EDGE</h2>
+          <h2 className="text-[22px] font-extrabold text-white/95">
+            CITY EDGE
+          </h2>
 
           <div className="mt-3 grid gap-2 text-[13px] leading-relaxed text-white/72">
-            <p>Light patterns pass across the casing.</p>
-            <p>Vertical signals repeat at regular intervals.</p>
-            <p>The environment resolves as dense, ordered, continuous.</p>
+            <p>The city resolves as pattern before detail.</p>
+            <p>Infrastructure responds without curiosity.</p>
             <p className="text-white/80 font-semibold">
-              This city behaves like infrastructure.
+              This environment accepts unassigned entities.
             </p>
-            <p className="font-mono text-white/80">
-              SUBNET-12
-            </p>
+            <p className="font-mono text-white/80">SUBNET-12</p>
           </div>
 
           <button
@@ -257,7 +284,8 @@ export default function PrologueSilenceInDarkness({ onExit }: { onExit: () => vo
             className="mt-6 rounded-full px-5 py-2 text-[12px] font-extrabold"
             style={{
               border: "1px solid rgba(255,255,255,0.12)",
-              background: "linear-gradient(90deg, rgba(168,85,247,0.90), rgba(56,189,248,0.84))",
+              background:
+                "linear-gradient(90deg, rgba(168,85,247,0.90), rgba(56,189,248,0.84))",
               color: "rgba(2,6,23,0.98)",
             }}
           >
@@ -269,24 +297,28 @@ export default function PrologueSilenceInDarkness({ onExit }: { onExit: () => vo
       {/* END */}
       {phase === "end" && (
         <div className="mt-8 rounded-3xl border p-5" style={cardShell()}>
-          <h2 className="text-[22px] font-extrabold text-white/95">ARCHIVE UPDATED</h2>
+          <h2 className="text-[22px] font-extrabold text-white/95">
+            ARCHIVE UPDATED
+          </h2>
 
           <div className="mt-3 grid gap-2 text-[13px] leading-relaxed text-white/72">
-            <p>This record predates the audit.</p>
-            <p>It explains what compliance screens do not.</p>
+            <p>This record predates oversight.</p>
+            <p>It explains what audits refuse to log.</p>
             <p className="text-white/80 font-semibold">
-              Basebots are manufactured unassigned. Subnet-12 routes them anyway.
+              Basebots were released incomplete by design.
             </p>
-            <p className="font-mono text-white/80">
-              CODEWORD: CROWN-12
-            </p>
+            <p className="font-mono text-white/80">CODEWORD: CROWN-12</p>
           </div>
 
           <div className="mt-5 flex gap-2">
             <button
               onClick={() => {
                 markPrologueComplete();
-                writeHint({ code: "CROWN-12", city: "CITY EDGE", subnet: "SUBNET-12" });
+                writeHint({
+                  code: "CROWN-12",
+                  city: "CITY EDGE",
+                  subnet: "SUBNET-12",
+                });
                 setDone(true);
                 onExit();
               }}
@@ -303,7 +335,8 @@ export default function PrologueSilenceInDarkness({ onExit }: { onExit: () => vo
 
           {done && (
             <div className="mt-4 text-[11px] text-white/55">
-              Saved • <span className="font-mono">CROWN-12</span> • <span className="font-mono">SUBNET-12</span>
+              Saved • <span className="font-mono">CROWN-12</span> •{" "}
+              <span className="font-mono">SUBNET-12</span>
             </div>
           )}
         </div>
