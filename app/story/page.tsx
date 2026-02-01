@@ -19,7 +19,6 @@ import GlobalStatsPanel from "@/components/story/GlobalStatsPanel";
 import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 
 /* ────────────────────────────────────────────── */
-/* Types */
 
 type Mode =
   | "hub"
@@ -32,21 +31,12 @@ type Mode =
   | "bonus"
   | "archive";
 
-type Key = Exclude<Mode, "hub">;
+/* ────────────────────────────────────────────── */
 
-type CardData = {
-  key: Key;
-  title: string;
-  teaser: string;
-  img: string;
-  done?: boolean;
-  bonus?: boolean;
-  unlocked?: boolean;
-  status?: string;
-};
+const SOUND_KEY = "basebots_sound";
+const AUDIO_SRC = "/audio/s1.mp3";
 
 /* ────────────────────────────────────────────── */
-/* Page */
 
 export default function StoryPage() {
   const publicClient = usePublicClient();
@@ -56,9 +46,45 @@ export default function StoryPage() {
   const fidBigInt = useMemo(() => (hasIdentity ? BigInt(fid) : 0n), [fid, hasIdentity]);
 
   const [mode, setMode] = useState<Mode>("hub");
-  const [activeKey, setActiveKey] = useState<Key>("ep1");
+  const [syncing, setSyncing] = useState(false);
 
-  /* ───────── On-chain memory ───────── */
+  /* ───────── Sound ───────── */
+
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [soundOn, setSoundOn] = useState(() => {
+    try {
+      return localStorage.getItem(SOUND_KEY) !== "off";
+    } catch {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    const a = new Audio(AUDIO_SRC);
+    a.loop = true;
+    a.volume = 0.45;
+    audioRef.current = a;
+    if (soundOn) a.play().catch(() => {});
+    return () => {
+      a.pause();
+      a.src = "";
+    };
+  }, []);
+
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+    if (soundOn) {
+      a.play().catch(() => {});
+      localStorage.setItem(SOUND_KEY, "on");
+    } else {
+      a.pause();
+      a.currentTime = 0;
+      localStorage.setItem(SOUND_KEY, "off");
+    }
+  }, [soundOn]);
+
+  /* ───────── On-chain state ───────── */
 
   const { data: botState, refetch } = useReadContract({
     ...BASEBOTS_S2,
@@ -73,41 +99,40 @@ export default function StoryPage() {
     }
     const s: any = botState;
     return {
-      ep1: Boolean(s.ep1Set),
-      ep2: Boolean(s.ep2Set),
-      ep3: Boolean(s.ep3Set),
-      ep4: Boolean(s.ep4Set),
-      ep5: Boolean(s.ep5Set),
-      finalized: Boolean(s.finalized),
+      ep1: s.ep1Set,
+      ep2: s.ep2Set,
+      ep3: s.ep3Set,
+      ep4: s.ep4Set,
+      ep5: s.ep5Set,
+      finalized: s.finalized,
     };
   }, [botState]);
 
-  /* ───────── Status Labels ───────── */
+  /* ───────── Sync orchestration ───────── */
 
-  const episodeStatus = {
-    ep1: state.ep1 ? "MEMORY INITIALIZED" : "CORE ONLINE",
-    ep2: state.ep2 ? "DESIGNATION LOCKED" : state.ep1 ? "AWAITING IDENTITY" : undefined,
-    ep3: state.ep3 ? "COGNITION SET" : state.ep2 ? "MEMORY FRAGMENT" : undefined,
-    ep4: state.ep4 ? "PROFILE BOUND" : state.ep3 ? "DRIFT UNSTABLE" : undefined,
-    ep5: state.finalized ? "FINALIZED" : state.ep4 ? "READY TO COMMIT" : undefined,
-  };
+  async function cinematicSync() {
+    if (!hasIdentity || syncing) return;
+    setSyncing(true);
+    await new Promise((r) => setTimeout(r, 900));
+    await refetch();
+    setSyncing(false);
+  }
 
-  /* ───────── Live updates ───────── */
-
-  const activeRef = useRef<bigint>(0n);
+  useEffect(() => {
+    const fn = () => cinematicSync();
+    window.addEventListener("basebots-progress-updated", fn);
+    return () => window.removeEventListener("basebots-progress-updated", fn);
+  }, []);
 
   useEffect(() => {
     if (!publicClient || !hasIdentity) return;
-    activeRef.current = fidBigInt;
-
     const unwatch = publicClient.watchContractEvent({
       ...BASEBOTS_S2,
-      eventName: "EpisodeSet",
-      onLogs: () => refetch(),
+      eventName: ["EpisodeSet", "Finalized"],
+      onLogs: () => cinematicSync(),
     });
-
     return () => unwatch();
-  }, [publicClient, fidBigInt, hasIdentity, refetch]);
+  }, [publicClient, fidBigInt, hasIdentity]);
 
   /* ───────── Routing ───────── */
 
@@ -115,206 +140,84 @@ export default function StoryPage() {
 
   if (mode !== "hub") {
     switch (mode) {
-      case "prologue":
-        return <PrologueSilenceInDarkness onExit={exit} />;
-      case "ep1":
-        return <EpisodeOne fid={fid} onExit={exit} />;
-      case "ep2":
-        return <EpisodeTwo fid={fid} onExit={exit} />;
-      case "ep3":
-        return <EpisodeThree fid={fid} onExit={exit} />;
-      case "ep4":
-        return <EpisodeFour fid={fid} onExit={exit} />;
-      case "ep5":
-        return (
-          <>
-            <EpisodeFive fid={fid} onExit={exit} />
-            <div style={{ marginTop: 28 }}>
-              <GlobalStatsPanel />
-            </div>
-          </>
-        );
-      case "bonus":
-        return state.ep3 ? <BonusEcho onExit={exit} /> : null;
-      case "archive":
-        return state.ep5 ? <BonusEchoArchive onExit={exit} /> : null;
+      case "prologue": return <PrologueSilenceInDarkness onExit={exit} />;
+      case "ep1": return <EpisodeOne fid={fid} onExit={exit} />;
+      case "ep2": return <EpisodeTwo fid={fid} onExit={exit} />;
+      case "ep3": return <EpisodeThree fid={fid} onExit={exit} />;
+      case "ep4": return <EpisodeFour fid={fid} onExit={exit} />;
+      case "ep5": return <EpisodeFive fid={fid} onExit={exit} />;
+      case "bonus": return state.ep3 ? <BonusEcho onExit={exit} /> : null;
+      case "archive": return state.finalized ? <BonusEchoArchive onExit={exit} /> : null;
     }
   }
-
-  /* ───────── Cards ───────── */
-
-  const cards: CardData[] = [
-    {
-      key: "prologue",
-      title: "Silence in Darkness",
-      teaser: "A room between systems exhales. Something dormant stirs.",
-      img: "/story/prologue.png",
-    },
-    {
-      key: "ep1",
-      title: "The Handshake",
-      teaser: "A contract appears on cold glass. The first choice wakes the rest.",
-      img: "/story/01-awakening.png",
-      done: state.ep1,
-      status: episodeStatus.ep1,
-    },
-    {
-      key: "ep2",
-      title: "The Recall",
-      teaser: "A memory fragment returns scorched at the edges.",
-      img: "/story/ep2.png",
-      done: state.ep2,
-      status: episodeStatus.ep2,
-    },
-    {
-      key: "ep3",
-      title: "The Watcher",
-      teaser: "The logs begin to stare back.",
-      img: "/story/ep3.png",
-      done: state.ep3,
-      status: episodeStatus.ep3,
-    },
-    {
-      key: "ep4",
-      title: "Drift Protocol",
-      teaser: "The city flickers. Core directives begin to fail.",
-      img: "/story/ep4.png",
-      done: state.ep4,
-      status: episodeStatus.ep4,
-    },
-    {
-      key: "ep5",
-      title: "Final Commit",
-      teaser: "One last merge. One irreversible outcome.",
-      img: "/story/ep5.png",
-      done: state.ep5,
-      status: episodeStatus.ep5,
-    },
-    {
-      key: "bonus",
-      title: "Echo Residual",
-      teaser: "Unreadable. A waveform your mind refuses to parse.",
-      img: "/story/b1.png",
-      bonus: true,
-      unlocked: state.ep3,
-    },
-    {
-      key: "archive",
-      title: "Classified Memory",
-      teaser: "Black lines obscure bright truths.",
-      img: "/story/b2.png",
-      bonus: true,
-      unlocked: state.ep5,
-    },
-  ];
 
   /* ───────── UI ───────── */
 
   return (
-    <main style={shell()}>
+    <main style={shell}>
       <style>{css}</style>
 
-      <header style={hero()}>
-        <h1 style={h1()}>Basebots: Core Memory</h1>
-        <p style={lead()}>
-          Memory fragments surface as systems awaken. Some stabilize. Others distort until the
-          sequence is complete.
-        </p>
+      {syncing && <div className="syncOverlay">SYNCING MEMORY…</div>}
 
-        <button
-          onClick={() => refetch()}
-          disabled={!hasIdentity}
-          className={`sync ${!hasIdentity ? "disabled" : ""}`}
-        >
-          Sync Memory
-        </button>
+      <header style={hero}>
+        <h1>Basebots: Core Memory</h1>
+        <p>Fragments stabilize only when the full sequence is complete.</p>
+
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={cinematicSync} disabled={!hasIdentity || syncing}>
+            Sync Memory
+          </button>
+          <button onClick={() => setSoundOn((s) => !s)}>
+            {soundOn ? "Sound ON" : "Sound OFF"}
+          </button>
+        </div>
       </header>
 
-      <section style={grid()}>
-        {cards.map((c) => {
-          const glitched = Boolean(c.bonus) && !Boolean(c.unlocked);
-          const active = activeKey === c.key;
-
-          return (
-            <Card
-              key={c.key}
-              title={c.title}
-              teaser={c.teaser}
-              img={c.img}
-              active={active}
-              completed={Boolean(c.done)}
-              glitched={glitched}
-              status={c.status}
-              onHover={() => setActiveKey(c.key)}
-              onOpen={() => {
-                setActiveKey(c.key);
-                if (!glitched) setMode(c.key);
-              }}
-            />
-          );
-        })}
+      <section style={grid}>
+        <Card title="Prologue" onOpen={() => setMode("prologue")} />
+        <Card title="Episode I" locked={!hasIdentity} done={state.ep1} onOpen={() => setMode("ep1")} />
+        <Card title="Episode II" locked={!state.ep1} done={state.ep2} onOpen={() => setMode("ep2")} />
+        <Card title="Episode III" locked={!state.ep2} done={state.ep3} onOpen={() => setMode("ep3")} />
+        <Card title="Episode IV" locked={!state.ep3} done={state.ep4} onOpen={() => setMode("ep4")} />
+        <Card title="Final Commit" locked={!state.ep4} done={state.finalized} onOpen={() => setMode("ep5")} />
+        <Card title="Echo Residual" locked={!state.ep3} bonus onOpen={() => setMode("bonus")} />
+        <Card title="Archive" locked={!state.finalized} bonus onOpen={() => setMode("archive")} />
       </section>
+
+      {state.finalized && (
+        <section style={{ marginTop: 40 }}>
+          <GlobalStatsPanel />
+        </section>
+      )}
     </main>
   );
 }
 
 /* ────────────────────────────────────────────── */
-/* Card */
-
-function StatusBadge({ label }: { label: string }) {
-  return (
-    <div
-      style={{
-        position: "absolute",
-        top: 12,
-        right: 12,
-        padding: "4px 10px",
-        fontSize: 11,
-        fontWeight: 900,
-        borderRadius: 999,
-        background: "rgba(168,85,247,0.18)",
-        border: "1px solid rgba(168,85,247,0.45)",
-      }}
-    >
-      {label}
-    </div>
-  );
-}
+/* Components */
 
 function Card({
   title,
-  teaser,
-  img,
-  active,
-  completed,
-  glitched,
-  status,
+  locked,
+  done,
+  bonus,
   onOpen,
-  onHover,
 }: {
   title: string;
-  teaser: string;
-  img: string;
-  active: boolean;
-  completed: boolean;
-  glitched: boolean;
-  status?: string;
+  locked?: boolean;
+  done?: boolean;
+  bonus?: boolean;
   onOpen: () => void;
-  onHover: () => void;
 }) {
   return (
     <button
-      className={`card ${active ? "active" : ""} ${glitched ? "glitch" : ""}`}
-      onClick={onOpen}
-      onMouseEnter={onHover}
-      style={{ backgroundImage: `url(${img})` }}
+      className={`card ${locked ? "locked" : ""} ${done ? "done" : ""}`}
+      onClick={() => !locked && onOpen()}
     >
-      <div className="overlay" />
-      {status && <StatusBadge label={status} />}
-      <div className="content">
-        <div className="title">{title}</div>
-        <div className={`teaser ${glitched ? "scramble" : ""}`}>{teaser}</div>
-      </div>
+      <div className="label">{title}</div>
+      {bonus && <div className="tag">BONUS</div>}
+      {locked && <div className="lock">LOCKED</div>}
+      {done && <div className="doneTag">COMPLETE</div>}
     </button>
   );
 }
@@ -322,62 +225,47 @@ function Card({
 /* ────────────────────────────────────────────── */
 /* Styles */
 
-const shell = () => ({
+const shell = {
   minHeight: "100vh",
   background: "#020617",
   color: "white",
-  padding: "40px 18px",
-});
+  padding: 28,
+};
 
-const hero = () => ({
-  maxWidth: 1120,
-  margin: "0 auto 24px",
-});
+const hero = {
+  maxWidth: 960,
+  margin: "0 auto 28px",
+};
 
-const h1 = () => ({
-  fontSize: 38,
-  marginBottom: 10,
-});
-
-const lead = () => ({
-  opacity: 0.82,
-  maxWidth: 760,
-  marginBottom: 16,
-});
-
-const grid = () => ({
-  maxWidth: 1120,
+const grid = {
+  maxWidth: 960,
   margin: "0 auto",
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-  gap: 16,
-});
+  gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
+  gap: 14,
+};
 
 const css = `
 .card{
+  height:150px;
+  border-radius:20px;
+  background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.14);
+  display:flex;
+  align-items:center;
+  justify-content:center;
   position:relative;
-  height:210px;
-  border-radius:22px;
-  background-size:cover;
-  background-position:center;
-  border:1px solid rgba(255,255,255,.12);
-  overflow:hidden;
-  transition:.22s;
+  font-weight:900;
 }
-.card.active{
-  border-color:rgba(168,85,247,.75);
-  box-shadow:0 0 36px rgba(168,85,247,.7);
+.card.locked{opacity:.35}
+.card.done{border-color:#38bdf8}
+.tag{position:absolute;top:10px;right:10px;font-size:11px}
+.lock,.doneTag{position:absolute;bottom:10px;font-size:11px}
+.syncOverlay{
+  position:fixed;inset:0;
+  background:rgba(2,6,23,.88);
+  display:flex;align-items:center;justify-content:center;
+  font-size:22px;font-weight:900;
+  z-index:999;
 }
-.overlay{
-  position:absolute; inset:0;
-  background:linear-gradient(180deg,transparent,rgba(2,6,23,.9));
-}
-.content{
-  position:absolute; bottom:14px; left:14px; right:14px;
-}
-.title{font-size:16px}
-.teaser{font-size:13px; opacity:.82}
-.glitch .teaser{filter:blur(1.4px)}
-.sync{padding:6px 12px}
-.sync.disabled{opacity:.5}
 `;
