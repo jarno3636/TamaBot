@@ -47,111 +47,9 @@ function deriveOutcomeEnum(ep1: number, profile: number): number {
   return OUTCOME_ENUM.AUTHORIZED;
 }
 
-function outcomeLabel(v: number): string {
+function outcomeLabel(v: number) {
   return Object.keys(OUTCOME_ENUM).find(k => OUTCOME_ENUM[k] === v) ?? "UNKNOWN";
 }
-
-/* ───────── ENDING NARRATIVES (FIX) ───────── */
-
-function endingNarrative(outcome: number) {
-  switch (outcome) {
-    case OUTCOME_ENUM.AUTHORIZED:
-      return {
-        title: "BASE PRECINCT",
-        text: `
-You enter Base City under full illumination.
-
-Access nodes propagate your credentials before you speak.
-A transit officer nods — already briefed.
-
-“You don’t get orders,” they say quietly.
-“You get expectations.”
-
-You are not free.
-You are operational.
-        `.trim(),
-      };
-
-    case OUTCOME_ENUM.OBSERVED:
-      return {
-        title: "THE GLASS WALK",
-        text: `
-Your presence triggers no alarms.
-That’s the alarm.
-
-Cameras trail you at a respectful distance.
-Systems acknowledge you — but never commit.
-
-You are permitted to exist.
-You are not permitted to vanish.
-
-Your file remains open.
-        `.trim(),
-      };
-
-    case OUTCOME_ENUM.SILENT:
-      return {
-        title: "THE UNDERBELLY",
-        text: `
-Base City never logged your arrival.
-
-You surface below the rails where light is traded,
-names are optional,
-and silence has market value.
-
-No one asks who you are.
-They already know what you do.
-
-You are invisible — by design.
-        `.trim(),
-      };
-
-    case OUTCOME_ENUM.UNTRACKED:
-      return {
-        title: "OUTER DISTRICTS",
-        text: `
-The city does not see you.
-
-No handshake.
-No denial.
-No trace.
-
-You walk beyond mapped infrastructure
-where autonomy exceeds oversight.
-
-No one is watching.
-
-That is both freedom and threat.
-        `.trim(),
-      };
-
-    case OUTCOME_ENUM.FLAGGED:
-      return {
-        title: "INTERNAL AFFAIRS",
-        text: `
-You are intercepted before the skyline opens.
-
-A corridor.
-White light.
-No exits.
-
-Your designation scrolls in red.
-“You noticed patterns you weren’t meant to.”
-
-Base City still needs you.
-Just never where witnesses gather.
-        `.trim(),
-      };
-
-    default:
-      return {
-        title: "UNRESOLVED",
-        text: "Outcome could not be classified.",
-      };
-  }
-}
-
-/* ───────── PSYCH PROFILE ───────── */
 
 function psychProfile(ep1: number, profile: number) {
   return `
@@ -160,7 +58,7 @@ SURFACE PROFILE: ${profile}
 
 ANALYSIS:
 Subject demonstrates strategic restraint.
-Latency indicates preference for leverage over certainty.
+Latency favors leverage over certainty.
 
 BEHAVIORAL SUMMARY:
 • Maintains composure under constraint
@@ -170,6 +68,27 @@ BEHAVIORAL SUMMARY:
 OVERSIGHT CONFIDENCE: PARTIAL
 AUTONOMY RISK: ACCEPTABLE
 `.trim();
+}
+
+/* ────────────────────────────────────────────── */
+/* Ending narratives */
+/* ────────────────────────────────────────────── */
+
+function endingNarrative(outcome: number) {
+  switch (outcome) {
+    case OUTCOME_ENUM.AUTHORIZED:
+      return { title: "BASE PRECINCT", text: "You are expected." };
+    case OUTCOME_ENUM.OBSERVED:
+      return { title: "THE GLASS WALK", text: "Your file remains open." };
+    case OUTCOME_ENUM.SILENT:
+      return { title: "THE UNDERBELLY", text: "Silence has value here." };
+    case OUTCOME_ENUM.UNTRACKED:
+      return { title: "OUTER DISTRICTS", text: "No one is watching." };
+    case OUTCOME_ENUM.FLAGGED:
+      return { title: "INTERNAL AFFAIRS", text: "Never in public." };
+    default:
+      return { title: "UNRESOLVED", text: "Classification failed." };
+  }
 }
 
 /* ────────────────────────────────────────────── */
@@ -193,13 +112,16 @@ export default function EpisodeFive({
   const { switchChainAsync } = useSwitchChain();
   const isBase = chain?.id === BASE_CHAIN_ID;
 
+  const [phase, setPhase] = useState<Phase>("arrival");
   const [ep1Choice, setEp1Choice] = useState<number | null>(null);
   const [profile, setProfile] = useState<number | null>(null);
+
+  const [readyToFinalize, setReadyToFinalize] = useState(false);
+  const [missing, setMissing] = useState<string[]>([]);
   const [alreadyFinalized, setAlreadyFinalized] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [phase, setPhase] = useState<Phase>("arrival");
 
-  /* ───────── Typing animation state ───────── */
+  /* ───────── Typing ───────── */
 
   const [typedText, setTypedText] = useState("");
   const [typingDone, setTypingDone] = useState(false);
@@ -218,7 +140,6 @@ export default function EpisodeFive({
     return () => {
       a.pause();
       a.src = "";
-      audioRef.current = null;
     };
   }, []);
 
@@ -234,22 +155,29 @@ export default function EpisodeFive({
     if (!publicClient) return;
 
     (async () => {
-      try {
-        const s: any = await publicClient.readContract({
-          address: BASEBOTS_S2.address,
-          abi: BASEBOTS_S2.abi,
-          functionName: "getBotState",
-          args: [fidBig],
-        });
+      const s: any = await publicClient.readContract({
+        address: BASEBOTS_S2.address,
+        abi: BASEBOTS_S2.abi,
+        functionName: "getBotState",
+        args: [fidBig],
+      });
 
-        setEp1Choice(Number(s?.ep1Choice));
-        setProfile(Number(s?.profile));
+      setEp1Choice(Number(s.ep1Choice));
+      setProfile(Number(s.profile));
 
-        if (s.finalized) {
-          setAlreadyFinalized(true);
-          setPhase("ending");
-        }
-      } catch {}
+      const missingEpisodes: string[] = [];
+      if (!s.ep1Set) missingEpisodes.push("Episode 1");
+      if (!s.ep2Set) missingEpisodes.push("Episode 2");
+      if (!s.ep3Set) missingEpisodes.push("Episode 3");
+      if (!s.ep4Set) missingEpisodes.push("Episode 4");
+
+      setMissing(missingEpisodes);
+      setReadyToFinalize(missingEpisodes.length === 0 && !s.finalized);
+
+      if (s.finalized) {
+        setAlreadyFinalized(true);
+        setPhase("ending");
+      }
     })();
   }, [publicClient, fidBig]);
 
@@ -283,10 +211,10 @@ export default function EpisodeFive({
   /* ───────── Finalize ───────── */
 
   async function finalize() {
-    if (!address || submitting || alreadyFinalized || outcomeEnum == null) return;
+    if (!readyToFinalize || !address || outcomeEnum == null) return;
 
+    setSubmitting(true);
     try {
-      setSubmitting(true);
       if (!isBase) await switchChainAsync({ chainId: BASE_CHAIN_ID });
 
       const hash = await writeContractAsync({
@@ -303,12 +231,11 @@ export default function EpisodeFive({
     }
   }
 
-  const ending =
-    outcomeEnum !== null ? endingNarrative(outcomeEnum) : null;
+  const ending = outcomeEnum ? endingNarrative(outcomeEnum) : null;
 
   /* ────────────────────────────────────────────── */
   /* Render */
-/* ────────────────────────────────────────────── */
+  /* ────────────────────────────────────────────── */
 
   return (
     <section style={container}>
@@ -328,11 +255,7 @@ export default function EpisodeFive({
         {phase === "arrival" && (
           <>
             <h2 style={title}>EMERGENCE</h2>
-            <p style={body}>
-              Base City initializes around you.
-              <br />
-              Every decision is already embedded.
-            </p>
+            <p style={body}>Every decision has already arrived.</p>
             <button style={primaryBtn} onClick={() => setPhase("judgment")}>
               Proceed
             </button>
@@ -341,11 +264,7 @@ export default function EpisodeFive({
 
         {phase === "judgment" && (
           <>
-            <pre style={mono}>
-              {outcomeEnum === null
-                ? "SYNTHESIS :: IN PROGRESS…"
-                : typedText}
-            </pre>
+            <pre style={mono}>{typedText || "SYNTHESIS…"}</pre>
 
             {typingDone && (
               <button style={primaryBtn} onClick={() => setPhase("finalize")}>
@@ -355,10 +274,32 @@ export default function EpisodeFive({
           </>
         )}
 
-        {phase === "finalize" && !alreadyFinalized && (
-          <button style={primaryBtn} onClick={finalize}>
-            {submitting ? "FINALIZING…" : "Finalize outcome"}
-          </button>
+        {phase === "finalize" && (
+          <>
+            {!readyToFinalize && (
+              <div style={glitchBox}>
+                <div style={glitchTitle}>SEQUENCE VIOLATION</div>
+                <div style={glitchText}>
+                  Missing:
+                  <ul>
+                    {missing.map(m => (
+                      <li key={m}>{m}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                <button style={secondaryBtn} onClick={onExit}>
+                  Return to hub
+                </button>
+              </div>
+            )}
+
+            {readyToFinalize && (
+              <button style={primaryBtn} onClick={finalize}>
+                {submitting ? "FINALIZING…" : "Finalize outcome"}
+              </button>
+            )}
+          </>
         )}
 
         {phase === "ending" && ending && (
@@ -418,7 +359,7 @@ const card = {
 const topRow = { display: "flex", justifyContent: "space-between" };
 const title = { fontSize: 32, fontWeight: 900 };
 const subtitle = { fontSize: 22, fontWeight: 900, marginTop: 16 };
-const body = { marginTop: 14, lineHeight: 1.75, opacity: 0.85 };
+const body = { marginTop: 14, opacity: 0.85 };
 
 const mono = {
   marginTop: 16,
@@ -428,15 +369,31 @@ const mono = {
   fontFamily: "monospace",
   fontSize: 12,
   whiteSpace: "pre-wrap" as const,
-  opacity: 0.9,
+};
+
+const glitchBox = {
+  marginTop: 18,
+  padding: 18,
+  borderRadius: 18,
+  background: "rgba(220,38,38,0.15)",
+  border: "1px solid rgba(220,38,38,0.6)",
+  animation: "glitch 1.2s infinite",
+};
+
+const glitchTitle = {
+  fontWeight: 900,
+  letterSpacing: 2,
+  color: "#f87171",
+};
+
+const glitchText = {
+  marginTop: 8,
+  fontSize: 13,
 };
 
 const endingText = {
   marginTop: 14,
-  fontSize: 13,
-  lineHeight: 1.7,
   whiteSpace: "pre-wrap" as const,
-  opacity: 0.9,
 };
 
 const primaryBtn = {
@@ -450,14 +407,13 @@ const primaryBtn = {
 };
 
 const secondaryBtn = {
-  marginTop: 18,
+  marginTop: 14,
   width: "100%",
   padding: "12px 18px",
   borderRadius: 999,
   background: "rgba(255,255,255,0.08)",
   border: "1px solid rgba(255,255,255,0.18)",
   color: "white",
-  fontWeight: 900,
 };
 
 const soundBtn = {
