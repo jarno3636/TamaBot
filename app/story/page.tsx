@@ -162,8 +162,11 @@ export default function StoryPage() {
   const publicClient = usePublicClient();
   const { fid, fidNum } = useFid();
 
-  const hasIdentity = typeof fid === "number" && fid > 0;
-  const fidBigInt = useMemo(() => (hasIdentity ? BigInt(fid) : 0n), [fid, hasIdentity]);
+  const hasIdentity = typeof fidNum === "number" && fidNum > 0;
+  const fidBigInt = useMemo(
+    () => (hasIdentity ? BigInt(fidNum) : 0n),
+    [fidNum, hasIdentity]
+  );
 
   const [mode, setMode] = useState<Mode>("hub");
   const [syncing, setSyncing] = useState(false);
