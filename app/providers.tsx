@@ -6,13 +6,13 @@ import "@coinbase/onchainkit/styles.css";
 
 import React, { useEffect, useMemo, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { WagmiProvider } from "wagmi";
+import { WagmiProvider, type Config } from "wagmi";
 import { RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
 import { base } from "viem/chains";
-import { wagmiConfig } from "@/lib/wallet";
 import { OnchainKitProvider } from "@coinbase/onchainkit";
 import { MiniKitProvider } from "@coinbase/onchainkit/minikit";
 import { MiniContextProvider } from "@/lib/useMiniContext";
+import { makeWagmiConfig } from "@/lib/wallet";
 
 /* ---------------- React Query ---------------- */
 const queryClient = new QueryClient({
@@ -24,18 +24,26 @@ const queryClient = new QueryClient({
   },
 });
 
+function detectMiniApp(): boolean {
+  if (typeof window === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  return /warpcast|farcaster/i.test(ua) || Boolean((window as any).farcaster);
+}
+
 /* ---------------- Root Providers ---------------- */
 export default function Providers({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
-  const [isMiniApp, setIsMiniApp] = useState(false);
+  const [wagmi, setWagmi] = useState<Config | null>(null);
+  const [isMini, setIsMini] = useState(false);
 
   useEffect(() => {
     setMounted(true);
 
-    // ✅ Detect Farcaster MiniApp safely
-    if (typeof window !== "undefined" && (window as any).farcaster) {
-      setIsMiniApp(true);
-    }
+    const mini = detectMiniApp();
+    setIsMini(mini);
+
+    // ✅ lazy init wagmi AFTER mount (prevents WalletConnect/handlers from firing during build/boot)
+    setWagmi(makeWagmiConfig());
   }, []);
 
   const theme = useMemo(
@@ -54,8 +62,8 @@ export default function Providers({ children }: { children: React.ReactNode }) {
     process.env.NEXT_PUBLIC_MINIKIT_PROJECT_ID ||
     "";
 
-  // 🚨 NEVER return null from providers
-  if (!mounted) {
+  // Never return null; show a stable placeholder until wagmi is ready
+  if (!mounted || !wagmi) {
     return (
       <div
         style={{
@@ -77,7 +85,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <WagmiProvider config={wagmiConfig}>
+      <WagmiProvider config={wagmi}>
         <OnchainKitProvider apiKey={onchainkitApiKey} chain={base}>
           <RainbowKitProvider
             theme={theme}
@@ -85,7 +93,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
             modalSize="compact"
             appInfo={{ appName: "Basebots" }}
           >
-            {isMiniApp ? (
+            {isMini ? (
               <MiniKitProvider
                 chain={base}
                 notificationProxyUrl="/api/notification"
@@ -93,7 +101,6 @@ export default function Providers({ children }: { children: React.ReactNode }) {
                 <MiniContextProvider>{children}</MiniContextProvider>
               </MiniKitProvider>
             ) : (
-              // ✅ Normal web fallback (NO MiniKit)
               <MiniContextProvider>{children}</MiniContextProvider>
             )}
           </RainbowKitProvider>
