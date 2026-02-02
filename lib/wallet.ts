@@ -1,4 +1,3 @@
-// lib/wallet.ts
 "use client";
 
 import { http, cookieStorage, createStorage, createConfig } from "wagmi";
@@ -22,44 +21,47 @@ const projectId =
   process.env.NEXT_PUBLIC_WALLETCONNECT_ID ||
   "";
 
-const walletGroups = [
-  {
-    groupName: "Popular",
-    wallets: [
-      injectedWallet,
-      metaMaskWallet,
-      coinbaseWallet,
-      rainbowWallet,
-      rabbyWallet,
-      walletConnectWallet,
-    ],
-  },
-];
-
-const rkConnectors = connectorsForWallets(walletGroups, {
-  appName: "TamaBot",
-  projectId,
-});
-
-// ✅ Frontend RPC (public env var). Keep this “good”.
 const FRONTEND_RPC =
-  process.env.NEXT_PUBLIC_BASE_RPC_URL ||
-  "https://mainnet.base.org"; // fallback if you forget to set it
+  process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
 
-export const wagmiConfig = createConfig({
-  chains: [base],
-  transports: {
-    [base.id]: http(FRONTEND_RPC, {
-      timeout: 20_000,
-      retryCount: 2,
-      retryDelay: 300,
-    }),
-  },
-  connectors: [
-    miniAppConnector(),
-    injected({ target: "coinbaseWallet", shimDisconnect: true }),
-    ...rkConnectors,
-  ],
-  ssr: true,
-  storage: createStorage({ storage: cookieStorage }),
-});
+export function createWagmiConfig() {
+  // 🚫 absolutely critical
+  if (typeof window === "undefined") return null;
+
+  const walletGroups = [
+    {
+      groupName: "Popular",
+      wallets: [
+        injectedWallet,
+        metaMaskWallet,
+        coinbaseWallet,
+        rainbowWallet,
+        rabbyWallet,
+        walletConnectWallet,
+      ],
+    },
+  ];
+
+  const rkConnectors = connectorsForWallets(walletGroups, {
+    appName: "TamaBot",
+    projectId,
+  });
+
+  return createConfig({
+    chains: [base],
+    transports: {
+      [base.id]: http(FRONTEND_RPC, {
+        timeout: 20_000,
+        retryCount: 2,
+        retryDelay: 300,
+      }),
+    },
+    connectors: [
+      miniAppConnector(),
+      injected({ target: "coinbaseWallet", shimDisconnect: true }),
+      ...rkConnectors,
+    ],
+    ssr: false, // 🔥 important
+    storage: createStorage({ storage: cookieStorage }),
+  });
+}
