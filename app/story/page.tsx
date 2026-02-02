@@ -51,25 +51,6 @@ type ChainState = {
 };
 
 /* ────────────────────────────────────────────── */
-/* Constants */
-/* ────────────────────────────────────────────── */
-
-const SOUND_KEY = "basebots_sound";
-const AUDIO_SRC = "/audio/s1.mp3";
-
-const IMAGES: Record<Mode, string> = {
-  hub: "",
-  prologue: "/story/prologue.png",
-  ep1: "/story/01-awakening.png",
-  ep2: "/story/ep2.png",
-  ep3: "/story/ep3.png",
-  ep4: "/story/ep4.png",
-  ep5: "/story/ep5.png",
-  bonus: "/story/b1.png",
-  archive: "/story/b2.png",
-};
-
-/* ────────────────────────────────────────────── */
 /* Helpers */
 /* ────────────────────────────────────────────── */
 
@@ -82,6 +63,7 @@ function fmtTs(ts?: number) {
   return new Date(ts * 1000).toLocaleString();
 }
 
+/* 🔒 SAFE decoder (never throws) */
 function decodeBotState(botState: any): ChainState {
   const empty: ChainState = {
     finalized: false,
@@ -91,20 +73,25 @@ function decodeBotState(botState: any): ChainState {
     ep4: false,
     ep5: false,
   };
-  if (!botState) return empty;
+
+  if (!botState || typeof botState !== "object") return empty;
 
   const s: any = botState;
   const isArr = Array.isArray(s);
-  const get = (k: string, i: number) =>
-    !isArr && k in s ? s[k] : s[i];
+
+  const get = (k: string, i: number) => {
+    if (isArr) return s[i];
+    if (s && typeof s === "object" && k in s) return s[k];
+    return undefined;
+  };
 
   return {
     designation: get("designation", 0)?.toString?.(),
-    ep1Choice: Number(get("ep1Choice", 1)),
-    cognitionBias: Number(get("cognitionBias", 2)),
-    profile: Number(get("profile", 3)),
-    outcome: Number(get("outcome", 4)),
-    schemaVersion: Number(get("schemaVersion", 5)),
+    ep1Choice: Number(get("ep1Choice", 1)) || undefined,
+    cognitionBias: Number(get("cognitionBias", 2)) || undefined,
+    profile: Number(get("profile", 3)) || undefined,
+    outcome: Number(get("outcome", 4)) || undefined,
+    schemaVersion: Number(get("schemaVersion", 5)) || undefined,
     finalized: Boolean(get("finalized", 6)),
     ep1: Boolean(get("ep1Set", 7)),
     ep2: Boolean(get("ep2Set", 8)),
@@ -122,54 +109,23 @@ function decodeBotState(botState: any): ChainState {
 
 export default function StoryPage() {
   const publicClient = usePublicClient();
-  const { fid, fidNum } = useFid();
+  const { fidNum } = useFid();
 
+  /* 🔒 Single source of truth */
   const hasIdentity = typeof fidNum === "number" && fidNum > 0;
-  const fidBigInt = useMemo(
-    () => (hasIdentity ? BigInt(fidNum) : 0n),
-    [fidNum, hasIdentity]
-  );
+  const safeFid: number | null = hasIdentity ? fidNum : null;
+  const fidBigInt = hasIdentity ? BigInt(fidNum) : null;
 
   const [mode, setMode] = useState<Mode>("hub");
   const [syncing, setSyncing] = useState(false);
-  const [showDiagnostics, setShowDiagnostics] = useState(false);
-
-  /* ───────── Sound ───────── */
-
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [soundOn, setSoundOn] = useState(() => {
-    try {
-      return localStorage.getItem(SOUND_KEY) !== "off";
-    } catch {
-      return true;
-    }
-  });
-
-  useEffect(() => {
-    const a = new Audio(AUDIO_SRC);
-    a.loop = true;
-    a.volume = 0.45;
-    audioRef.current = a;
-    if (soundOn) a.play().catch(() => {});
-    return () => a.pause();
-  }, []);
-
-  useEffect(() => {
-    const a = audioRef.current;
-    if (!a) return;
-    soundOn ? a.play().catch(() => {}) : a.pause();
-    try {
-      localStorage.setItem(SOUND_KEY, soundOn ? "on" : "off");
-    } catch {}
-  }, [soundOn]);
 
   /* ───────── On-chain state ───────── */
 
-  const { data, refetch, isFetching, isLoading, error } = useReadContract({
+  const { data, refetch } = useReadContract({
     ...BASEBOTS_S2,
     functionName: "getBotState",
-    args: hasIdentity ? [fidBigInt] : undefined,
-    query: { enabled: hasIdentity, staleTime: 0 },
+    args: fidBigInt ? [fidBigInt] : undefined,
+    query: { enabled: Boolean(fidBigInt), staleTime: 0 },
   });
 
   const state = useMemo(() => decodeBotState(data), [data]);
@@ -187,53 +143,52 @@ export default function StoryPage() {
   /* ───────── Sync ───────── */
 
   async function cinematicSync() {
-    if (!hasIdentity || syncing) return;
+    if (!fidBigInt || syncing) return;
     setSyncing(true);
-    await new Promise((r) => setTimeout(r, 500));
     try {
       await refetch();
-    } catch {}
-    setSyncing(false);
+    } finally {
+      setSyncing(false);
+    }
   }
 
   useEffect(() => {
-    if (hasIdentity) cinematicSync();
-  }, [hasIdentity, fidBigInt]);
+    if (fidBigInt) cinematicSync();
+  }, [fidBigInt]);
 
-  /* ───────── SAFE EVENT WATCHERS (NO FILTERS) ───────── */
+  /* ───────── SAFE EVENT WATCHERS ───────── */
 
   useEffect(() => {
-  if (!publicClient || !hasIdentity || fidBigInt <= 0n) return;
+    if (!publicClient || !fidBigInt) return;
 
-  const handler = () => {
-    void cinematicSync();
-  };
+    const handler = () => void cinematicSync();
 
-  const unwatch1 = publicClient.watchContractEvent({
-    ...BASEBOTS_S2,
-    eventName: "EpisodeSet",
-    onLogs: handler,
-  });
+    const unwatch1 = publicClient.watchContractEvent({
+      ...BASEBOTS_S2,
+      eventName: "EpisodeSet",
+      onLogs: handler,
+    });
 
-  const unwatch2 = publicClient.watchContractEvent({
-    ...BASEBOTS_S2,
-    eventName: "Finalized",
-    onLogs: handler,
-  });
+    const unwatch2 = publicClient.watchContractEvent({
+      ...BASEBOTS_S2,
+      eventName: "Finalized",
+      onLogs: handler,
+    });
 
-  const unwatch3 = publicClient.watchContractEvent({
-    ...BASEBOTS_S2,
-    eventName: "Respec",
-    onLogs: handler,
-  });
+    const unwatch3 = publicClient.watchContractEvent({
+      ...BASEBOTS_S2,
+      eventName: "Respec",
+      onLogs: handler,
+    });
 
-  return () => {
-    unwatch1();
-    unwatch2();
-    unwatch3();
-  };
-}, [publicClient, hasIdentity, fidBigInt]);
-  /* ───────── Routing ───────── */
+    return () => {
+      unwatch1();
+      unwatch2();
+      unwatch3();
+    };
+  }, [publicClient, fidBigInt]);
+
+  /* ───────── Routing (FID SAFE) ───────── */
 
   const exit = () => {
     setMode("hub");
@@ -241,20 +196,23 @@ export default function StoryPage() {
   };
 
   if (mode !== "hub") {
-    const map = {
+    /* 🔒 Episodes cannot render without identity */
+    if (!safeFid && mode !== "prologue") return null;
+
+    const routes: Record<Mode, JSX.Element | null> = {
+      hub: null,
       prologue: <PrologueSilenceInDarkness onExit={exit} />,
-      ep1: <EpisodeOne fid={fid} onExit={exit} />,
-      ep2: <EpisodeTwo fid={fid} onExit={exit} />,
-      ep3: <EpisodeThree fid={fid} onExit={exit} />,
-      ep4: <EpisodeFour fid={fid} onExit={exit} />,
-      ep5: <EpisodeFive fid={fid} onExit={exit} />,
+      ep1: <EpisodeOne fid={safeFid!} onExit={exit} />,
+      ep2: <EpisodeTwo fid={safeFid!} onExit={exit} />,
+      ep3: <EpisodeThree fid={safeFid!} onExit={exit} />,
+      ep4: <EpisodeFour fid={safeFid!} onExit={exit} />,
+      ep5: <EpisodeFive fid={safeFid!} onExit={exit} />,
       bonus: state.ep3 ? <BonusEcho onExit={exit} /> : null,
       archive: state.finalized ? <BonusEchoArchive onExit={exit} /> : null,
-    } as const;
+    };
 
-    return map[mode];
+    return routes[mode];
   }
-
   /* ───────── Premium Inline UI ───────── */
 
   const shell: React.CSSProperties = {
