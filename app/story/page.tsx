@@ -17,7 +17,26 @@ import BonusEchoArchive from "@/components/story/BonusEchoArchive";
 import GlobalStatsPanel from "@/components/story/GlobalStatsPanel";
 
 import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
+/* ────────────────────────────────────────────── */
+/* Canonical Story Images (single source of truth) */
+/* ────────────────────────────────────────────── */
 
+const IMAGES = {
+  prologue: "/story/prologue.png",
+
+  // Episode 1 = Awakening (NOT prologue)
+  ep1: "/story/01-awakening.png",
+
+  ep2: "/story/ep2.png",
+  ep3: "/story/ep3.png",
+  ep4: "/story/ep4.png",
+  ep5: "/story/ep5.png",
+
+  // Bonus / Archive / Global
+  bonus: "/story/b1.png",
+  archive: "/story/b2.png",
+  global: "/story/gs.png",
+} as const;
 /* ────────────────────────────────────────────── */
 /* Helpers */
 /* ────────────────────────────────────────────── */
