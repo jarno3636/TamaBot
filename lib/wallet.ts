@@ -1,7 +1,7 @@
 // lib/wallet.ts
 "use client";
 
-import { http, cookieStorage, createStorage, createConfig } from "wagmi";
+import { http, createConfig, createStorage, cookieStorage } from "wagmi";
 import { base } from "viem/chains";
 
 import { connectorsForWallets } from "@rainbow-me/rainbowkit";
@@ -17,13 +17,24 @@ import {
 import { injected } from "wagmi/connectors";
 import { farcasterMiniApp } from "@farcaster/miniapp-wagmi-connector";
 
-/* ---------------- WalletConnect Project ID ---------------- */
+/* ───────── Env ───────── */
+
 const projectId =
   process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ||
   process.env.NEXT_PUBLIC_WALLETCONNECT_ID ||
   "";
 
-/* ---------------- RainbowKit wallets ---------------- */
+const FRONTEND_RPC =
+  process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
+
+/* ───────── Detect MiniApp ───────── */
+
+const isMiniApp =
+  typeof window !== "undefined" &&
+  (window as any).farcaster !== undefined;
+
+/* ───────── Wallets ───────── */
+
 const walletGroups = [
   {
     groupName: "Popular",
@@ -43,12 +54,8 @@ const rkConnectors = connectorsForWallets(walletGroups, {
   projectId,
 });
 
-/* ---------------- RPC ---------------- */
-const FRONTEND_RPC =
-  process.env.NEXT_PUBLIC_BASE_RPC_URL ||
-  "https://mainnet.base.org";
+/* ───────── Wagmi Config ───────── */
 
-/* ---------------- ✅ EXPORT THIS ---------------- */
 export const wagmiConfig = createConfig({
   chains: [base],
   transports: {
@@ -58,13 +65,17 @@ export const wagmiConfig = createConfig({
       retryDelay: 300,
     }),
   },
+
   connectors: [
     farcasterMiniApp(),
     injected({ shimDisconnect: true }),
     ...rkConnectors,
   ],
-  ssr: true,
-  storage: createStorage({
-    storage: cookieStorage,
-  }),
+
+  // 🚨 THIS IS THE KEY FIX
+  storage: isMiniApp
+    ? undefined // ❌ NO IndexedDB / persistence in MiniApp
+    : createStorage({ storage: cookieStorage }),
+
+  ssr: false, // 🚨 REQUIRED for MiniApp stability
 });
