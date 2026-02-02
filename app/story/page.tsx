@@ -110,7 +110,19 @@ export default function StoryPage() {
       finalizedAt: Number(s.finalizedAt),
     };
   }, [data]);
+  /* ───────── Progress ───────── */
 
+  const progressCount =
+    Number(state.ep1) +
+    Number(state.ep2) +
+    Number(state.ep3) +
+    Number(state.ep4) +
+    Number(state.ep5) +
+    Number(state.finalized);
+
+  const progressPct = Math.round(
+    (clamp(progressCount, 0, 6) / 6) * 100
+  );
   /* ───────── Sync ───────── */
 
   async function cinematicSync() {
