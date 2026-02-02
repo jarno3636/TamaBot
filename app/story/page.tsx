@@ -76,11 +76,18 @@ type ChainState = {
   ep3: boolean;
   ep4: boolean;
   ep5: boolean;
+
+  // Optional decoded fields (diagnostics only)
+  ep1Choice?: number | string;
+  cognitionBias?: number | string;
+  profile?: number | string;
+  outcome?: number | string;
+  designation?: string;
+
   schemaVersion?: number;
   updatedAt?: number;
   finalizedAt?: number;
 };
-
 /* ────────────────────────────────────────────── */
 
 export default function StoryPage() {
