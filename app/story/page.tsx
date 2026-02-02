@@ -19,7 +19,24 @@ import GlobalStatsPanel from "@/components/story/GlobalStatsPanel";
 import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 
 /* ────────────────────────────────────────────── */
-/* Types */
+/* Helpers */
+/* ────────────────────────────────────────────── */
+
+function isValidFID(v: string | number | undefined) {
+  if (v === undefined || v === null) return false;
+  const n = typeof v === "string" ? Number(v) : v;
+  return Number.isFinite(n) && n > 0 && Number.isInteger(n);
+}
+
+function clamp(n: number, a: number, b: number) {
+  return Math.max(a, Math.min(b, n));
+}
+
+function fmtTs(ts?: number) {
+  if (!ts) return "—";
+  return new Date(ts * 1000).toLocaleString();
+}
+
 /* ────────────────────────────────────────────── */
 
 type Mode =
@@ -34,87 +51,27 @@ type Mode =
   | "archive";
 
 type ChainState = {
-  designation?: string;
-  ep1Choice?: number;
-  cognitionBias?: number;
-  profile?: number;
-  outcome?: number;
-  schemaVersion?: number;
   finalized: boolean;
   ep1: boolean;
   ep2: boolean;
   ep3: boolean;
   ep4: boolean;
   ep5: boolean;
+  schemaVersion?: number;
   updatedAt?: number;
   finalizedAt?: number;
 };
 
 /* ────────────────────────────────────────────── */
-/* Helpers */
-/* ────────────────────────────────────────────── */
-
-function clamp(n: number, a: number, b: number) {
-  return Math.max(a, Math.min(b, n));
-}
-
-function fmtTs(ts?: number) {
-  if (!ts) return "—";
-  return new Date(ts * 1000).toLocaleString();
-}
-
-/* 🔒 SAFE decoder (never throws) */
-function decodeBotState(botState: any): ChainState {
-  const empty: ChainState = {
-    finalized: false,
-    ep1: false,
-    ep2: false,
-    ep3: false,
-    ep4: false,
-    ep5: false,
-  };
-
-  if (!botState || typeof botState !== "object") return empty;
-
-  const s: any = botState;
-  const isArr = Array.isArray(s);
-
-  const get = (k: string, i: number) => {
-    if (isArr) return s[i];
-    if (s && typeof s === "object" && k in s) return s[k];
-    return undefined;
-  };
-
-  return {
-    designation: get("designation", 0)?.toString?.(),
-    ep1Choice: Number(get("ep1Choice", 1)) || undefined,
-    cognitionBias: Number(get("cognitionBias", 2)) || undefined,
-    profile: Number(get("profile", 3)) || undefined,
-    outcome: Number(get("outcome", 4)) || undefined,
-    schemaVersion: Number(get("schemaVersion", 5)) || undefined,
-    finalized: Boolean(get("finalized", 6)),
-    ep1: Boolean(get("ep1Set", 7)),
-    ep2: Boolean(get("ep2Set", 8)),
-    ep3: Boolean(get("ep3Set", 9)),
-    ep4: Boolean(get("ep4Set", 10)),
-    ep5: Boolean(get("ep5Set", 11)),
-    updatedAt: Number(get("updatedAt", 12)) || undefined,
-    finalizedAt: Number(get("finalizedAt", 13)) || undefined,
-  };
-}
-
-/* ────────────────────────────────────────────── */
-/* Page */
-/* ────────────────────────────────────────────── */
 
 export default function StoryPage() {
   const publicClient = usePublicClient();
-  const { fidNum } = useFid();
+  const { fid } = useFid();
 
-  /* 🔒 Single source of truth */
-  const hasIdentity = typeof fidNum === "number" && fidNum > 0;
-  const safeFid: number | null = hasIdentity ? fidNum : null;
-  const fidBigInt = hasIdentity ? BigInt(fidNum) : null;
+  /* ✅ SAME PATTERN AS REST OF APP */
+  const hasIdentity = isValidFID(fid);
+  const fidNum = hasIdentity ? Number(fid) : null;
+  const fidBigInt = hasIdentity ? BigInt(fidNum!) : undefined;
 
   const [mode, setMode] = useState<Mode>("hub");
   const [syncing, setSyncing] = useState(false);
@@ -124,26 +81,40 @@ export default function StoryPage() {
   const { data, refetch } = useReadContract({
     ...BASEBOTS_S2,
     functionName: "getBotState",
-    args: fidBigInt ? [fidBigInt] : undefined,
-    query: { enabled: Boolean(fidBigInt), staleTime: 0 },
+    args: fidBigInt !== undefined ? [fidBigInt] : undefined,
+    query: { enabled: fidBigInt !== undefined },
   });
 
-  const state = useMemo(() => decodeBotState(data), [data]);
+  const state: ChainState = useMemo(() => {
+    if (!data) {
+      return {
+        finalized: false,
+        ep1: false,
+        ep2: false,
+        ep3: false,
+        ep4: false,
+        ep5: false,
+      };
+    }
 
-  const progressCount =
-    (state.ep1 ? 1 : 0) +
-    (state.ep2 ? 1 : 0) +
-    (state.ep3 ? 1 : 0) +
-    (state.ep4 ? 1 : 0) +
-    (state.ep5 ? 1 : 0) +
-    (state.finalized ? 1 : 0);
-
-  const progressPct = Math.round((clamp(progressCount, 0, 6) / 6) * 100);
+    const s: any = data;
+    return {
+      finalized: Boolean(s.finalized),
+      ep1: Boolean(s.ep1Set),
+      ep2: Boolean(s.ep2Set),
+      ep3: Boolean(s.ep3Set),
+      ep4: Boolean(s.ep4Set),
+      ep5: Boolean(s.ep5Set),
+      schemaVersion: Number(s.schemaVersion),
+      updatedAt: Number(s.updatedAt),
+      finalizedAt: Number(s.finalizedAt),
+    };
+  }, [data]);
 
   /* ───────── Sync ───────── */
 
   async function cinematicSync() {
-    if (!fidBigInt || syncing) return;
+    if (!hasIdentity || syncing) return;
     setSyncing(true);
     try {
       await refetch();
@@ -153,10 +124,10 @@ export default function StoryPage() {
   }
 
   useEffect(() => {
-    if (fidBigInt) cinematicSync();
-  }, [fidBigInt]);
+    if (hasIdentity) cinematicSync();
+  }, [hasIdentity]);
 
-  /* ───────── SAFE EVENT WATCHERS ───────── */
+  /* ───────── Contract Events ───────── */
 
   useEffect(() => {
     if (!publicClient || !fidBigInt) return;
@@ -175,44 +146,32 @@ export default function StoryPage() {
       onLogs: handler,
     });
 
-    const unwatch3 = publicClient.watchContractEvent({
-      ...BASEBOTS_S2,
-      eventName: "Respec",
-      onLogs: handler,
-    });
-
     return () => {
       unwatch1();
       unwatch2();
-      unwatch3();
     };
   }, [publicClient, fidBigInt]);
 
-  /* ───────── Routing (FID SAFE) ───────── */
+  /* ───────── Routing ───────── */
 
-  const exit = () => {
-    setMode("hub");
-    cinematicSync();
-  };
+  const exit = () => setMode("hub");
 
   if (mode !== "hub") {
-    /* 🔒 Episodes cannot render without identity */
-    if (!safeFid && mode !== "prologue") return null;
-
-    const routes: Record<Mode, JSX.Element | null> = {
+    const map: Record<Mode, JSX.Element | null> = {
       hub: null,
       prologue: <PrologueSilenceInDarkness onExit={exit} />,
-      ep1: <EpisodeOne fid={safeFid!} onExit={exit} />,
-      ep2: <EpisodeTwo fid={safeFid!} onExit={exit} />,
-      ep3: <EpisodeThree fid={safeFid!} onExit={exit} />,
-      ep4: <EpisodeFour fid={safeFid!} onExit={exit} />,
-      ep5: <EpisodeFive fid={safeFid!} onExit={exit} />,
+      ep1: <EpisodeOne fid={fid!} onExit={exit} />,
+      ep2: <EpisodeTwo fid={fid!} onExit={exit} />,
+      ep3: <EpisodeThree fid={fid!} onExit={exit} />,
+      ep4: <EpisodeFour fid={fid!} onExit={exit} />,
+      ep5: <EpisodeFive fid={fid!} onExit={exit} />,
       bonus: state.ep3 ? <BonusEcho onExit={exit} /> : null,
       archive: state.finalized ? <BonusEchoArchive onExit={exit} /> : null,
     };
 
-    return routes[mode];
+    return map[mode];
   }
+
   /* ───────── Premium Inline UI ───────── */
 
   const shell: React.CSSProperties = {
