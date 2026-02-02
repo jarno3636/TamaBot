@@ -6,7 +6,7 @@ import "@coinbase/onchainkit/styles.css";
 
 import React, { useEffect, useMemo, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { WagmiProvider, useReconnect } from "wagmi";
+import { WagmiProvider } from "wagmi";
 import { RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
 import { base } from "viem/chains";
 import { wagmiConfig } from "@/lib/wallet";
@@ -24,21 +24,18 @@ const queryClient = new QueryClient({
   },
 });
 
-/* ---------------- Wallet auto-reconnect ---------------- */
-function AutoReconnect() {
-  const { reconnect } = useReconnect();
-  useEffect(() => {
-    reconnect();
-  }, [reconnect]);
-  return null;
-}
-
 /* ---------------- Root Providers ---------------- */
 export default function Providers({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
+  const [isMiniApp, setIsMiniApp] = useState(false);
 
   useEffect(() => {
     setMounted(true);
+
+    // ✅ Detect Farcaster MiniApp safely
+    if (typeof window !== "undefined" && (window as any).farcaster) {
+      setIsMiniApp(true);
+    }
   }, []);
 
   const theme = useMemo(
@@ -57,11 +54,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
     process.env.NEXT_PUBLIC_MINIKIT_PROJECT_ID ||
     "";
 
-  /**
-   * 🚨 CRITICAL:
-   * Never return `null` from Providers.
-   * This placeholder prevents hydration + IndexedDB crashes.
-   */
+  // 🚨 NEVER return null from providers
   if (!mounted) {
     return (
       <div
@@ -85,8 +78,6 @@ export default function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <WagmiProvider config={wagmiConfig}>
-        <AutoReconnect />
-
         <OnchainKitProvider apiKey={onchainkitApiKey} chain={base}>
           <RainbowKitProvider
             theme={theme}
@@ -94,17 +85,19 @@ export default function Providers({ children }: { children: React.ReactNode }) {
             modalSize="compact"
             appInfo={{ appName: "Basebots" }}
           >
-            <MiniKitProvider
-              chain={base}
-              notificationProxyUrl="/api/notification"
-            >
-              <MiniContextProvider>
-                {children}
-              </MiniContextProvider>
-            </MiniKitProvider>
+            {isMiniApp ? (
+              <MiniKitProvider
+                chain={base}
+                notificationProxyUrl="/api/notification"
+              >
+                <MiniContextProvider>{children}</MiniContextProvider>
+              </MiniKitProvider>
+            ) : (
+              // ✅ Normal web fallback (NO MiniKit)
+              <MiniContextProvider>{children}</MiniContextProvider>
+            )}
           </RainbowKitProvider>
         </OnchainKitProvider>
-
       </WagmiProvider>
     </QueryClientProvider>
   );
