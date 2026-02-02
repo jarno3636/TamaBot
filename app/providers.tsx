@@ -1,20 +1,19 @@
-// app/providers.tsx
 "use client";
 
 import "@rainbow-me/rainbowkit/styles.css";
 import "@coinbase/onchainkit/styles.css";
 
-import React, { useEffect, useMemo, type ReactNode } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider, useReconnect } from "wagmi";
 import { RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
 import { base } from "viem/chains";
-import { wagmiConfig } from "@/lib/wallet";
 import { OnchainKitProvider } from "@coinbase/onchainkit";
 import { MiniKitProvider } from "@coinbase/onchainkit/minikit";
 import { MiniContextProvider } from "@/lib/useMiniContext";
+import { createWagmiConfig } from "@/lib/wallet";
 
-/* ---------------- React Query (simple) ---------------- */
+/* ---------------- React Query ---------------- */
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -33,8 +32,17 @@ function AutoReconnect() {
   return null;
 }
 
-/* ------------------- Root Providers ------------------- */
 export default function Providers({ children }: { children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(false);
+  const [wagmiConfig, setWagmiConfig] = useState<any>(null);
+
+  useEffect(() => {
+    setMounted(true);
+    setWagmiConfig(createWagmiConfig());
+  }, []);
+
+  if (!mounted || !wagmiConfig) return null; // 🚫 prevents IndexedDB crash
+
   const theme = useMemo(
     () =>
       darkTheme({
@@ -46,11 +54,10 @@ export default function Providers({ children }: { children: React.ReactNode }) {
     [],
   );
 
-  // CDP/OnchainKit API key (fallback keeps old var working)
   const onchainkitApiKey =
-    (process.env.NEXT_PUBLIC_ONCHAINKIT_API_KEY ||
-      process.env.NEXT_PUBLIC_MINIKIT_PROJECT_ID ||
-      "") as string;
+    process.env.NEXT_PUBLIC_ONCHAINKIT_API_KEY ||
+    process.env.NEXT_PUBLIC_MINIKIT_PROJECT_ID ||
+    "";
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -63,9 +70,10 @@ export default function Providers({ children }: { children: React.ReactNode }) {
             modalSize="compact"
             appInfo={{ appName: "Basebots" }}
           >
-            {/* MiniKitProvider: no apiKey prop */}
-            <MiniKitProvider chain={base} notificationProxyUrl="/api/notification">
-              {/* Global Farcaster identity (fid/user) available everywhere */}
+            <MiniKitProvider
+              chain={base}
+              notificationProxyUrl="/api/notification"
+            >
               <MiniContextProvider>{children}</MiniContextProvider>
             </MiniKitProvider>
           </RainbowKitProvider>
