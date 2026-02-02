@@ -75,10 +75,18 @@ export default function StoryPage() {
 
   const [mode, setMode] = useState<Mode>("hub");
   const [syncing, setSyncing] = useState(false);
+  const [soundOn, setSoundOn] = useState(true);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   /* ───────── On-chain state ───────── */
 
-  const { data, refetch } = useReadContract({
+  const {
+  data,
+  refetch,
+  error,
+  isLoading,
+  isFetching,
+} = useReadContract({
     ...BASEBOTS_S2,
     functionName: "getBotState",
     args: fidBigInt !== undefined ? [fidBigInt] : undefined,
