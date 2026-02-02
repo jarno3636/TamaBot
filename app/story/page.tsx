@@ -203,33 +203,36 @@ export default function StoryPage() {
   /* ───────── SAFE EVENT WATCHERS (NO FILTERS) ───────── */
 
   useEffect(() => {
-    if (!publicClient || !hasIdentity || fidBigInt <= 0n) return;
+  if (!publicClient || !hasIdentity || fidBigInt <= 0n) return;
 
-    const unwatch1 = publicClient.watchContractEvent({
-      ...BASEBOTS_S2,
-      eventName: "EpisodeSet",
-      onLogs: cinematicSync,
-    });
+  const handler = () => {
+    void cinematicSync();
+  };
 
-    const unwatch2 = publicClient.watchContractEvent({
-      ...BASEBOTS_S2,
-      eventName: "Finalized",
-      onLogs: cinematicSync,
-    });
+  const unwatch1 = publicClient.watchContractEvent({
+    ...BASEBOTS_S2,
+    eventName: "EpisodeSet",
+    onLogs: handler,
+  });
 
-    const unwatch3 = publicClient.watchContractEvent({
-      ...BASEBOTS_S2,
-      eventName: "Respec",
-      onLogs: cinematicSync,
-    });
+  const unwatch2 = publicClient.watchContractEvent({
+    ...BASEBOTS_S2,
+    eventName: "Finalized",
+    onLogs: handler,
+  });
 
-    return () => {
-      unwatch1();
-      unwatch2();
-      unwatch3();
-    };
-  }, [publicClient, hasIdentity, fidBigInt]);
+  const unwatch3 = publicClient.watchContractEvent({
+    ...BASEBOTS_S2,
+    eventName: "Respec",
+    onLogs: handler,
+  });
 
+  return () => {
+    unwatch1();
+    unwatch2();
+    unwatch3();
+  };
+}, [publicClient, hasIdentity, fidBigInt]);
   /* ───────── Routing ───────── */
 
   const exit = () => {
