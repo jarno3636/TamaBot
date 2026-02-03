@@ -1,15 +1,23 @@
-import type { Metadata } from "next";
-import StoryClient from "@/components/story/StoryClient";
-
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
 export const runtime = "nodejs";
 
-export const metadata: Metadata = {
-  title: "Basebots: Core Memory",
-  description: "On-chain episodic memory system for Basebots",
-};
-
 export default function Page() {
-  return <StoryClient />;
+  return (
+    <html>
+      <body
+        style={{
+          minHeight: "100vh",
+          background: "#020617",
+          color: "white",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontWeight: 900,
+          fontSize: 20,
+        }}
+      >
+        STORY ROUTE OK
+      </body>
+    </html>
+  );
 }
