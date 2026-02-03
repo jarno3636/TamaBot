@@ -1,23 +1,16 @@
+// app/story/page.tsx
+import type { Metadata } from "next";
+import StoryClient from "@/components/story/StoryClient";
+
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 export const runtime = "nodejs";
 
+export const metadata: Metadata = {
+  title: "Story | Basebots",
+  description: "Narrative progression and memory archive",
+};
+
 export default function Page() {
-  return (
-    <html>
-      <body
-        style={{
-          minHeight: "100vh",
-          background: "#020617",
-          color: "white",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontWeight: 900,
-          fontSize: 20,
-        }}
-      >
-        STORY ROUTE OK
-      </body>
-    </html>
-  );
+  return <StoryClient />;
 }
