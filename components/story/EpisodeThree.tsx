@@ -44,16 +44,23 @@ type Ep3State = {
 /* ────────────────────────────────────────────── */
 
 function loadState(): Ep3State {
+  if (typeof window === "undefined") return {};
   try {
-    return JSON.parse(localStorage.getItem(EP3_STATE_KEY) || "{}");
+    return JSON.parse(window.localStorage.getItem(EP3_STATE_KEY) || "{}");
   } catch {
     return {};
   }
 }
 
 function saveState(patch: Partial<Ep3State>) {
-  const cur = loadState();
-  localStorage.setItem(EP3_STATE_KEY, JSON.stringify({ ...cur, ...patch }));
+  if (typeof window === "undefined") return;
+  try {
+    const cur = loadState();
+    window.localStorage.setItem(
+      EP3_STATE_KEY,
+      JSON.stringify({ ...cur, ...patch })
+    );
+  } catch {}
 }
 
 function normalizeFid(input: string | number | bigint): bigint {
