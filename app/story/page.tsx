@@ -1,4 +1,3 @@
-// app/story/page.tsx
 import type { Metadata } from "next";
 import StoryClient from "@/components/story/StoryClient";
 
