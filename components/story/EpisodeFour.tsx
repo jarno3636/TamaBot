@@ -18,8 +18,24 @@ const SOUND_KEY = "basebots_ep4_sound";
 const BASE_CHAIN_ID = 8453;
 
 /* ────────────────────────────────────────────── */
-/* Helpers */
+/* SAFE HELPERS (CRITICAL) */
 /* ────────────────────────────────────────────── */
+
+function normalizeFid(input: string | number | bigint): bigint {
+  try {
+    if (typeof input === "bigint") return input > 0n ? input : 0n;
+    if (typeof input === "number")
+      return input > 0 ? BigInt(Math.floor(input)) : 0n;
+
+    const digits = String(input).match(/^\d+$/)?.[0];
+    if (!digits) return 0n;
+
+    const b = BigInt(digits);
+    return b > 0n ? b : 0n;
+  } catch {
+    return 0n;
+  }
+}
 
 /**
  * cognitionBias → surface profile enum
@@ -83,7 +99,6 @@ type Phase =
   | "summary"
   | "analysis"
   | "projection"
-  | "sealing"
   | "aftermath"
   | "lock";
 
@@ -94,20 +109,20 @@ export default function EpisodeFour({
   fid: string | number | bigint;
   onExit: () => void;
 }) {
-  const fidBig = useMemo(() => BigInt(fid), [fid]);
+  const fidBig = useMemo(() => normalizeFid(fid), [fid]);
+  const hasFid = fidBig > 0n;
 
   const [phase, setPhase] = useState<Phase>("intro");
   const [submitting, setSubmitting] = useState(false);
   const [alreadySet, setAlreadySet] = useState(false);
 
-  const [chainStatus, setChainStatus] = useState("Initializing surface scan…");
+  const [chainStatus, setChainStatus] = useState("Awaiting identity…");
   const [readBusy, setReadBusy] = useState(false);
-
   const [bias, setBias] = useState<number | null>(null);
 
   const profileEnum = useMemo(
     () => (bias !== null ? biasToProfileEnum(bias) : null),
-    [bias]
+    [bias],
   );
 
   /* wagmi */
@@ -161,11 +176,11 @@ export default function EpisodeFour({
   }, [soundOn]);
 
   /* ────────────────────────────────────────────── */
-  /* Chain Read */
+  /* Chain Read (SAFE) */
   /* ────────────────────────────────────────────── */
 
   async function readChainState() {
-    if (!publicClient) return;
+    if (!publicClient || !hasFid) return;
 
     setReadBusy(true);
     try {
@@ -191,8 +206,8 @@ export default function EpisodeFour({
         setAlreadySet(false);
         setChainStatus("Surface profile pending");
       }
-    } catch (e: any) {
-      setChainStatus(e?.shortMessage || e?.message || "Chain read failed");
+    } catch {
+      setChainStatus("Chain read failed");
       setBias(null);
       setAlreadySet(false);
     } finally {
@@ -201,16 +216,21 @@ export default function EpisodeFour({
   }
 
   useEffect(() => {
+    if (!hasFid) {
+      setChainStatus("Awaiting identity…");
+      return;
+    }
     if (!publicClient) return;
     void readChainState();
-  }, [publicClient, fidBig]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [publicClient, hasFid]);
 
   /* ────────────────────────────────────────────── */
-  /* Commit */
+  /* Commit (SAFE) */
   /* ────────────────────────────────────────────── */
 
   async function commit() {
-    if (submitting || alreadySet) return;
+    if (!hasFid || submitting || alreadySet) return;
 
     if (!address) {
       setChainStatus("Connect wallet to continue");
@@ -245,14 +265,13 @@ export default function EpisodeFour({
       window.dispatchEvent(new Event("basebots-progress-updated"));
       setPhase("aftermath");
       setChainStatus("Surface profile locked");
-    } catch (e: any) {
-      setChainStatus(e?.shortMessage || e?.message || "Transaction failed");
+    } catch {
+      setChainStatus("Transaction failed");
     } finally {
       setSubmitting(false);
     }
   }
 
-  /* ────────────────────────────────────────────── */
   /* Render */
   /* ────────────────────────────────────────────── */
 
