@@ -3,6 +3,7 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import { useState } from "react";
+import useFid from "@/hooks/useFid";
 
 /**
  * Lazy load EVERYTHING so a single bad component
@@ -10,26 +11,54 @@ import { useState } from "react";
  */
 const Prologue = dynamic(
   () => import("@/components/story/PrologueSilenceInDarkness"),
-  { ssr: false },
+  { ssr: false }
 );
 
 const EpisodeOne = dynamic(
   () => import("@/components/story/EpisodeOne"),
-  { ssr: false },
+  { ssr: false }
 );
 
 type Mode = "hub" | "prologue" | "ep1";
 
 export default function StoryClient() {
+  const { fid } = useFid(); // ✅ SINGLE SOURCE OF TRUTH
   const [mode, setMode] = useState<Mode>("hub");
+
+  const hasFid =
+    fid !== undefined &&
+    fid !== null &&
+    Number.isFinite(Number(fid)) &&
+    Number(fid) > 0;
+
+  /* ─────────────────────────────── */
+  /* Route rendering */
+  /* ─────────────────────────────── */
 
   if (mode === "prologue") {
     return <Prologue onExit={() => setMode("hub")} />;
   }
 
   if (mode === "ep1") {
-    return <EpisodeOne onExit={() => setMode("hub")} />;
+    if (!hasFid) {
+      return (
+        <MissingIdentity
+          onBack={() => setMode("hub")}
+        />
+      );
+    }
+
+    return (
+      <EpisodeOne
+        fid={fid!}
+        onExit={() => setMode("hub")}
+      />
+    );
   }
+
+  /* ─────────────────────────────── */
+  /* HUB */
+  /* ─────────────────────────────── */
 
   return (
     <main
@@ -42,11 +71,12 @@ export default function StoryClient() {
     >
       <div style={{ maxWidth: 900, margin: "0 auto" }}>
         <h1 style={{ fontSize: 32, fontWeight: 900 }}>
-          Story Hub (No FID / No Chain)
+          Story Hub
         </h1>
 
         <p style={{ opacity: 0.7, marginTop: 8 }}>
-          This is a diagnostic build. If this crashes, the issue is not FID.
+          Identity:{" "}
+          <b>{hasFid ? `FID ${fid}` : "Not detected"}</b>
         </p>
 
         <div style={{ display: "flex", gap: 12, marginTop: 20 }}>
@@ -59,11 +89,62 @@ export default function StoryClient() {
 
           <button
             onClick={() => setMode("ep1")}
-            style={btn}
+            style={{
+              ...btn,
+              opacity: hasFid ? 1 : 0.4,
+            }}
+            disabled={!hasFid}
           >
             Open Episode One
           </button>
         </div>
+      </div>
+    </main>
+  );
+}
+
+/* ─────────────────────────────── */
+/* Missing Identity Guard */
+/* ─────────────────────────────── */
+
+function MissingIdentity({ onBack }: { onBack: () => void }) {
+  return (
+    <main
+      style={{
+        minHeight: "100vh",
+        background: "#020617",
+        color: "white",
+        padding: 24,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <div
+        style={{
+          maxWidth: 520,
+          padding: 24,
+          borderRadius: 20,
+          background: "rgba(255,255,255,0.05)",
+          border: "1px solid rgba(255,255,255,0.15)",
+          textAlign: "center",
+        }}
+      >
+        <h2 style={{ fontWeight: 900 }}>
+          Identity Required
+        </h2>
+
+        <p style={{ opacity: 0.8, marginTop: 10 }}>
+          This episode writes to chain and requires
+          a valid Farcaster identity (FID).
+        </p>
+
+        <button
+          onClick={onBack}
+          style={{ ...btn, marginTop: 16 }}
+        >
+          Return to hub
+        </button>
       </div>
     </main>
   );
