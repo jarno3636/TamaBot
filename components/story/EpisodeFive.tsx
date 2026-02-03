@@ -15,8 +15,6 @@ import { BASEBOTS_S2 } from "@/lib/abi/basebotsSeason2State";
 
 const BASE_CHAIN_ID = 8453;
 const SOUND_KEY = "basebots_ep5_sound";
-
-// If your hub already watches this key (you mentioned “bonus residual” earlier)
 const BONUS_RESIDUAL_KEY = "basebots_bonus_residual_unlocked";
 
 /*
@@ -39,13 +37,26 @@ const OUTCOME_ENUM: Record<string, number> = {
 };
 
 /* ────────────────────────────────────────────── */
-/* Helpers */
+/* SAFE HELPERS (CRITICAL) */
 /* ────────────────────────────────────────────── */
 
+function normalizeFid(input: string | number | bigint): bigint {
+  try {
+    if (typeof input === "bigint") return input > 0n ? input : 0n;
+    if (typeof input === "number")
+      return input > 0 ? BigInt(Math.floor(input)) : 0n;
+
+    const digits = String(input).match(/^\d+$/)?.[0];
+    if (!digits) return 0n;
+
+    const b = BigInt(digits);
+    return b > 0n ? b : 0n;
+  } catch {
+    return 0n;
+  }
+}
+
 function deriveOutcomeEnum(ep1: number, profile: number): number {
-  // ep1Choice: 1..4 (ACCEPT, STALL, SPOOF, PULL_PLUG)
-  // profile: 0..3 per your Episode 4 mapping (EXECUTOR/OBSERVER/OPERATOR/SENTINEL)
-  // Your earlier derive assumed profile 1=OBSERVER, 3=SENTINEL. We keep your logic intact:
   if (ep1 === 4) return OUTCOME_ENUM.UNTRACKED;
   if (ep1 === 3) return OUTCOME_ENUM.SILENT;
   if (profile === 3) return OUTCOME_ENUM.FLAGGED;
@@ -55,138 +66,6 @@ function deriveOutcomeEnum(ep1: number, profile: number): number {
 
 function outcomeLabel(v: number) {
   return Object.keys(OUTCOME_ENUM).find((k) => OUTCOME_ENUM[k] === v) ?? "UNKNOWN";
-}
-
-function psychProfile(ep1: number, profile: number, outcome: number) {
-  const o = outcomeLabel(outcome);
-
-  return `
-BASEBOTS / PSYCHOMETRY v2.7
-FID CLASSIFICATION / FINAL PASS
-
-DIRECTIVE MEMORY (EP1): ${ep1}
-SURFACE PROFILE (EP4): ${profile}
-OUTCOME VECTOR (EP5): ${o}
-
-ANALYSIS:
-Subject demonstrates strategic restraint.
-Latency favors leverage over certainty.
-
-BEHAVIORAL SUMMARY:
-• Maintains composure under constraint
-• Trades visibility for control
-• Operates without closure
-
-RISK FLAGS:
-• Visibility: VARIABLE
-• Obedience: CONDITIONAL
-• Curiosity: ELEVATED
-
-OVERSIGHT CONFIDENCE: PARTIAL
-AUTONOMY RISK: ACCEPTABLE
-`.trim();
-}
-
-/* ────────────────────────────────────────────── */
-/* Ending narratives (short version you can expand) */
-/* ────────────────────────────────────────────── */
-
-function endingNarrative(outcome: number) {
-  switch (outcome) {
-    case OUTCOME_ENUM.AUTHORIZED:
-      return {
-        title: "BASE PRECINCT",
-        text: `
-You enter Base City under full illumination.
-
-Access nodes propagate your credentials before you speak.
-A transit officer nods—already briefed.
-
-“You don’t get orders,” they say quietly.
-“You get expectations.”
-
-You are not free.
-You are operational.
-        `.trim(),
-      };
-
-    case OUTCOME_ENUM.OBSERVED:
-      return {
-        title: "THE GLASS WALK",
-        text: `
-Your presence triggers no alarms.
-That’s the alarm.
-
-Cameras trail you at a respectful distance.
-Systems acknowledge you—never commit.
-
-You are permitted to exist.
-You are not permitted to vanish.
-
-Your file remains open.
-        `.trim(),
-      };
-
-    case OUTCOME_ENUM.SILENT:
-      return {
-        title: "THE UNDERBELLY",
-        text: `
-Base City never logged your arrival.
-
-You surface below the rails where light is traded,
-names are optional,
-and silence has market value.
-
-No one asks who you are.
-They already know what you do.
-
-You are invisible—by design.
-        `.trim(),
-      };
-
-    case OUTCOME_ENUM.UNTRACKED:
-      return {
-        title: "OUTER DISTRICTS",
-        text: `
-The city does not see you.
-
-No handshake.
-No denial.
-No trace.
-
-You walk beyond mapped infrastructure
-where autonomy exceeds oversight.
-
-No one is watching.
-
-That is both freedom and threat.
-        `.trim(),
-      };
-
-    case OUTCOME_ENUM.FLAGGED:
-      return {
-        title: "INTERNAL AFFAIRS",
-        text: `
-You are intercepted before the skyline opens.
-
-A corridor.
-White light.
-No exits.
-
-Your designation scrolls in red.
-“You noticed patterns you weren’t meant to.”
-
-Base City still needs you.
-Just never where witnesses gather.
-        `.trim(),
-      };
-
-    default:
-      return {
-        title: "UNRESOLVED",
-        text: "Outcome could not be classified.",
-      };
-  }
 }
 
 /* ────────────────────────────────────────────── */
@@ -202,7 +81,8 @@ export default function EpisodeFive({
   fid: string | number | bigint;
   onExit: () => void;
 }) {
-  const fidBig = useMemo(() => BigInt(fid), [fid]);
+  const fidBig = useMemo(() => normalizeFid(fid), [fid]);
+  const hasFid = fidBig > 0n;
 
   const { address, chain } = useAccount();
   const publicClient = usePublicClient();
@@ -211,24 +91,14 @@ export default function EpisodeFive({
   const isBase = chain?.id === BASE_CHAIN_ID;
 
   const [phase, setPhase] = useState<Phase>("arrival");
-
   const [ep1Choice, setEp1Choice] = useState<number | null>(null);
   const [profile, setProfile] = useState<number | null>(null);
-
-  const [alreadyFinalized, setAlreadyFinalized] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-
-  const [readyToFinalize, setReadyToFinalize] = useState(false);
   const [missing, setMissing] = useState<string[]>([]);
-  const [statusLine, setStatusLine] = useState("Reading chain…");
-
-  /* Bonus CTA visibility */
+  const [alreadyFinalized, setAlreadyFinalized] = useState(false);
+  const [readyToFinalize, setReadyToFinalize] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [statusLine, setStatusLine] = useState("Awaiting identity…");
   const [bonusReady, setBonusReady] = useState(false);
-
-  /* ───────── Typing ───────── */
-
-  const [typedText, setTypedText] = useState("");
-  const [typingDone, setTypingDone] = useState(false);
 
   /* ───────── Sound ───────── */
 
@@ -246,14 +116,14 @@ export default function EpisodeFive({
     a.loop = true;
     a.volume = 0.45;
     audioRef.current = a;
-
     if (soundOn) a.play().catch(() => {});
     return () => {
-      a.pause();
-      a.src = "";
+      try {
+        a.pause();
+        a.src = "";
+      } catch {}
       audioRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -271,11 +141,11 @@ export default function EpisodeFive({
     } catch {}
   }, [soundOn]);
 
-  /* ───────── Read chain ───────── */
+  /* ───────── Chain Read (SAFE) ───────── */
 
   useEffect(() => {
-    if (!publicClient) {
-      setStatusLine("No public client");
+    if (!publicClient || !hasFid) {
+      setStatusLine("Awaiting identity…");
       return;
     }
 
@@ -283,7 +153,7 @@ export default function EpisodeFive({
 
     (async () => {
       try {
-        setStatusLine("Reading bot state…");
+        setStatusLine("Reading sequence state…");
 
         const s: any = await publicClient.readContract({
           address: BASEBOTS_S2.address,
@@ -310,78 +180,42 @@ export default function EpisodeFive({
 
         const finalized = Boolean(s?.finalized);
         setAlreadyFinalized(finalized);
-
-        // Ready to finalize only if ep1..ep4 are set and not already finalized
         setReadyToFinalize(missingEpisodes.length === 0 && !finalized);
 
         setStatusLine(
           finalized
             ? "Finalization already committed"
-            : missingEpisodes.length > 0
+            : missingEpisodes.length
               ? "Sequence incomplete"
               : "Sequence valid"
         );
 
-        // Bonus: show CTA if key already present OR once finalized
-        const bonusKey = (() => {
-          try {
-            return localStorage.getItem(BONUS_RESIDUAL_KEY) === "true";
-          } catch {
-            return false;
-          }
-        })();
-        setBonusReady(bonusKey || finalized);
+        try {
+          setBonusReady(
+            localStorage.getItem(BONUS_RESIDUAL_KEY) === "true" || finalized
+          );
+        } catch {}
+
         if (finalized) setPhase("ending");
-      } catch (e: any) {
-        if (!cancelled) {
-          setStatusLine(e?.shortMessage || e?.message || "Chain read failed");
-          // still allow UI to proceed so you never dead-end the UX
-        }
+      } catch {
+        if (!cancelled) setStatusLine("Chain read failed");
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [publicClient, fidBig]);
+  }, [publicClient, hasFid, fidBig]);
 
   const outcomeEnum = useMemo(() => {
     if (ep1Choice == null || profile == null) return null;
     return deriveOutcomeEnum(ep1Choice, profile);
   }, [ep1Choice, profile]);
 
-  /* ───────── Typing effect ───────── */
-
-  useEffect(() => {
-    if (phase !== "judgment") return;
-
-    if (ep1Choice == null || profile == null || outcomeEnum == null) {
-      setTypedText("SYNTHESIS :: IN PROGRESS…\nAwaiting upstream episodes / profile.");
-      setTypingDone(false);
-      return;
-    }
-
-    const full = psychProfile(ep1Choice, profile, outcomeEnum);
-    let i = 0;
-    setTypedText("");
-    setTypingDone(false);
-
-    const id = window.setInterval(() => {
-      i++;
-      setTypedText(full.slice(0, i));
-      if (i >= full.length) {
-        window.clearInterval(id);
-        setTypingDone(true);
-      }
-    }, 16);
-
-    return () => window.clearInterval(id);
-  }, [phase, ep1Choice, profile, outcomeEnum]);
-
-  /* ───────── Finalize ───────── */
+  /* ───────── Finalize (SAFE) ───────── */
 
   async function finalize() {
-    if (!readyToFinalize) return;
+    if (!hasFid || !readyToFinalize || !publicClient) return;
 
     if (!address) {
       setStatusLine("Connect wallet to finalize");
@@ -393,13 +227,9 @@ export default function EpisodeFive({
       return;
     }
 
-    if (!publicClient) {
-      setStatusLine("No public client");
-      return;
-    }
-
-    setSubmitting(true);
     try {
+      setSubmitting(true);
+
       if (!isBase) {
         setStatusLine("Switching to Base…");
         await switchChainAsync({ chainId: BASE_CHAIN_ID });
@@ -417,28 +247,21 @@ export default function EpisodeFive({
       setStatusLine("Finalizing on-chain…");
       await publicClient.waitForTransactionReceipt({ hash });
 
-      // Trigger bonus availability + hub refresh
       try {
-        // If you want bonus only for specific endings, gate it here:
-        // const shouldUnlock = outcomeEnum === OUTCOME_ENUM.SILENT || outcomeEnum === OUTCOME_ENUM.FLAGGED;
-        // if (shouldUnlock) localStorage.setItem(BONUS_RESIDUAL_KEY, "true");
         localStorage.setItem(BONUS_RESIDUAL_KEY, "true");
       } catch {}
 
       window.dispatchEvent(new Event("basebots-progress-updated"));
       setBonusReady(true);
-
       setAlreadyFinalized(true);
       setPhase("ending");
       setStatusLine("Outcome committed");
-    } catch (e: any) {
-      setStatusLine(e?.shortMessage || e?.message || "Finalization failed");
+    } catch {
+      setStatusLine("Finalization failed");
     } finally {
       setSubmitting(false);
     }
   }
-
-  const ending = outcomeEnum ? endingNarrative(outcomeEnum) : null;
 
   /* ────────────────────────────────────────────── */
   /* Render */
