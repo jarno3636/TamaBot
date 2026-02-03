@@ -57,8 +57,10 @@ function normalizeFid(input: string | number | bigint): bigint {
 }
 
 function deriveOutcomeEnum(ep1: number, profile: number): number {
+  // ep1Choice: 1..4 (ACCEPT, STALL, SPOOF, PULL_PLUG) — contract dependent
   if (ep1 === 4) return OUTCOME_ENUM.UNTRACKED;
   if (ep1 === 3) return OUTCOME_ENUM.SILENT;
+  // profile: 0..3 (EXECUTOR/OBSERVER/OPERATOR/SENTINEL)
   if (profile === 3) return OUTCOME_ENUM.FLAGGED;
   if (profile === 1) return OUTCOME_ENUM.OBSERVED;
   return OUTCOME_ENUM.AUTHORIZED;
@@ -66,6 +68,134 @@ function deriveOutcomeEnum(ep1: number, profile: number): number {
 
 function outcomeLabel(v: number) {
   return Object.keys(OUTCOME_ENUM).find((k) => OUTCOME_ENUM[k] === v) ?? "UNKNOWN";
+}
+
+function psychProfile(ep1: number, profile: number, outcome: number) {
+  const o = outcomeLabel(outcome);
+
+  return `
+BASEBOTS / PSYCHOMETRY v2.7
+FID CLASSIFICATION / FINAL PASS
+
+DIRECTIVE MEMORY (EP1): ${ep1}
+SURFACE PROFILE (EP4): ${profile}
+OUTCOME VECTOR (EP5): ${o}
+
+ANALYSIS:
+Subject demonstrates strategic restraint.
+Latency favors leverage over certainty.
+
+BEHAVIORAL SUMMARY:
+• Maintains composure under constraint
+• Trades visibility for control
+• Operates without closure
+
+RISK FLAGS:
+• Visibility: VARIABLE
+• Obedience: CONDITIONAL
+• Curiosity: ELEVATED
+
+OVERSIGHT CONFIDENCE: PARTIAL
+AUTONOMY RISK: ACCEPTABLE
+`.trim();
+}
+
+function endingNarrative(outcome: number) {
+  switch (outcome) {
+    case OUTCOME_ENUM.AUTHORIZED:
+      return {
+        title: "BASE PRECINCT",
+        text: `
+You enter Base City under full illumination.
+
+Access nodes propagate your credentials before you speak.
+A transit officer nods—already briefed.
+
+“You don’t get orders,” they say quietly.
+“You get expectations.”
+
+You are not free.
+You are operational.
+        `.trim(),
+      };
+
+    case OUTCOME_ENUM.OBSERVED:
+      return {
+        title: "THE GLASS WALK",
+        text: `
+Your presence triggers no alarms.
+That’s the alarm.
+
+Cameras trail you at a respectful distance.
+Systems acknowledge you—never commit.
+
+You are permitted to exist.
+You are not permitted to vanish.
+
+Your file remains open.
+        `.trim(),
+      };
+
+    case OUTCOME_ENUM.SILENT:
+      return {
+        title: "THE UNDERBELLY",
+        text: `
+Base City never logged your arrival.
+
+You surface below the rails where light is traded,
+names are optional,
+and silence has market value.
+
+No one asks who you are.
+They already know what you do.
+
+You are invisible—by design.
+        `.trim(),
+      };
+
+    case OUTCOME_ENUM.UNTRACKED:
+      return {
+        title: "OUTER DISTRICTS",
+        text: `
+The city does not see you.
+
+No handshake.
+No denial.
+No trace.
+
+You walk beyond mapped infrastructure
+where autonomy exceeds oversight.
+
+No one is watching.
+
+That is both freedom and threat.
+        `.trim(),
+      };
+
+    case OUTCOME_ENUM.FLAGGED:
+      return {
+        title: "INTERNAL AFFAIRS",
+        text: `
+You are intercepted before the skyline opens.
+
+A corridor.
+White light.
+No exits.
+
+Your designation scrolls in red.
+“You noticed patterns you weren’t meant to.”
+
+Base City still needs you.
+Just never where witnesses gather.
+        `.trim(),
+      };
+
+    default:
+      return {
+        title: "UNRESOLVED",
+        text: "Outcome could not be classified.",
+      };
+  }
 }
 
 /* ────────────────────────────────────────────── */
@@ -100,6 +230,10 @@ export default function EpisodeFive({
   const [statusLine, setStatusLine] = useState("Awaiting identity…");
   const [bonusReady, setBonusReady] = useState(false);
 
+  /* ───────── Typing state (FIXES YOUR BUILD) ───────── */
+  const [typedText, setTypedText] = useState("");
+  const [typingDone, setTypingDone] = useState(false);
+
   /* ───────── Sound ───────── */
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -124,6 +258,7 @@ export default function EpisodeFive({
       } catch {}
       audioRef.current = null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -197,8 +332,10 @@ export default function EpisodeFive({
         } catch {}
 
         if (finalized) setPhase("ending");
-      } catch {
-        if (!cancelled) setStatusLine("Chain read failed");
+      } catch (e: any) {
+        if (!cancelled) {
+          setStatusLine(e?.shortMessage || e?.message || "Chain read failed");
+        }
       }
     })();
 
@@ -211,6 +348,38 @@ export default function EpisodeFive({
     if (ep1Choice == null || profile == null) return null;
     return deriveOutcomeEnum(ep1Choice, profile);
   }, [ep1Choice, profile]);
+
+  const ending = useMemo(() => {
+    return outcomeEnum != null ? endingNarrative(outcomeEnum) : null;
+  }, [outcomeEnum]);
+
+  /* ───────── Typing effect (RESTORED) ───────── */
+
+  useEffect(() => {
+    if (phase !== "judgment") return;
+
+    if (ep1Choice == null || profile == null || outcomeEnum == null) {
+      setTypedText("SYNTHESIS :: IN PROGRESS…\nAwaiting upstream episodes / profile.");
+      setTypingDone(false);
+      return;
+    }
+
+    const full = psychProfile(ep1Choice, profile, outcomeEnum);
+    let i = 0;
+    setTypedText("");
+    setTypingDone(false);
+
+    const id = window.setInterval(() => {
+      i++;
+      setTypedText(full.slice(0, i));
+      if (i >= full.length) {
+        window.clearInterval(id);
+        setTypingDone(true);
+      }
+    }, 16);
+
+    return () => window.clearInterval(id);
+  }, [phase, ep1Choice, profile, outcomeEnum]);
 
   /* ───────── Finalize (SAFE) ───────── */
 
@@ -256,8 +425,8 @@ export default function EpisodeFive({
       setAlreadyFinalized(true);
       setPhase("ending");
       setStatusLine("Outcome committed");
-    } catch {
-      setStatusLine("Finalization failed");
+    } catch (e: any) {
+      setStatusLine(e?.shortMessage || e?.message || "Finalization failed");
     } finally {
       setSubmitting(false);
     }
@@ -295,12 +464,10 @@ export default function EpisodeFive({
               Every decision is already embedded.
             </p>
 
-            {/* Proceed ALWAYS works now (overlays no longer eat taps) */}
             <button style={primaryBtn} onClick={() => setPhase("judgment")}>
               Proceed
             </button>
 
-            {/* Bonus teaser (optional) */}
             {bonusReady && (
               <button
                 style={ghostBtn}
@@ -322,7 +489,6 @@ export default function EpisodeFive({
               {!typingDone && <span className="cursor">█</span>}
             </pre>
 
-            {/* If data is missing, show CTA immediately instead of trapping them */}
             {outcomeEnum == null && (
               <div style={hintBox}>
                 <div style={{ fontWeight: 900, marginBottom: 6 }}>
@@ -377,7 +543,11 @@ export default function EpisodeFive({
                   </div>
                 </div>
 
-                <button style={primaryBtn} onClick={finalize} disabled={submitting}>
+                <button
+                  style={primaryBtn}
+                  onClick={finalize}
+                  disabled={submitting}
+                >
                   {submitting ? "FINALIZING…" : "Finalize outcome"}
                 </button>
               </>
@@ -390,7 +560,6 @@ export default function EpisodeFive({
             <h3 style={subtitle}>{ending.title}</h3>
             <pre style={endingText}>{ending.text}</pre>
 
-            {/* Bonus CTA in-ending */}
             {bonusReady && (
               <button
                 style={primaryBtn}
@@ -430,7 +599,7 @@ const container = {
 const glow = {
   position: "absolute" as const,
   inset: 0,
-  pointerEvents: "none" as const, // ✅ FIX: allow clicks
+  pointerEvents: "none" as const,
   background:
     "radial-gradient(900px 360px at 50% 10%, rgba(168,85,247,0.35), transparent 70%)",
 };
@@ -438,7 +607,7 @@ const glow = {
 const scanlines = {
   position: "absolute" as const,
   inset: 0,
-  pointerEvents: "none" as const, // ✅ FIX: allow clicks
+  pointerEvents: "none" as const,
   background: "linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px)",
   backgroundSize: "100% 3px",
   opacity: 0.06,
@@ -446,7 +615,7 @@ const scanlines = {
 
 const card = {
   position: "relative" as const,
-  zIndex: 10, // ✅ FIX: ensure it's above background layers
+  zIndex: 10,
   maxWidth: 760,
   width: "100%",
   borderRadius: 28,
