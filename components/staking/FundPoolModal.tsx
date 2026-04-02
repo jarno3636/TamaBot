@@ -15,13 +15,37 @@ import type { FundTarget, TokenMeta } from "./stakingUtils";
 import { getErrText } from "./stakingUtils";
 
 const ERC20_METADATA_ABI = [
-  { name: "name", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "string", name: "" }] },
-  { name: "symbol", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "string", name: "" }] },
-  { name: "decimals", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "uint8", name: "" }] },
+  {
+    name: "name",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "string", name: "" }],
+  },
+  {
+    name: "symbol",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "string", name: "" }],
+  },
+  {
+    name: "decimals",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint8", name: "" }],
+  },
 ] as const;
 
 const ERC20_BALANCE_ABI = [
-  { name: "balanceOf", type: "function", stateMutability: "view", inputs: [{ name: "owner", type: "address" }], outputs: [{ type: "uint256", name: "" }] },
+  {
+    name: "balanceOf",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "owner", type: "address" }],
+    outputs: [{ type: "uint256", name: "" }],
+  },
 ] as const;
 
 const ERC20_TRANSFER_ABI = [
@@ -41,42 +65,54 @@ function cx(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ");
 }
 
-function toneStyle(tone: "teal" | "emerald" | "sky" | "amber" | "rose" | "white") {
+function toneStyle(
+  tone: "teal" | "emerald" | "sky" | "amber" | "rose" | "white"
+) {
   switch (tone) {
     case "teal":
       return {
-        background: "linear-gradient(135deg, rgba(121,255,225,0.30), rgba(56,189,248,0.14))",
+        background:
+          "linear-gradient(135deg, rgba(121,255,225,0.30), rgba(56,189,248,0.14))",
         borderColor: "rgba(121,255,225,0.92)",
         color: "rgba(240,253,250,0.98)",
-        boxShadow: "0 0 0 1px rgba(121,255,225,0.18), 0 0 18px rgba(121,255,225,0.20)",
+        boxShadow:
+          "0 0 0 1px rgba(121,255,225,0.18), 0 0 18px rgba(121,255,225,0.20)",
       } as React.CSSProperties;
     case "emerald":
       return {
-        background: "linear-gradient(135deg, rgba(52,211,153,0.26), rgba(16,185,129,0.12))",
+        background:
+          "linear-gradient(135deg, rgba(52,211,153,0.26), rgba(16,185,129,0.12))",
         borderColor: "rgba(52,211,153,0.88)",
         color: "rgba(236,253,245,0.98)",
-        boxShadow: "0 0 0 1px rgba(52,211,153,0.16), 0 0 16px rgba(52,211,153,0.16)",
+        boxShadow:
+          "0 0 0 1px rgba(52,211,153,0.16), 0 0 16px rgba(52,211,153,0.16)",
       } as React.CSSProperties;
     case "sky":
       return {
-        background: "linear-gradient(135deg, rgba(56,189,248,0.24), rgba(14,165,233,0.12))",
+        background:
+          "linear-gradient(135deg, rgba(56,189,248,0.24), rgba(14,165,233,0.12))",
         borderColor: "rgba(56,189,248,0.86)",
         color: "rgba(240,249,255,0.98)",
-        boxShadow: "0 0 0 1px rgba(56,189,248,0.14), 0 0 16px rgba(56,189,248,0.14)",
+        boxShadow:
+          "0 0 0 1px rgba(56,189,248,0.14), 0 0 16px rgba(56,189,248,0.14)",
       } as React.CSSProperties;
     case "amber":
       return {
-        background: "linear-gradient(135deg, rgba(251,191,36,0.26), rgba(245,158,11,0.12))",
+        background:
+          "linear-gradient(135deg, rgba(251,191,36,0.26), rgba(245,158,11,0.12))",
         borderColor: "rgba(251,191,36,0.86)",
         color: "rgba(255,251,235,0.98)",
-        boxShadow: "0 0 0 1px rgba(251,191,36,0.14), 0 0 16px rgba(251,191,36,0.14)",
+        boxShadow:
+          "0 0 0 1px rgba(251,191,36,0.14), 0 0 16px rgba(251,191,36,0.14)",
       } as React.CSSProperties;
     case "rose":
       return {
-        background: "linear-gradient(135deg, rgba(251,113,133,0.26), rgba(244,63,94,0.12))",
+        background:
+          "linear-gradient(135deg, rgba(251,113,133,0.26), rgba(244,63,94,0.12))",
         borderColor: "rgba(251,113,133,0.86)",
         color: "rgba(255,241,242,0.98)",
-        boxShadow: "0 0 0 1px rgba(251,113,133,0.14), 0 0 16px rgba(251,113,133,0.14)",
+        boxShadow:
+          "0 0 0 1px rgba(251,113,133,0.14), 0 0 16px rgba(251,113,133,0.14)",
       } as React.CSSProperties;
     default:
       return {
@@ -95,7 +131,10 @@ function Chip({
   children: React.ReactNode;
 }) {
   return (
-    <span className="inline-flex items-center rounded-full border px-2 py-[1px] text-[10px] font-semibold" style={toneStyle(tone)}>
+    <span
+      className="inline-flex items-center rounded-full border px-2 py-[1px] text-[10px] font-semibold"
+      style={toneStyle(tone)}
+    >
       {children}
     </span>
   );
@@ -106,11 +145,13 @@ function Btn({
   children,
   onClick,
   disabled,
+  className,
 }: {
   tone: "teal" | "emerald" | "sky" | "amber" | "rose" | "white";
   children: React.ReactNode;
   onClick?: () => void;
   disabled?: boolean;
+  className?: string;
 }) {
   return (
     <button
@@ -118,9 +159,10 @@ function Btn({
       onClick={onClick}
       disabled={disabled}
       className={cx(
-        "inline-flex items-center justify-center rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-transform active:scale-95 shrink-0",
+        "inline-flex items-center justify-center rounded-full border px-3 py-2 text-[12px] font-semibold transition-transform active:scale-95 shrink-0",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/60",
         disabled && "opacity-60 cursor-not-allowed",
+        className
       )}
       style={toneStyle(tone)}
     >
@@ -130,13 +172,13 @@ function Btn({
 }
 
 const inputBase =
-  "mt-1 w-full max-w-full rounded-2xl border border-white/15 bg-white/5 px-3 py-2 text-[13px] md:text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#79ffe1]/60";
+  "mt-1.5 w-full min-w-0 rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3 text-[16px] sm:text-sm text-white placeholder-white/35 outline-none transition focus:border-[#79ffe1]/60 focus:ring-2 focus:ring-[#79ffe1]/50";
 
 function sanitizeAmountInput(v: string) {
-  // keep digits + single dot, strip commas/spaces
   const raw = v.replace(/,/g, "").replace(/\s+/g, "");
   let out = "";
   let seenDot = false;
+
   for (const ch of raw) {
     if (ch >= "0" && ch <= "9") out += ch;
     else if (ch === "." && !seenDot) {
@@ -144,7 +186,16 @@ function sanitizeAmountInput(v: string) {
       seenDot = true;
     }
   }
+
   return out;
+}
+
+function formatDisplayAmount(value: string, maxFractionDigits = 6) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return value;
+  return num.toLocaleString("en-US", {
+    maximumFractionDigits: maxFractionDigits,
+  });
 }
 
 export default function FundPoolModal({
@@ -171,10 +222,11 @@ export default function FundPoolModal({
   const [balErr, setBalErr] = useState<string | null>(null);
 
   const { writeContract, data: fundTxHash, error: fundErr } = useWriteContract();
-  const { isLoading: fundPending, isSuccess: fundMined } = useWaitForTransactionReceipt({
-    hash: fundTxHash,
-    chainId: base.id,
-  });
+  const { isLoading: fundPending, isSuccess: fundMined } =
+    useWaitForTransactionReceipt({
+      hash: fundTxHash,
+      chainId: base.id,
+    });
 
   const [fundMsg, setFundMsg] = useState("");
   const [mounted, setMounted] = useState(false);
@@ -186,14 +238,13 @@ export default function FundPoolModal({
 
   useEffect(() => {
     if (!open) return;
+
     setFundMsg("");
     setMetaErr(null);
     setTokenMeta(null);
     setBalErr(null);
     setBalanceWei(null);
-
     setAmount(sanitizeAmountInput((suggestedAmount || "").toString()));
-
     setCopiedPool(false);
     setCopiedToken(false);
   }, [open, suggestedAmount]);
@@ -206,17 +257,19 @@ export default function FundPoolModal({
 
   useEffect(() => {
     if (!open) return;
-    const prevHtml = document.documentElement.style.overflow;
-    const prevBody = document.body.style.overflow;
+
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    const prevBodyOverflow = document.body.style.overflow;
+
     document.documentElement.style.overflow = "hidden";
     document.body.style.overflow = "hidden";
+
     return () => {
-      document.documentElement.style.overflow = prevHtml;
-      document.body.style.overflow = prevBody;
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      document.body.style.overflow = prevBodyOverflow;
     };
   }, [open]);
 
-  // Load metadata
   useEffect(() => {
     if (!open || !target || !publicClient) return;
     let cancelled = false;
@@ -227,9 +280,21 @@ export default function FundPoolModal({
         setMetaErr(null);
 
         const [symbol, name, decimals] = await Promise.all([
-          publicClient.readContract({ address: target.rewardToken, abi: ERC20_METADATA_ABI, functionName: "symbol" }),
-          publicClient.readContract({ address: target.rewardToken, abi: ERC20_METADATA_ABI, functionName: "name" }),
-          publicClient.readContract({ address: target.rewardToken, abi: ERC20_METADATA_ABI, functionName: "decimals" }),
+          publicClient.readContract({
+            address: target.rewardToken,
+            abi: ERC20_METADATA_ABI,
+            functionName: "symbol",
+          }),
+          publicClient.readContract({
+            address: target.rewardToken,
+            abi: ERC20_METADATA_ABI,
+            functionName: "name",
+          }),
+          publicClient.readContract({
+            address: target.rewardToken,
+            abi: ERC20_METADATA_ABI,
+            functionName: "decimals",
+          }),
         ]);
 
         if (cancelled) return;
@@ -259,7 +324,6 @@ export default function FundPoolModal({
   const symbol = tokenMeta?.symbol ?? "TOKEN";
   const decimals = tokenMeta?.decimals ?? 18;
 
-  // Load balance (after metadata so decimals formatting is right)
   useEffect(() => {
     if (!open || !target || !publicClient || !address) return;
     let cancelled = false;
@@ -310,7 +374,9 @@ export default function FundPoolModal({
 
   function setPctOfSuggested(pct: number) {
     if (!Number.isFinite(suggestedNum) || suggestedNum <= 0) return;
-    const v = (suggestedNum * pct).toLocaleString("en-US", { maximumFractionDigits: 6 }).replace(/,/g, "");
+    const v = (suggestedNum * pct)
+      .toLocaleString("en-US", { maximumFractionDigits: 6 })
+      .replace(/,/g, "");
     setAmount(v);
   }
 
@@ -347,6 +413,7 @@ export default function FundPoolModal({
   const amountWeiPreview = useMemo(() => {
     const v = sanitizeAmountInput(amount);
     if (!v) return null;
+
     try {
       const wei = parseUnits(v, decimals);
       return wei > 0n ? wei : null;
@@ -365,22 +432,39 @@ export default function FundPoolModal({
     try {
       setFundMsg("");
 
-      if (!targetOk || !target) return setFundMsg("Missing or invalid pool/token info.");
-      if (!address) return setFundMsg("Connect your wallet.");
+      if (!targetOk || !target) {
+        setFundMsg("Missing or invalid pool/token info.");
+        return;
+      }
+
+      if (!address) {
+        setFundMsg("Connect your wallet.");
+        return;
+      }
 
       const v = sanitizeAmountInput(amount);
-      if (!v) return setFundMsg("Enter an amount.");
-      if (v.startsWith("-")) return setFundMsg("Amount must be > 0.");
+      if (!v) {
+        setFundMsg("Enter an amount.");
+        return;
+      }
 
       let amountWei: bigint;
       try {
         amountWei = parseUnits(v, decimals);
       } catch {
-        return setFundMsg("Invalid amount format.");
+        setFundMsg("Invalid amount format.");
+        return;
       }
 
-      if (amountWei <= 0n) return setFundMsg("Amount must be > 0.");
-      if (balanceWei !== null && amountWei > balanceWei) return setFundMsg("Amount exceeds wallet balance.");
+      if (amountWei <= 0n) {
+        setFundMsg("Amount must be greater than 0.");
+        return;
+      }
+
+      if (balanceWei !== null && amountWei > balanceWei) {
+        setFundMsg("Amount exceeds wallet balance.");
+        return;
+      }
 
       writeContract({
         address: target.rewardToken,
@@ -399,16 +483,27 @@ export default function FundPoolModal({
   if (!open || !target || !mounted) return null;
 
   return (
-    <div className="fixed inset-0 z-[2147483647] grid place-items-center p-4" role="dialog" aria-modal="true">
-      <button aria-label="Close" onClick={onClose} className="absolute inset-0 bg-black" />
+    <div
+      className="fixed inset-0 z-[2147483647] flex items-end justify-center sm:items-center p-0 sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="fund-pool-title"
+    >
+      <button
+        aria-label="Close"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/70 backdrop-blur-[2px]"
+      />
 
       <div
         className={cx(
-          "relative overflow-hidden rounded-[28px] border border-white/15 bg-[#070A16]",
-          "shadow-[0_40px_120px_rgba(0,0,0,0.95)] ring-1 ring-white/10",
-          "w-[min(92vw,28rem)]",
-          "max-h-[calc(100svh-2rem)]",
+          "relative flex w-full sm:w-[min(92vw,30rem)] flex-col overflow-hidden",
+          "border border-white/15 bg-[#070A16] ring-1 ring-white/10",
+          "rounded-t-[28px] sm:rounded-[28px]",
+          "max-h-[100dvh] sm:max-h-[calc(100dvh-2rem)]",
+          "shadow-[0_30px_80px_rgba(0,0,0,0.85)]"
         )}
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <div
           aria-hidden
@@ -419,22 +514,32 @@ export default function FundPoolModal({
           }}
         />
 
-        <div className="relative px-5 pt-5 pb-4 border-b border-white/10 bg-[#070A16]">
+        <div className="relative shrink-0 border-b border-white/10 bg-[#070A16]/95 px-5 pt-5 pb-4 backdrop-blur-md">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <div className="h-9 w-9 rounded-2xl border" style={toneStyle("teal")} aria-hidden />
+              <div className="flex items-center gap-3">
+                <div
+                  className="h-10 w-10 rounded-2xl border"
+                  style={toneStyle("teal")}
+                  aria-hidden
+                />
                 <div className="min-w-0">
-                  <h2 className="text-sm font-semibold">Fund pool</h2>
+                  <h2 id="fund-pool-title" className="text-base font-semibold text-white">
+                    Fund pool
+                  </h2>
                   <p className="mt-0.5 text-[11px] text-white/60">
                     Send reward tokens directly to the pool contract.
                   </p>
                 </div>
               </div>
 
-              <div className="mt-2 flex flex-wrap items-center gap-2">
+              <div className="mt-3 flex flex-wrap items-center gap-2">
                 <Chip tone="sky">Base</Chip>
-                {metaLoading ? <Chip tone="white">Loading token…</Chip> : <Chip tone="teal">{symbol}</Chip>}
+                {metaLoading ? (
+                  <Chip tone="white">Loading token…</Chip>
+                ) : (
+                  <Chip tone="teal">{symbol}</Chip>
+                )}
                 {fundPending && <Chip tone="amber">Pending…</Chip>}
                 {fundMined && <Chip tone="emerald">Confirmed</Chip>}
               </div>
@@ -443,25 +548,33 @@ export default function FundPoolModal({
             <button
               type="button"
               onClick={onClose}
-              className="shrink-0 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[11px] font-semibold text-white/85 hover:bg-white/15 transition-transform active:scale-95"
+              className="shrink-0 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[11px] font-semibold text-white/85 transition hover:bg-white/15 active:scale-95"
             >
               ✕
             </button>
           </div>
         </div>
 
-        <div className="relative px-5 py-4 overflow-y-auto overflow-x-hidden overscroll-contain max-h-[calc(100svh-2rem-84px)]">
-          <div className="grid gap-2">
-            <div className="rounded-2xl border border-white/10 bg-black/40 p-3">
+        <div className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-4 sm:px-5 py-4">
+          <div className="grid gap-3">
+            <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0 text-[10px] uppercase tracking-wide text-white/55">
                   Pool address
                 </div>
-                <Btn tone={copiedPool ? "emerald" : "white"} onClick={() => copy(target.pool, "pool")} disabled={fundPending}>
+                <Btn
+                  tone={copiedPool ? "emerald" : "white"}
+                  onClick={() => copy(target.pool, "pool")}
+                  disabled={fundPending}
+                >
                   {copiedPool ? "Copied" : "Copy"}
                 </Btn>
               </div>
-              <div className="mt-1 break-all font-mono text-[11px] text-white/80">{target.pool}</div>
+
+              <div className="mt-2 rounded-2xl bg-black/30 px-3 py-2 font-mono text-[11px] leading-relaxed text-white/80 break-all">
+                {target.pool}
+              </div>
+
               <div className="mt-2">
                 <Link
                   href={`https://basescan.org/address/${target.pool}`}
@@ -474,24 +587,33 @@ export default function FundPoolModal({
               </div>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-black/40 p-3">
+            <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0 text-[10px] uppercase tracking-wide text-white/55">
                   Reward token
                 </div>
-                <Btn tone={copiedToken ? "emerald" : "white"} onClick={() => copy(target.rewardToken, "token")} disabled={fundPending}>
+                <Btn
+                  tone={copiedToken ? "emerald" : "white"}
+                  onClick={() => copy(target.rewardToken, "token")}
+                  disabled={fundPending}
+                >
                   {copiedToken ? "Copied" : "Copy"}
                 </Btn>
               </div>
-              <div className="mt-1 break-all font-mono text-[11px] text-white/80">{target.rewardToken}</div>
+
+              <div className="mt-2 rounded-2xl bg-black/30 px-3 py-2 font-mono text-[11px] leading-relaxed text-white/80 break-all">
+                {target.rewardToken}
+              </div>
 
               {address && (
-                <div className="mt-2 text-[11px] text-white/60">
+                <div className="mt-3 text-[11px] text-white/60">
                   Balance:{" "}
                   {balLoading ? (
-                    <span className="text-white/70 font-semibold">loading…</span>
+                    <span className="font-semibold text-white/70">loading…</span>
                   ) : balanceWei !== null ? (
-                    <span className="text-white/80 font-semibold">{balanceText}</span>
+                    <span className="font-semibold text-white/85">
+                      {formatDisplayAmount(balanceText)}
+                    </span>
                   ) : (
                     <span className="text-amber-200">{balErr || "unknown"}</span>
                   )}{" "}
@@ -501,19 +623,23 @@ export default function FundPoolModal({
             </div>
           </div>
 
-          <div className="mt-4 rounded-3xl border border-white/10 bg-black/35 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="mt-4 rounded-[26px] border border-white/10 bg-white/[0.035] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+            <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-[11px] font-semibold text-white/85">Amount</div>
-                <div className="text-[11px] text-white/55">Choose how many {symbol} to send.</div>
+                <div className="text-[12px] font-semibold text-white/90">Amount</div>
+                <div className="text-[11px] text-white/55">
+                  Choose how many {symbol} to send.
+                </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {suggestedAmount && (
                   <button
                     type="button"
-                    onClick={() => setAmount(sanitizeAmountInput(String(suggestedAmount)))}
-                    className="shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-transform active:scale-95"
+                    onClick={() =>
+                      setAmount(sanitizeAmountInput(String(suggestedAmount)))
+                    }
+                    className="shrink-0 rounded-full border px-3 py-2 text-[11px] font-semibold transition-transform active:scale-95"
                     style={toneStyle("teal")}
                     disabled={fundPending}
                   >
@@ -521,78 +647,105 @@ export default function FundPoolModal({
                   </button>
                 )}
 
-                <Btn tone="white" onClick={setMaxFromBalance} disabled={fundPending || balanceWei === null}>
+                <Btn
+                  tone="white"
+                  onClick={setMaxFromBalance}
+                  disabled={fundPending || balanceWei === null}
+                >
                   Max
                 </Btn>
               </div>
             </div>
 
             <label className="mt-3 block">
-              <span className="text-[11px] uppercase tracking-wide text-white/60">Amount ({symbol})</span>
+              <span className="text-[11px] uppercase tracking-wide text-white/60">
+                Amount ({symbol})
+              </span>
+
               <input
                 type="text"
                 inputMode="decimal"
                 value={amount}
                 onChange={(e) => setAmount(sanitizeAmountInput(e.target.value))}
-                placeholder={suggestedAmount ? sanitizeAmountInput(String(suggestedAmount)) : "e.g. 1000"}
+                placeholder={
+                  suggestedAmount
+                    ? sanitizeAmountInput(String(suggestedAmount))
+                    : "e.g. 1000"
+                }
                 className={inputBase}
                 disabled={fundPending}
               />
-              {metaErr && <p className="mt-1 text-[11px] text-amber-200">{metaErr}</p>}
+
+              {metaErr && (
+                <p className="mt-1.5 text-[11px] text-amber-200">{metaErr}</p>
+              )}
 
               {exceedsBalance && (
-                <p className="mt-1 text-[11px] text-rose-200">
+                <p className="mt-1.5 text-[11px] text-rose-200">
                   Amount exceeds your wallet balance.
                 </p>
               )}
 
-              <p className="mt-1 text-[11px] text-white/45">
-                Uses <span className="text-white/70 font-semibold">{decimals}</span> decimals.
+              <p className="mt-1.5 text-[11px] text-white/45">
+                Uses{" "}
+                <span className="font-semibold text-white/70">{decimals}</span>{" "}
+                decimals.
               </p>
             </label>
 
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Btn tone="white" onClick={() => setAmount("")} disabled={fundPending}>
+            <div className="mt-3 grid grid-cols-2 sm:grid-cols-5 gap-2">
+              <Btn
+                tone="white"
+                onClick={() => setAmount("")}
+                disabled={fundPending}
+                className="w-full"
+              >
                 Clear
               </Btn>
-              <Btn tone="sky" onClick={() => setPctOfSuggested(0.25)} disabled={fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0}>
+              <Btn
+                tone="sky"
+                onClick={() => setPctOfSuggested(0.25)}
+                disabled={
+                  fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0
+                }
+                className="w-full"
+              >
                 25%
               </Btn>
-              <Btn tone="sky" onClick={() => setPctOfSuggested(0.5)} disabled={fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0}>
+              <Btn
+                tone="sky"
+                onClick={() => setPctOfSuggested(0.5)}
+                disabled={
+                  fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0
+                }
+                className="w-full"
+              >
                 50%
               </Btn>
-              <Btn tone="sky" onClick={() => setPctOfSuggested(0.75)} disabled={fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0}>
+              <Btn
+                tone="sky"
+                onClick={() => setPctOfSuggested(0.75)}
+                disabled={
+                  fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0
+                }
+                className="w-full"
+              >
                 75%
               </Btn>
-              <Btn tone="teal" onClick={() => setPctOfSuggested(1)} disabled={fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0}>
+              <Btn
+                tone="teal"
+                onClick={() => setPctOfSuggested(1)}
+                disabled={
+                  fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0
+                }
+                className="w-full col-span-2 sm:col-span-1"
+              >
                 100%
               </Btn>
             </div>
           </div>
 
-          <div className="mt-4">
-            <button
-              type="button"
-              onClick={handleFund}
-              disabled={fundPending || !targetOk || exceedsBalance || !amountWeiPreview}
-              className={cx(
-                "w-full inline-flex items-center justify-center rounded-full py-3 text-sm font-semibold transition-transform active:scale-[0.98]",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/70",
-                fundPending || !targetOk || exceedsBalance || !amountWeiPreview
-                  ? "opacity-60 cursor-not-allowed"
-                  : "hover:brightness-110",
-              )}
-              style={{
-                background: "linear-gradient(90deg, rgba(121,255,225,1) 0%, rgba(56,189,248,1) 100%)",
-                color: "#07121b",
-                boxShadow: "0 14px 40px rgba(121, 255, 225, 0.28)",
-              }}
-            >
-              {fundPending ? "Sending…" : `Send ${symbol}`}
-            </button>
-          </div>
-
-          <div className="mt-3 space-y-1 text-[11px] text-white/75">
+          <div className="mt-4 space-y-1 text-[11px] text-white/75">
             {fundTxHash && (
               <div>
                 Tx:{" "}
@@ -607,19 +760,56 @@ export default function FundPoolModal({
               </div>
             )}
 
-            {fundMined && <div className="text-emerald-300 font-semibold">Confirmed ✔ Closing…</div>}
-
-            {(fundMsg || fundErr) && (
-              <div className={fundErr ? "text-rose-300" : "text-white/80"}>{fundMsg || getErrText(fundErr)}</div>
+            {fundMined && (
+              <div className="font-semibold text-emerald-300">
+                Confirmed ✔ Closing…
+              </div>
             )}
 
-            {!targetOk && <div className="text-rose-200">Invalid target addresses.</div>}
-            {!address && <div className="text-amber-200">Tip: connect your wallet to send rewards.</div>}
+            {(fundMsg || fundErr) && (
+              <div className={fundErr ? "text-rose-300" : "text-white/80"}>
+                {fundMsg || getErrText(fundErr)}
+              </div>
+            )}
+
+            {!targetOk && (
+              <div className="text-rose-200">Invalid target addresses.</div>
+            )}
+
+            {!address && (
+              <div className="text-amber-200">
+                Tip: connect your wallet to send rewards.
+              </div>
+            )}
           </div>
 
-          <div className="mt-3 text-[10px] text-white/45">
-            Rewards must already be in your wallet. This sends tokens directly to the pool contract address.
+          <div className="mt-3 pb-1 text-[10px] leading-relaxed text-white/45">
+            Rewards must already be in your wallet. This sends tokens directly to
+            the pool contract address.
           </div>
+        </div>
+
+        <div className="shrink-0 border-t border-white/10 bg-[#070A16]/95 px-4 sm:px-5 py-4 backdrop-blur-md">
+          <button
+            type="button"
+            onClick={handleFund}
+            disabled={fundPending || !targetOk || exceedsBalance || !amountWeiPreview}
+            className={cx(
+              "inline-flex w-full items-center justify-center rounded-2xl py-3.5 text-sm font-semibold transition-transform active:scale-[0.98]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#79ffe1]/70",
+              fundPending || !targetOk || exceedsBalance || !amountWeiPreview
+                ? "cursor-not-allowed opacity-60"
+                : "hover:brightness-110"
+            )}
+            style={{
+              background:
+                "linear-gradient(90deg, rgba(121,255,225,1) 0%, rgba(56,189,248,1) 100%)",
+              color: "#07121b",
+              boxShadow: "0 14px 40px rgba(121, 255, 225, 0.22)",
+            }}
+          >
+            {fundPending ? "Sending…" : `Send ${symbol}`}
+          </button>
         </div>
       </div>
     </div>
