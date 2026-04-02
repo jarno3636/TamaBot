@@ -72,53 +72,53 @@ function toneStyle(
     case "teal":
       return {
         background:
-          "linear-gradient(135deg, rgba(121,255,225,0.30), rgba(56,189,248,0.14))",
-        borderColor: "rgba(121,255,225,0.92)",
+          "linear-gradient(135deg, rgba(121,255,225,0.20), rgba(56,189,248,0.10))",
+        borderColor: "rgba(121,255,225,0.72)",
         color: "rgba(240,253,250,0.98)",
         boxShadow:
-          "0 0 0 1px rgba(121,255,225,0.18), 0 0 18px rgba(121,255,225,0.20)",
+          "0 0 0 1px rgba(121,255,225,0.10), 0 0 12px rgba(121,255,225,0.12)",
       } as React.CSSProperties;
     case "emerald":
       return {
         background:
-          "linear-gradient(135deg, rgba(52,211,153,0.26), rgba(16,185,129,0.12))",
-        borderColor: "rgba(52,211,153,0.88)",
+          "linear-gradient(135deg, rgba(52,211,153,0.18), rgba(16,185,129,0.10))",
+        borderColor: "rgba(52,211,153,0.70)",
         color: "rgba(236,253,245,0.98)",
         boxShadow:
-          "0 0 0 1px rgba(52,211,153,0.16), 0 0 16px rgba(52,211,153,0.16)",
+          "0 0 0 1px rgba(52,211,153,0.10), 0 0 12px rgba(52,211,153,0.10)",
       } as React.CSSProperties;
     case "sky":
       return {
         background:
-          "linear-gradient(135deg, rgba(56,189,248,0.24), rgba(14,165,233,0.12))",
-        borderColor: "rgba(56,189,248,0.86)",
+          "linear-gradient(135deg, rgba(56,189,248,0.18), rgba(14,165,233,0.10))",
+        borderColor: "rgba(56,189,248,0.72)",
         color: "rgba(240,249,255,0.98)",
         boxShadow:
-          "0 0 0 1px rgba(56,189,248,0.14), 0 0 16px rgba(56,189,248,0.14)",
+          "0 0 0 1px rgba(56,189,248,0.10), 0 0 12px rgba(56,189,248,0.10)",
       } as React.CSSProperties;
     case "amber":
       return {
         background:
-          "linear-gradient(135deg, rgba(251,191,36,0.26), rgba(245,158,11,0.12))",
-        borderColor: "rgba(251,191,36,0.86)",
+          "linear-gradient(135deg, rgba(251,191,36,0.18), rgba(245,158,11,0.10))",
+        borderColor: "rgba(251,191,36,0.72)",
         color: "rgba(255,251,235,0.98)",
         boxShadow:
-          "0 0 0 1px rgba(251,191,36,0.14), 0 0 16px rgba(251,191,36,0.14)",
+          "0 0 0 1px rgba(251,191,36,0.10), 0 0 12px rgba(251,191,36,0.10)",
       } as React.CSSProperties;
     case "rose":
       return {
         background:
-          "linear-gradient(135deg, rgba(251,113,133,0.26), rgba(244,63,94,0.12))",
-        borderColor: "rgba(251,113,133,0.86)",
+          "linear-gradient(135deg, rgba(251,113,133,0.18), rgba(244,63,94,0.10))",
+        borderColor: "rgba(251,113,133,0.72)",
         color: "rgba(255,241,242,0.98)",
         boxShadow:
-          "0 0 0 1px rgba(251,113,133,0.14), 0 0 16px rgba(251,113,133,0.14)",
+          "0 0 0 1px rgba(251,113,133,0.10), 0 0 12px rgba(251,113,133,0.10)",
       } as React.CSSProperties;
     default:
       return {
-        background: "rgba(255,255,255,0.06)",
-        borderColor: "rgba(255,255,255,0.14)",
-        color: "rgba(255,255,255,0.88)",
+        background: "rgba(255,255,255,0.04)",
+        borderColor: "rgba(255,255,255,0.12)",
+        color: "rgba(255,255,255,0.90)",
       } as React.CSSProperties;
   }
 }
@@ -132,7 +132,7 @@ function Chip({
 }) {
   return (
     <span
-      className="inline-flex items-center rounded-full border px-2 py-[1px] text-[10px] font-semibold"
+      className="inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold"
       style={toneStyle(tone)}
     >
       {children}
@@ -172,7 +172,7 @@ function Btn({
 }
 
 const inputBase =
-  "mt-1.5 w-full min-w-0 rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3 text-[16px] sm:text-sm text-white placeholder-white/35 outline-none transition focus:border-[#79ffe1]/60 focus:ring-2 focus:ring-[#79ffe1]/50";
+  "mt-1.5 block w-full min-w-0 rounded-2xl border border-white/15 bg-[#050814] px-4 py-3 text-[16px] sm:text-sm text-white placeholder-white/30 outline-none transition focus:border-[#79ffe1]/60 focus:ring-2 focus:ring-[#79ffe1]/50";
 
 function sanitizeAmountInput(v: string) {
   const raw = v.replace(/,/g, "").replace(/\s+/g, "");
@@ -193,9 +193,7 @@ function sanitizeAmountInput(v: string) {
 function formatDisplayAmount(value: string, maxFractionDigits = 6) {
   const num = Number(value);
   if (!Number.isFinite(num)) return value;
-  return num.toLocaleString("en-US", {
-    maximumFractionDigits: maxFractionDigits,
-  });
+  return num.toLocaleString("en-US", { maximumFractionDigits: maxFractionDigits });
 }
 
 export default function FundPoolModal({
@@ -230,7 +228,6 @@ export default function FundPoolModal({
 
   const [fundMsg, setFundMsg] = useState("");
   const [mounted, setMounted] = useState(false);
-
   const [copiedPool, setCopiedPool] = useState(false);
   const [copiedToken, setCopiedToken] = useState(false);
 
@@ -258,15 +255,15 @@ export default function FundPoolModal({
   useEffect(() => {
     if (!open) return;
 
-    const prevHtmlOverflow = document.documentElement.style.overflow;
-    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtml = document.documentElement.style.overflow;
+    const prevBody = document.body.style.overflow;
 
     document.documentElement.style.overflow = "hidden";
     document.body.style.overflow = "hidden";
 
     return () => {
-      document.documentElement.style.overflow = prevHtmlOverflow;
-      document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.overflow = prevHtml;
+      document.body.style.overflow = prevBody;
     };
   }, [open]);
 
@@ -492,29 +489,36 @@ export default function FundPoolModal({
       <button
         aria-label="Close"
         onClick={onClose}
-        className="absolute inset-0 bg-black/70 backdrop-blur-[2px]"
+        className="absolute inset-0 bg-black/85"
       />
 
       <div
         className={cx(
-          "relative flex w-full sm:w-[min(92vw,30rem)] flex-col overflow-hidden",
-          "border border-white/15 bg-[#070A16] ring-1 ring-white/10",
+          "relative isolate flex w-full sm:w-[min(92vw,30rem)] flex-col overflow-hidden",
           "rounded-t-[28px] sm:rounded-[28px]",
+          "border border-white/12",
           "max-h-[100dvh] sm:max-h-[calc(100dvh-2rem)]",
-          "shadow-[0_30px_80px_rgba(0,0,0,0.85)]"
+          "shadow-[0_40px_120px_rgba(0,0,0,0.85)]"
         )}
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        style={{
+          background: "#070B14",
+          paddingBottom: "env(safe-area-inset-bottom)",
+        }}
       >
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 opacity-95"
+          className="pointer-events-none absolute inset-0"
           style={{
             background:
-              "radial-gradient(800px 320px at 12% -10%, rgba(121,255,225,0.20), transparent 60%), radial-gradient(800px 320px at 90% 0%, rgba(56,189,248,0.18), transparent 55%), radial-gradient(700px 320px at 50% 115%, rgba(168,85,247,0.12), transparent 55%)",
+              "radial-gradient(700px 260px at 12% -10%, rgba(121,255,225,0.12), transparent 58%), radial-gradient(700px 280px at 90% 0%, rgba(56,189,248,0.10), transparent 54%), linear-gradient(180deg, rgba(8,12,24,0.96) 0%, rgba(6,9,18,0.98) 55%, rgba(5,8,16,1) 100%)",
           }}
         />
 
-        <div className="relative shrink-0 border-b border-white/10 bg-[#070A16]/95 px-5 pt-5 pb-4 backdrop-blur-md">
+        <div className="relative shrink-0 border-b border-white/10 bg-[#0a1020] px-5 pt-5 pb-4">
+          <div className="mb-3 flex justify-center sm:hidden">
+            <div className="h-1.5 w-12 rounded-full bg-white/15" />
+          </div>
+
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex items-center gap-3">
@@ -535,11 +539,7 @@ export default function FundPoolModal({
 
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <Chip tone="sky">Base</Chip>
-                {metaLoading ? (
-                  <Chip tone="white">Loading token…</Chip>
-                ) : (
-                  <Chip tone="teal">{symbol}</Chip>
-                )}
+                {metaLoading ? <Chip tone="white">Loading token…</Chip> : <Chip tone="teal">{symbol}</Chip>}
                 {fundPending && <Chip tone="amber">Pending…</Chip>}
                 {fundMined && <Chip tone="emerald">Confirmed</Chip>}
               </div>
@@ -548,16 +548,16 @@ export default function FundPoolModal({
             <button
               type="button"
               onClick={onClose}
-              className="shrink-0 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[11px] font-semibold text-white/85 transition hover:bg-white/15 active:scale-95"
+              className="shrink-0 rounded-full border border-white/15 bg-white/8 px-3 py-1.5 text-[11px] font-semibold text-white/85 transition hover:bg-white/12 active:scale-95"
             >
               ✕
             </button>
           </div>
         </div>
 
-        <div className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-4 sm:px-5 py-4">
+        <div className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-4 sm:px-5 py-4 bg-[#070B14]">
           <div className="grid gap-3">
-            <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+            <div className="rounded-3xl border border-white/10 bg-[#0b1120] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0 text-[10px] uppercase tracking-wide text-white/55">
                   Pool address
@@ -571,7 +571,7 @@ export default function FundPoolModal({
                 </Btn>
               </div>
 
-              <div className="mt-2 rounded-2xl bg-black/30 px-3 py-2 font-mono text-[11px] leading-relaxed text-white/80 break-all">
+              <div className="mt-2 rounded-2xl border border-white/8 bg-[#050914] px-3 py-2 font-mono text-[11px] leading-relaxed text-white/80 break-all">
                 {target.pool}
               </div>
 
@@ -587,7 +587,7 @@ export default function FundPoolModal({
               </div>
             </div>
 
-            <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+            <div className="rounded-3xl border border-white/10 bg-[#0b1120] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0 text-[10px] uppercase tracking-wide text-white/55">
                   Reward token
@@ -601,7 +601,7 @@ export default function FundPoolModal({
                 </Btn>
               </div>
 
-              <div className="mt-2 rounded-2xl bg-black/30 px-3 py-2 font-mono text-[11px] leading-relaxed text-white/80 break-all">
+              <div className="mt-2 rounded-2xl border border-white/8 bg-[#050914] px-3 py-2 font-mono text-[11px] leading-relaxed text-white/80 break-all">
                 {target.rewardToken}
               </div>
 
@@ -623,7 +623,7 @@ export default function FundPoolModal({
             </div>
           </div>
 
-          <div className="mt-4 rounded-[26px] border border-white/10 bg-white/[0.035] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+          <div className="mt-4 rounded-[26px] border border-white/10 bg-[#0b1120] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-[12px] font-semibold text-white/90">Amount</div>
@@ -636,9 +636,7 @@ export default function FundPoolModal({
                 {suggestedAmount && (
                   <button
                     type="button"
-                    onClick={() =>
-                      setAmount(sanitizeAmountInput(String(suggestedAmount)))
-                    }
+                    onClick={() => setAmount(sanitizeAmountInput(String(suggestedAmount)))}
                     className="shrink-0 rounded-full border px-3 py-2 text-[11px] font-semibold transition-transform active:scale-95"
                     style={toneStyle("teal")}
                     disabled={fundPending}
@@ -667,18 +665,12 @@ export default function FundPoolModal({
                 inputMode="decimal"
                 value={amount}
                 onChange={(e) => setAmount(sanitizeAmountInput(e.target.value))}
-                placeholder={
-                  suggestedAmount
-                    ? sanitizeAmountInput(String(suggestedAmount))
-                    : "e.g. 1000"
-                }
+                placeholder={suggestedAmount ? sanitizeAmountInput(String(suggestedAmount)) : "e.g. 1000"}
                 className={inputBase}
                 disabled={fundPending}
               />
 
-              {metaErr && (
-                <p className="mt-1.5 text-[11px] text-amber-200">{metaErr}</p>
-              )}
+              {metaErr && <p className="mt-1.5 text-[11px] text-amber-200">{metaErr}</p>}
 
               {exceedsBalance && (
                 <p className="mt-1.5 text-[11px] text-rose-200">
@@ -687,9 +679,7 @@ export default function FundPoolModal({
               )}
 
               <p className="mt-1.5 text-[11px] text-white/45">
-                Uses{" "}
-                <span className="font-semibold text-white/70">{decimals}</span>{" "}
-                decimals.
+                Uses <span className="font-semibold text-white/70">{decimals}</span> decimals.
               </p>
             </label>
 
@@ -705,9 +695,7 @@ export default function FundPoolModal({
               <Btn
                 tone="sky"
                 onClick={() => setPctOfSuggested(0.25)}
-                disabled={
-                  fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0
-                }
+                disabled={fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0}
                 className="w-full"
               >
                 25%
@@ -715,9 +703,7 @@ export default function FundPoolModal({
               <Btn
                 tone="sky"
                 onClick={() => setPctOfSuggested(0.5)}
-                disabled={
-                  fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0
-                }
+                disabled={fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0}
                 className="w-full"
               >
                 50%
@@ -725,9 +711,7 @@ export default function FundPoolModal({
               <Btn
                 tone="sky"
                 onClick={() => setPctOfSuggested(0.75)}
-                disabled={
-                  fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0
-                }
+                disabled={fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0}
                 className="w-full"
               >
                 75%
@@ -735,9 +719,7 @@ export default function FundPoolModal({
               <Btn
                 tone="teal"
                 onClick={() => setPctOfSuggested(1)}
-                disabled={
-                  fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0
-                }
+                disabled={fundPending || !Number.isFinite(suggestedNum) || suggestedNum <= 0}
                 className="w-full col-span-2 sm:col-span-1"
               >
                 100%
@@ -772,10 +754,7 @@ export default function FundPoolModal({
               </div>
             )}
 
-            {!targetOk && (
-              <div className="text-rose-200">Invalid target addresses.</div>
-            )}
-
+            {!targetOk && <div className="text-rose-200">Invalid target addresses.</div>}
             {!address && (
               <div className="text-amber-200">
                 Tip: connect your wallet to send rewards.
@@ -784,12 +763,11 @@ export default function FundPoolModal({
           </div>
 
           <div className="mt-3 pb-1 text-[10px] leading-relaxed text-white/45">
-            Rewards must already be in your wallet. This sends tokens directly to
-            the pool contract address.
+            Rewards must already be in your wallet. This sends tokens directly to the pool contract address.
           </div>
         </div>
 
-        <div className="shrink-0 border-t border-white/10 bg-[#070A16]/95 px-4 sm:px-5 py-4 backdrop-blur-md">
+        <div className="shrink-0 border-t border-white/10 bg-[#0a1020] px-4 sm:px-5 py-4">
           <button
             type="button"
             onClick={handleFund}
@@ -805,7 +783,7 @@ export default function FundPoolModal({
               background:
                 "linear-gradient(90deg, rgba(121,255,225,1) 0%, rgba(56,189,248,1) 100%)",
               color: "#07121b",
-              boxShadow: "0 14px 40px rgba(121, 255, 225, 0.22)",
+              boxShadow: "0 14px 40px rgba(121,255,225,0.22)",
             }}
           >
             {fundPending ? "Sending…" : `Send ${symbol}`}
